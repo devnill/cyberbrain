@@ -1,0 +1,10 @@
+{
+  "vault_path": "/path/to/your/ObsidianVault",
+  "inbox": "AI/Claude-Sessions",
+  "staging_folder": "AI/Claude-Inbox",
+  "backend": "claude-cli",
+  "autofile": false,
+  "daily_journal": false,
+  "journal_folder": "AI/Journal",
+  "journal_name": "%Y-%m-%d"
+}

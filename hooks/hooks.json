@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/pre-compact-extract.sh",
+            "timeout": 120,
+            "statusMessage": "Extracting knowledge before compaction..."
+          }
+        ]
+      }
+    ]
+  }
+}

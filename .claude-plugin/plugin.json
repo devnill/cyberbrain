@@ -1,0 +1,9 @@
+{
+  "name": "knowledge-graph",
+  "version": "0.1.0",
+  "description": "Extract knowledge beats from Claude Code sessions and file them into an Obsidian vault. Provides kg-recall, kg-file, kg-extract, and kg-claude-md skills plus a PreCompact hook and MCP server for Claude Desktop.",
+  "author": "dan",
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": "./.mcp.json"
+}
