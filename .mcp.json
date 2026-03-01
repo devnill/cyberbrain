@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "knowledge-graph": {
-      "command": "python3",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp/server.py"]
+      "command": "uv",
+      "args": ["run", "--with", "mcp", "python3", "mcp/server.py"]
     }
   }
 }

@@ -22,6 +22,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+class BackendError(Exception):
+    """Raised when the configured LLM backend cannot produce a response."""
+
+
 # ---------------------------------------------------------------------------
 # Config loading
 # ---------------------------------------------------------------------------
@@ -190,24 +194,36 @@ def _call_claude_cli(system_prompt: str, user_message: str, config: dict) -> str
 
     claude_path = config.get("claude_path", "claude")
     if not shutil.which(claude_path):
-        print(
-            f"[extract_beats] 'claude' CLI not found (backend=claude-cli). "
+        raise BackendError(
+            f"'claude' CLI not found at {claude_path!r} (backend=claude-cli). "
             "Ensure Claude Code is installed and 'claude' is in PATH, "
-            "or set claude_path in knowledge.json.",
-            file=sys.stderr,
+            "or set claude_path in knowledge.json, "
+            "or switch to backend=anthropic or backend=bedrock in knowledge.json."
         )
-        return ""
 
     model = config.get("claude_model", CLI_DEFAULT_MODEL)
     full_prompt = f"{system_prompt}\n\n---\n\n{user_message}"
 
-    cmd = [claude_path, "-p", "--model", model, "--no-session-persistence", "--max-turns", "1"]
+    # Allow the caller to grant specific tools via config; default to none.
+    # The extraction prompt is pure text→JSON and needs no tools. Keeping the
+    # tool list empty prevents the subprocess from sending PermissionRequest IPC
+    # events to the parent session's TUI, which would cause it to hang
+    # indefinitely waiting for a human to click approve.
+    allowed_tools = config.get("claude_allowed_tools", "")
+    cmd = [claude_path, "-p", "--tools", allowed_tools, "--model", model, "--no-session-persistence", "--max-turns", "1"]
     print(f"[extract_beats] Using claude-cli backend (model={model})", file=sys.stderr)
 
-    # Strip CLAUDECODE so claude -p can run inside an active Claude Code session.
-    # The nested-session guard blocks interactive sessions; claude -p is non-interactive
-    # and safe to run as a subprocess.
-    env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+    # Strip Claude Code session vars so claude -p can run as a clean subprocess.
+    # CLAUDECODE triggers the nested-session guard. CLAUDE_CODE_ENTRYPOINT and the
+    # DISABLE_* vars prevent the child process from establishing API connections
+    # (confirmed: github.com/anthropics/claude-code/issues/26190).
+    _STRIP_VARS = {
+        "CLAUDECODE",
+        "CLAUDE_CODE_ENTRYPOINT",
+        "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY",
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+    }
+    env = {k: v for k, v in os.environ.items() if k not in _STRIP_VARS}
 
     try:
         result = subprocess.run(
@@ -219,32 +235,41 @@ def _call_claude_cli(system_prompt: str, user_message: str, config: dict) -> str
             env=env,
         )
     except subprocess.TimeoutExpired:
-        print("[extract_beats] claude -p timed out", file=sys.stderr)
-        return ""
+        raise BackendError(
+            f"claude -p timed out after {config.get('claude_timeout', 120)}s. "
+            "Increase claude_timeout in knowledge.json or switch to a faster backend."
+        )
     except Exception as e:
-        print(f"[extract_beats] claude -p error: {e}", file=sys.stderr)
-        return ""
+        raise BackendError(f"claude -p failed to start: {e}")
 
     if result.returncode != 0:
-        print(
-            f"[extract_beats] claude -p exited {result.returncode}: "
-            f"{result.stderr[:300]}",
-            file=sys.stderr,
+        stderr_snippet = result.stderr[:500].strip() or "(empty)"
+        raise BackendError(
+            f"claude -p exited with code {result.returncode}. "
+            f"Stderr: {stderr_snippet}"
         )
-        return ""
 
-    return result.stdout.strip()
+    output = result.stdout.strip()
+    if not output:
+        stderr_snippet = result.stderr[:300].strip() or "(empty)"
+        raise BackendError(
+            "claude -p exited successfully (code 0) but produced no output. "
+            f"Stderr: {stderr_snippet}. "
+            "This may indicate an auth issue, rate limiting, or an incompatible "
+            "claude CLI version. Try: claude -p --model claude-haiku-4-5 "
+            "--no-session-persistence --max-turns 1 'respond with: ok'"
+        )
+    return output
 
 
 def _call_anthropic_sdk(system_prompt: str, user_message: str, config: dict) -> str:
     try:
         import anthropic
     except ImportError:
-        print(
-            "[extract_beats] 'anthropic' package not installed. Run: pip install anthropic",
-            file=sys.stderr,
+        raise BackendError(
+            "'anthropic' package not installed. "
+            "Run: pip install anthropic  (in the MCP venv: ~/.claude/mcp-venv/bin/pip install anthropic)"
         )
-        return ""
 
     backend = config.get("backend", DEFAULT_BACKEND)
 
@@ -255,23 +280,38 @@ def _call_anthropic_sdk(system_prompt: str, user_message: str, config: dict) -> 
         print(f"[extract_beats] Using Bedrock backend (region={region}, model={model})", file=sys.stderr)
     else:  # "anthropic"
         if not os.environ.get("ANTHROPIC_API_KEY"):
-            print(
-                "[extract_beats] ANTHROPIC_API_KEY not set. "
-                "Set it or use backend=claude-cli / bedrock in knowledge.json.",
-                file=sys.stderr,
+            raise BackendError(
+                "ANTHROPIC_API_KEY is not set. "
+                "Export it in your environment or switch to backend=claude-cli / bedrock in knowledge.json."
             )
-            return ""
         model = config.get("model", DIRECT_DEFAULT_MODEL)
         client = anthropic.Anthropic()
         print(f"[extract_beats] Using Anthropic API backend (model={model})", file=sys.stderr)
 
-    response = client.messages.create(
-        model=model,
-        max_tokens=4096,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_message}],
-    )
-    return response.content[0].text.strip()
+    try:
+        response = client.messages.create(
+            model=model,
+            max_tokens=4096,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_message}],
+        )
+    except Exception as e:
+        raise BackendError(f"API call failed ({type(e).__name__}): {e}")
+
+    if not response.content:
+        raise BackendError("API returned an empty content array.")
+
+    block = response.content[0]
+    if not hasattr(block, "text"):
+        raise BackendError(
+            f"API returned an unexpected content block type: {type(block).__name__}. "
+            "Expected a text block."
+        )
+
+    output = block.text.strip()
+    if not output:
+        raise BackendError("API returned an empty response text.")
+    return output
 
 
 def call_model(system_prompt: str, user_message: str, config: dict) -> str:
@@ -323,7 +363,13 @@ def extract_beats(transcript_text: str, config: dict, trigger: str, cwd: str) ->
 # Beat writing
 # ---------------------------------------------------------------------------
 
-VALID_TYPES = {"decision", "insight", "task", "problem-solution", "error-fix", "reference"}
+VALID_TYPES = {
+    # Beat schema (auto-extracted)
+    "decision", "insight", "task", "problem-solution", "error-fix", "reference",
+    # kg-file ontology (human-authored) — pass through without remapping
+    "project", "concept", "tool", "problem", "resource",
+    "person", "event", "claude-context", "domain", "skill", "place",
+}
 VALID_SCOPES = {"project", "general"}
 
 _FILENAME_INVALID = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
@@ -446,9 +492,25 @@ def search_vault(beat: dict, vault_path: str, max_results: int = 5) -> list[str]
 # Autofile
 # ---------------------------------------------------------------------------
 
-def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now: datetime) -> Path | None:
+def _is_within_vault(vault: Path, target: Path) -> bool:
+    """Return True if target resolves to a path within vault."""
+    try:
+        target.resolve().relative_to(vault.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now: datetime,
+                   vault_context: str | None = None) -> Path | None:
     """File a beat intelligently into the vault using LLM judgment."""
     vault_path = config["vault_path"]
+
+    # Load vault filing context from CLAUDE.md if not pre-cached by caller
+    if vault_context is None:
+        claude_md_path = Path(vault_path) / "CLAUDE.md"
+        vault_context = claude_md_path.read_text(encoding="utf-8")[:3000] if claude_md_path.exists() else \
+            "File notes using human-readable names with spaces. Use ontology types: concept, insight, decision, problem, reference."
 
     # Search for related vault docs
     related_paths = search_vault(beat, vault_path)
@@ -460,11 +522,6 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now: date
             related_docs.append(f"### {rel}\n\n{content[:2000]}")
         except OSError:
             pass
-
-    # Load vault filing context from CLAUDE.md if available
-    claude_md_path = Path(vault_path) / "CLAUDE.md"
-    vault_context = claude_md_path.read_text(encoding="utf-8")[:3000] if claude_md_path.exists() else \
-        "File notes using human-readable names with spaces. Use ontology types: concept, insight, decision, problem, reference."
 
     # Get top-level folder listing
     try:
@@ -484,7 +541,30 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now: date
         "vault_folders": vault_folders or "(empty)",
     })
 
-    raw = call_model(system_prompt, user_message, config)
+    # Build autofile-specific config: support a separate model for filing decisions
+    backend = config.get("backend", DEFAULT_BACKEND)
+    if "autofile_model" in config:
+        autofile_config = dict(config)
+        if backend == "claude-cli":
+            autofile_config["claude_model"] = config["autofile_model"]
+        else:
+            autofile_config["model"] = config["autofile_model"]
+        effective_model = config["autofile_model"]
+    else:
+        autofile_config = config
+        if backend == "claude-cli":
+            effective_model = config.get("claude_model", CLI_DEFAULT_MODEL)
+        elif backend == "bedrock":
+            effective_model = config.get("model", BEDROCK_DEFAULT_MODEL)
+        else:
+            effective_model = config.get("model", DIRECT_DEFAULT_MODEL)
+    print(f"[extract_beats] autofile: using {effective_model}", file=sys.stderr)
+
+    try:
+        raw = call_model(system_prompt, user_message, autofile_config)
+    except BackendError as e:
+        print(f"[extract_beats] autofile: backend error, falling back to staging: {e}", file=sys.stderr)
+        return write_beat(beat, config, session_id, cwd, now)
     if not raw:
         # Fall back to staging
         return write_beat(beat, config, session_id, cwd, now)
@@ -505,6 +585,9 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now: date
     if action == "extend":
         target_rel = decision.get("target_path", "")
         target = vault / target_rel
+        if not _is_within_vault(vault, target):
+            print(f"[extract_beats] autofile: path traversal rejected: {target_rel}", file=sys.stderr)
+            return write_beat(beat, config, session_id, cwd, now)
         insertion = decision.get("insertion", "")
         if not target.exists() or not insertion:
             return write_beat(beat, config, session_id, cwd, now)
@@ -519,6 +602,9 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now: date
         if not rel_path or not content:
             return write_beat(beat, config, session_id, cwd, now)
         output_path = vault / rel_path
+        if not _is_within_vault(vault, output_path):
+            print(f"[extract_beats] autofile: path traversal rejected: {rel_path}", file=sys.stderr)
+            return write_beat(beat, config, session_id, cwd, now)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         # Handle collisions — prepend number so the canonical name is unmodified
         base = output_path
@@ -584,7 +670,7 @@ def main():
     parser.add_argument("--transcript", help="Path to transcript JSONL file")
     parser.add_argument("--beats-json", help="Path to pre-extracted beats JSON (skips transcript parsing and API call)")
     parser.add_argument("--session-id", required=True, help="Session ID")
-    parser.add_argument("--trigger", default="auto", choices=["auto", "manual"], help="Compaction trigger type")
+    parser.add_argument("--trigger", default="auto", choices=["auto", "manual", "session-end"], help="Compaction trigger type")
     parser.add_argument("--cwd", required=True, help="Working directory of the Claude Code session")
     args = parser.parse_args()
 
@@ -616,7 +702,11 @@ def main():
             sys.exit(0)
 
         print("[extract_beats] Calling Claude API to extract beats...", file=sys.stderr)
-        beats = extract_beats(transcript_text, config, args.trigger, args.cwd)
+        try:
+            beats = extract_beats(transcript_text, config, args.trigger, args.cwd)
+        except BackendError as e:
+            print(f"[extract_beats] Backend error: {e}", file=sys.stderr)
+            sys.exit(0)
 
     if not beats:
         print("[extract_beats] No beats extracted.", file=sys.stderr)
@@ -625,10 +715,20 @@ def main():
     now = datetime.now(timezone.utc)
     written = []
 
+    # Cache vault CLAUDE.md once for the whole autofile run (avoids N disk reads for N beats)
+    vault_context = None
+    if autofile_enabled:
+        vault = Path(config["vault_path"])
+        claude_md_path = vault / "CLAUDE.md"
+        if claude_md_path.exists():
+            vault_context = claude_md_path.read_text(encoding="utf-8")[:3000]
+        else:
+            vault_context = "File notes using human-readable names with spaces. Use ontology types: concept, insight, decision, problem, reference."
+
     for beat in beats:
         try:
             if autofile_enabled:
-                path = autofile_beat(beat, config, args.session_id, args.cwd, now)
+                path = autofile_beat(beat, config, args.session_id, args.cwd, now, vault_context=vault_context)
             else:
                 path = write_beat(beat, config, args.session_id, args.cwd, now)
             if path:

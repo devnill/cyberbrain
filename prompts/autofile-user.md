@@ -1,17 +1,13 @@
-## Beat to file
-
-```json
+<beat_to_file>
 {beat_json}
-```
+</beat_to_file>
 
-## Related vault documents
-
+<related_vault_documents>
 {related_docs}
+</related_vault_documents>
 
-## Vault filing context
-
+<vault_conventions>
 {vault_context}
+</vault_conventions>
 
-## Current vault folders
-
-{vault_folders}
+Vault folder structure: {vault_folders}

@@ -1,6 +1,6 @@
 # Claude Code Knowledge Graph
 
-A memory system for Claude Code that survives context compaction. It extracts structured knowledge from sessions automatically, stores it as Obsidian-compatible markdown, and makes it retrievable in future sessions via slash commands.
+A knowledge capture and retrieval system for LLM interactions. It extracts structured knowledge from Claude sessions automatically, stores it as Obsidian-compatible markdown, and makes it retrievable in future sessions via slash commands. While it integrates tightly with Claude Code, the vault is designed to hold knowledge from any source — technical work, research, writing, or any domain where you want to remember what you've learned.
 
 ---
 
@@ -42,9 +42,9 @@ Three skills are also included for manual knowledge management: `/kg-recall` (re
 ## Requirements
 
 - Python 3.8+
-- **One of**: `ANTHROPIC_API_KEY` set in your shell environment *(default)*, or AWS credentials configured for Bedrock *(optional — see [API Authentication](#api-authentication) below)*
+- Claude Code (the `claude` CLI)
 - An Obsidian vault (existing or new — see setup sections below)
-- Claude Code
+- **Optional**: `ANTHROPIC_API_KEY` for the `anthropic` backend, or AWS credentials for the `bedrock` backend. The default `claude-cli` backend uses your active Claude Code session — no separate API key needed.
 
 ---
 
@@ -102,9 +102,11 @@ This is created by the installer. Edit it to point at your vault:
 | `vault_path` | yes | Absolute path to your Obsidian vault root |
 | `inbox` | yes | Where general beats go (not project-specific) |
 | `staging_folder` | yes | Where beats land when there's no project config |
-| `backend` | no | `"anthropic"` *(default)* or `"bedrock"` |
+| `backend` | no | `"claude-cli"` *(default)*, `"anthropic"`, or `"bedrock"` |
+| `claude_model` | no | Model for `claude-cli` backend; default `"claude-haiku-4-5"` |
+| `model` | no | Model for `anthropic` or `bedrock` backends; defaults to `claude-haiku-4-5` (direct) or `us.anthropic.claude-haiku-4-5-20251001` (Bedrock) |
+| `autofile_model` | no | Model used specifically for autofile filing decisions; falls back to `claude_model` / `model` if unset. Set to `"claude-sonnet-4-5"` for higher-quality filing at increased cost. |
 | `bedrock_region` | no | AWS region for Bedrock *(default: `"us-east-1"`)*; only used when `backend` is `"bedrock"` |
-| `model` | no | Override the model ID; defaults to `claude-haiku-4-5` (direct) or `us.anthropic.claude-haiku-4-5-20251001` (Bedrock) |
 
 The extractor will not run until `vault_path` is set to a real, existing directory.
 
@@ -392,35 +394,83 @@ The `AI/` folders are managed by the extractor. The typed folders (`concept/`, `
 
 ---
 
+## Capturing Claude.ai and mobile sessions
+
+Claude Code sessions are captured automatically. Sessions from Claude.ai (web or mobile)
+require a periodic export.
+
+**Step 1: Request a data export**
+
+Go to claude.ai → Settings → Privacy → Export Data (or privacy.anthropic.com).
+The export ZIP arrives by email, typically within a few hours.
+
+**Step 2: Run the import script**
+
+Extract the ZIP and run:
+
+```bash
+python3 scripts/import-desktop-export.py ~/Downloads/claude-ai-export/conversations.json
+```
+
+The script tracks which conversations have already been processed. Re-running it on a
+newer export safely skips already-imported conversations.
+
+**Recommended cadence:** Once a month, or after any period of heavy Claude.ai use.
+
+**Note:** The Anthropic export covers all interfaces — Claude.ai web, iOS, Android,
+and Claude Desktop. There is no interface-specific filtering needed.
+
+---
+
 ## API Authentication
 
-The extractor needs credentials to call Claude. Two backends are supported.
+The extractor supports three backends. Select via `"backend"` in `~/.claude/knowledge.json`.
 
-### Direct Anthropic API *(default)*
+### claude-cli *(default — no API key required)*
 
-Set your API key in your shell environment:
+The default backend shells out to `claude -p`, which uses your active Claude Code session credentials. No additional API key is needed.
+
+```json
+{
+  "vault_path": "/Users/you/Documents/MyVault",
+  "backend": "claude-cli",
+  "claude_model": "claude-haiku-4-5"
+}
+```
+
+Note: The `CLAUDECODE` environment variable is stripped before calling `claude -p` to avoid nested session errors.
+
+### Direct Anthropic API *(alternative)*
+
+To use the Anthropic SDK directly, set your API key and select the backend:
 
 ```bash
 export ANTHROPIC_API_KEY='sk-ant-...'
 ```
 
-Add this to `~/.zshrc` or `~/.bashrc` so it's available in all shell sessions, including those launched by Claude Code hooks. No changes to `knowledge.json` are needed — the direct API is the default backend.
+```json
+{
+  "vault_path": "/Users/you/Documents/MyVault",
+  "backend": "anthropic",
+  "model": "claude-haiku-4-5"
+}
+```
+
+Add the export to `~/.zshrc` or `~/.bashrc` so it's available in shell sessions launched by Claude Code hooks.
 
 ### AWS Bedrock *(alternative)*
 
-If you have AWS credentials configured and access to Anthropic models via Bedrock, add to `~/.claude/knowledge.json`:
+If you have AWS credentials and access to Anthropic models via Bedrock:
 
 ```json
 {
   "vault_path": "/Users/you/Documents/MyVault",
-  "inbox": "AI/Claude-Sessions",
-  "staging_folder": "AI/Claude-Inbox",
   "backend": "bedrock",
   "bedrock_region": "us-east-1"
 }
 ```
 
-The extractor will use your ambient AWS credentials (`~/.aws/credentials`, environment variables, or IAM role). `ANTHROPIC_API_KEY` is not required when using Bedrock.
+The extractor uses ambient AWS credentials (`~/.aws/credentials`, environment variables, or IAM role). `ANTHROPIC_API_KEY` is not required.
 
 ---
 
@@ -429,11 +479,12 @@ The extractor will use your ambient AWS credentials (`~/.aws/credentials`, envir
 **Extraction is silent / no beats appear**
 
 Check that:
-- For direct API: `ANTHROPIC_API_KEY` is set in your environment (not just in Claude Code's env)
-- For Bedrock: `"backend": "bedrock"` is set in `~/.claude/knowledge.json` and AWS credentials are configured
 - `vault_path` in `~/.claude/knowledge.json` points to a real directory
 - The hook is registered: open `~/.claude/settings.json` and confirm a `PreCompact` key exists under `hooks`
 - The hook is executable: `ls -l ~/.claude/hooks/pre-compact-extract.sh`
+- For `claude-cli` backend (default): the `claude` CLI is in your PATH and works outside Claude Code
+- For `anthropic` backend: `ANTHROPIC_API_KEY` is set in your environment (not just in Claude Code's env)
+- For `bedrock` backend: `"backend": "bedrock"` is set in `~/.claude/knowledge.json` and AWS credentials are configured
 
 **"Prompt file not found" error**
 
@@ -473,6 +524,9 @@ If pyyaml is missing: `pip install pyyaml`
 | `extractors/requirements.txt` | Python dependencies |
 | `prompts/extract-beats-system.md` | System prompt for beat extraction |
 | `prompts/extract-beats-user.md` | User message template for beat extraction |
+| `prompts/autofile-system.md` | System prompt for autofile filing decisions |
+| `prompts/enrich-system.md` | System prompt for `/kg-enrich` note classification |
+| `prompts/claude-desktop-project.md` | Recommended Claude Desktop Project system prompt |
 | `skills/kg-recall/SKILL.md` | `/kg-recall` skill |
 | `skills/kg-file/SKILL.md` | `/kg-file` skill |
 | `skills/kg-file/references/ontology.md` | Full entity type schemas and relationship vocabulary |
@@ -480,3 +534,6 @@ If pyyaml is missing: `pip install pyyaml`
 | `skills/kg-claude-md/scripts/analyze_vault.py` | Vault structure analyzer |
 | `skills/kg-claude-md/references/` | Output structure spec and CLAUDE.md template |
 | `skills/kg-extract/SKILL.md` | `/kg-extract` skill |
+| `skills/kg-enrich/SKILL.md` | `/kg-enrich` skill |
+| `scripts/import-desktop-export.py` | Import Claude or ChatGPT export into the vault |
+| `scripts/test-smoke.sh` | Manual smoke test — run after install to verify setup |

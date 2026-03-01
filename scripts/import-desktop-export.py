@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-import-desktop-export.py — Import Anthropic Claude Desktop export into an Obsidian vault.
+import-desktop-export.py — Import Claude or ChatGPT export into an Obsidian vault.
 
-Reads the conversations.json from an Anthropic data export and extracts knowledge
-beats using extract_beats.py, writing results to the vault.  Fully resumable: a
-state file tracks every conversation so the run can be interrupted and restarted
-without duplicating work.
+Reads conversations.json from an Anthropic data export or a ChatGPT export and
+extracts knowledge beats using extract_beats.py, writing results to the vault.
+Fully resumable: a state file tracks every conversation so the run can be
+interrupted and restarted without duplicating work.
 
 Usage:
     python3 import-desktop-export.py PATH/TO/conversations.json [options]
@@ -29,6 +29,9 @@ Quick examples:
 
     # Only process conversations from the last 6 months
     python3 import-desktop-export.py conversations.json --since 2025-08-01
+
+    # Import a ChatGPT export
+    python3 import-desktop-export.py chatgpt-conversations.json --format chatgpt --dry-run
 """
 
 import argparse
@@ -124,6 +127,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--reprocess-errors", action="store_true",
         help="Retry conversations that previously resulted in an error",
+    )
+
+    # Format
+    parser.add_argument(
+        "--format", choices=["claude", "chatgpt"], default="claude",
+        help="Export format: 'claude' (Anthropic, default) or 'chatgpt' (OpenAI)",
     )
 
     # Behaviour
@@ -293,6 +302,92 @@ def render_conversation(conv: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Format-agnostic conversation helpers
+# ---------------------------------------------------------------------------
+
+def conv_id(conv: dict, fmt: str) -> str:
+    """Return conversation unique ID for the given format."""
+    if fmt == "chatgpt":
+        return conv.get("id") or conv.get("conversation_id", "")
+    return conv["uuid"]
+
+
+def conv_updated_date(conv: dict, fmt: str) -> str:
+    """Return YYYY-MM-DD date string for date filtering."""
+    if fmt == "chatgpt":
+        ts = conv.get("update_time") or conv.get("create_time") or 0
+        return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+    return (conv.get("updated_at") or "")[:10]
+
+
+# ---------------------------------------------------------------------------
+# ChatGPT conversation rendering
+# ---------------------------------------------------------------------------
+
+def extract_chatgpt_thread(mapping: dict, current_node: str) -> list[dict]:
+    """Walk from current_node back through parent links; return ordered messages."""
+    thread, node_id = [], current_node
+    while node_id:
+        node = mapping.get(node_id)
+        if node is None:
+            break
+        if node.get("message") is not None:
+            thread.append(node["message"])
+        node_id = node.get("parent")
+    thread.reverse()
+    return thread
+
+
+def render_chatgpt_message_text(msg: dict) -> str:
+    content = msg.get("content") or {}
+    if content.get("content_type") != "text":
+        return ""
+    parts = content.get("parts") or []
+    return "".join(p for p in parts if isinstance(p, str)).strip()
+
+
+def render_chatgpt_conversation(conv: dict) -> str:
+    """Render a ChatGPT conversation to plain-text for LLM extraction."""
+    parts = []
+    title = conv.get("title") or "Untitled"
+    update_time = conv.get("update_time")
+    if update_time:
+        date = datetime.fromtimestamp(update_time, tz=timezone.utc).strftime("%Y-%m-%d")
+        parts.extend([f"## {title}", f"Date: {date}", ""])
+    else:
+        parts.extend([f"## {title}", ""])
+    mapping = conv.get("mapping") or {}
+    current_node = conv.get("current_node", "")
+    thread = extract_chatgpt_thread(mapping, current_node)
+    for msg in thread:
+        role = (msg.get("author") or {}).get("role", "")
+        if role in {"system", "tool"}:
+            continue
+        label = "Human" if role == "user" else "Assistant"
+        text = render_chatgpt_message_text(msg)
+        if text:
+            parts.extend([f"**{label}:** {text}", ""])
+    rendered = "\n".join(parts).strip()
+    if len(rendered) > MAX_TRANSCRIPT_CHARS:
+        rendered = "...[earlier content truncated]...\n\n" + rendered[-MAX_TRANSCRIPT_CHARS:]
+    return rendered
+
+
+def conv_char_count(conv: dict, fmt: str) -> int:
+    """Count rendered text characters for the given format."""
+    if fmt == "chatgpt":
+        return len(render_chatgpt_conversation(conv))
+    return conversation_char_count(conv)
+
+
+def conv_has_content(conv: dict, fmt: str) -> bool:
+    """Return True if the conversation has extractable message content."""
+    if fmt == "chatgpt":
+        return bool(conv.get("mapping") and conv.get("current_node"))
+    return bool(conv.get("chat_messages"))
+
+
+# ---------------------------------------------------------------------------
 # Work queue builder
 # ---------------------------------------------------------------------------
 
@@ -300,6 +395,7 @@ def build_work_queue(
     conversations: list[dict],
     state: dict,
     *,
+    fmt: str,
     reprocess_errors: bool,
     since: str | None,
     until: str | None,
@@ -314,17 +410,17 @@ def build_work_queue(
     if not reprocess_errors:
         done_statuses.add("error")
 
-    sorted_convs = sorted(conversations, key=lambda c: c.get("updated_at", ""))
+    sorted_convs = sorted(conversations, key=lambda c: conv_updated_date(c, fmt))
     queue = []
 
     for conv in sorted_convs:
-        uid = conv["uuid"]
+        uid = conv_id(conv, fmt)
         existing_status = state["conversations"].get(uid, {}).get("status")
 
         if existing_status in done_statuses:
             continue
 
-        updated = (conv.get("updated_at") or "")[:10]
+        updated = conv_updated_date(conv, fmt)
         if since and updated < since:
             continue
         if until and updated > until:
@@ -345,6 +441,7 @@ def process_conversation(
     autofile_enabled: bool,
     cwd: str,
     eb,
+    fmt: str = "claude",
 ) -> tuple[int, list[Path]]:
     """
     Extract beats from one conversation and write them to the vault.
@@ -352,16 +449,27 @@ def process_conversation(
     Returns (beats_written_count, list_of_written_paths).
     Raises on any exception (caller records error in state).
     """
-    uid = conv["uuid"]
+    uid = conv_id(conv, fmt)
 
-    # Use the conversation's own timestamp so beats carry their original date
-    updated_at_str = conv.get("updated_at") or ""
-    if updated_at_str:
-        now = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00"))
+    # Use the conversation's own timestamp so beats carry their original date.
+    # Claude format: full ISO string; ChatGPT format: unix float → datetime.
+    now = datetime.now(timezone.utc)
+    if fmt == "chatgpt":
+        ts = conv.get("update_time") or conv.get("create_time")
+        if ts:
+            now = datetime.fromtimestamp(ts, tz=timezone.utc)
     else:
-        now = datetime.now(timezone.utc)
+        updated_at_str = conv.get("updated_at") or ""
+        if updated_at_str:
+            try:
+                now = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00"))
+            except ValueError:
+                pass
 
-    transcript = render_conversation(conv)
+    if fmt == "chatgpt":
+        transcript = render_chatgpt_conversation(conv)
+    else:
+        transcript = render_conversation(conv)
     if not transcript.strip():
         return 0, []
 
@@ -391,19 +499,19 @@ def process_conversation(
 # Display helpers
 # ---------------------------------------------------------------------------
 
-def print_table(conversations: list[dict], state: dict) -> None:
-    sorted_convs = sorted(conversations, key=lambda c: c.get("updated_at", ""))
+def print_table(conversations: list[dict], state: dict, fmt: str = "claude") -> None:
+    sorted_convs = sorted(conversations, key=lambda c: conv_updated_date(c, fmt))
     totals: dict[str, int] = {"ok": 0, "skipped": 0, "error": 0, "pending": 0}
 
-    print(f"{'UUID':<15} {'Status':<9} {'Beats':>5}  {'Updated':<10}  {'Chars':>6}  Name")
+    print(f"{'ID':<15} {'Status':<9} {'Beats':>5}  {'Updated':<10}  {'Chars':>6}  Name")
     print("-" * 88)
 
     for conv in sorted_convs:
-        uid = conv["uuid"]
+        uid = conv_id(conv, fmt)
         short_uid = uid[:12] + "..."
-        name = (conv.get("name") or "(unnamed)")[:42]
-        updated = (conv.get("updated_at") or "")[:10]
-        chars = conversation_char_count(conv)
+        name = (conv.get("name") or conv.get("title") or "(unnamed)")[:42]
+        updated = conv_updated_date(conv, fmt)
+        chars = conv_char_count(conv, fmt)
 
         entry = state["conversations"].get(uid, {})
         status = entry.get("status", "pending")
@@ -436,20 +544,20 @@ def print_dry_run_plan(
     work_queue: list[dict],
     state: dict,
     min_chars: int,
+    fmt: str = "claude",
 ) -> None:
-    all_convs = sum(len(v) for v in [state["conversations"]])
     print(f"Dry run — no API calls will be made.\n")
     print(f"Work queue: {len(work_queue)} conversation(s) to process")
-    print(f"Processing order: oldest-first by updated_at\n")
+    print(f"Processing order: oldest-first by date\n")
 
     for idx, conv in enumerate(work_queue, 1):
-        chars = conversation_char_count(conv)
-        name = (conv.get("name") or "(unnamed)")[:55]
-        updated = (conv.get("updated_at") or "")[:10]
+        chars = conv_char_count(conv, fmt)
+        name = (conv.get("name") or conv.get("title") or "(unnamed)")[:55]
+        updated = conv_updated_date(conv, fmt)
         skip_note = ""
         if chars < min_chars:
             skip_note = f" -> SKIP: too short ({chars} chars < {min_chars})"
-        elif not conv.get("chat_messages"):
+        elif not conv_has_content(conv, fmt):
             skip_note = " -> SKIP: no messages"
         print(f"  [{idx:>3}] {updated}  {chars:>6} chars  {name}{skip_note}")
 
@@ -474,9 +582,11 @@ def main() -> None:
     state_path = Path(args.state)
     state = load_state(state_path)
 
+    fmt = args.format
+
     # --list mode
     if args.list:
-        print_table(conversations, state)
+        print_table(conversations, state, fmt=fmt)
         return
 
     # Resolve config and inject project name
@@ -494,6 +604,7 @@ def main() -> None:
     work_queue = build_work_queue(
         conversations,
         state,
+        fmt=fmt,
         reprocess_errors=args.reprocess_errors,
         since=args.since,
         until=args.until,
@@ -503,12 +614,12 @@ def main() -> None:
         work_queue = work_queue[: args.limit]
 
     already_done = len(conversations) - len(
-        [c for c in conversations if state["conversations"].get(c["uuid"], {}).get("status") not in {"ok", "skipped", "error"}]
+        [c for c in conversations if state["conversations"].get(conv_id(c, fmt), {}).get("status") not in {"ok", "skipped", "error"}]
     ) - len(work_queue) + (len(work_queue) if args.limit else 0)
 
     # --dry-run mode
     if args.dry_run:
-        print_dry_run_plan(work_queue, state, args.min_chars)
+        print_dry_run_plan(work_queue, state, args.min_chars, fmt=fmt)
         return
 
     if not work_queue:
@@ -528,14 +639,14 @@ def main() -> None:
 
     try:
         for idx, conv in enumerate(work_queue, 1):
-            uid = conv["uuid"]
-            name = (conv.get("name") or "(unnamed)")[:70]
-            chars = conversation_char_count(conv)
+            uid = conv_id(conv, fmt)
+            name = (conv.get("name") or conv.get("title") or "(unnamed)")[:70]
+            chars = conv_char_count(conv, fmt)
 
             print(f"[{idx:>{len(str(total))}}/{total}] {name}")
 
             # Skip: no messages
-            if not conv.get("chat_messages"):
+            if not conv_has_content(conv, fmt):
                 reason = "No messages"
                 print(f"  -> skipped: {reason}")
                 record_state(state, uid, "skipped", 0, reason, name)
@@ -555,7 +666,7 @@ def main() -> None:
             # Extract
             try:
                 beats_written, written_paths = process_conversation(
-                    conv, config, autofile_enabled, args.cwd, eb
+                    conv, config, autofile_enabled, args.cwd, eb, fmt=fmt
                 )
                 session_written.extend(written_paths)
                 print(f"  -> ok: {beats_written} beat(s) written")

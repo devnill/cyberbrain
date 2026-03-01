@@ -49,10 +49,13 @@ echo "  $CLAUDE_DIR/mcp/"
 echo ""
 echo "Installing files..."
 
-# Hook
+# Hooks
 cp "$REPO_DIR/hooks/pre-compact-extract.sh" "$CLAUDE_DIR/hooks/pre-compact-extract.sh"
 chmod +x "$CLAUDE_DIR/hooks/pre-compact-extract.sh"
 echo "  [OK] hooks/pre-compact-extract.sh"
+cp "$REPO_DIR/hooks/session-end-extract.sh" "$CLAUDE_DIR/hooks/session-end-extract.sh"
+chmod +x "$CLAUDE_DIR/hooks/session-end-extract.sh"
+echo "  [OK] hooks/session-end-extract.sh"
 
 # Extractor
 cp "$REPO_DIR/extractors/extract_beats.py" "$CLAUDE_DIR/extractors/extract_beats.py"
@@ -69,6 +72,12 @@ cp "$REPO_DIR/prompts/autofile-system.md" "$CLAUDE_DIR/prompts/autofile-system.m
 cp "$REPO_DIR/prompts/autofile-user.md"   "$CLAUDE_DIR/prompts/autofile-user.md"
 echo "  [OK] prompts/autofile-system.md"
 echo "  [OK] prompts/autofile-user.md"
+cp "$REPO_DIR/prompts/enrich-system.md" "$CLAUDE_DIR/prompts/enrich-system.md"
+cp "$REPO_DIR/prompts/enrich-user.md"   "$CLAUDE_DIR/prompts/enrich-user.md"
+echo "  [OK] prompts/enrich-system.md"
+echo "  [OK] prompts/enrich-user.md"
+cp "$REPO_DIR/prompts/claude-desktop-project.md" "$CLAUDE_DIR/prompts/claude-desktop-project.md"
+echo "  [OK] prompts/claude-desktop-project.md"
 
 # Skills — prefer pre-built .skill packages from dist/ if available;
 # fall back to copying source directories (useful during local development).
@@ -88,6 +97,7 @@ install_skill kg-recall
 install_skill kg-file
 install_skill kg-claude-md
 install_skill kg-extract
+install_skill kg-enrich
 
 # MCP server
 cp "$REPO_DIR/mcp/server.py" "$CLAUDE_DIR/mcp/server.py"
@@ -146,22 +156,35 @@ if path.exists():
 else:
     d = {}
 
-existing = d.get('hooks', {}).get('PreCompact')
+DESIRED_SESSION_END = {
+    'hooks': [{
+        'type': 'command',
+        'command': '~/.claude/hooks/session-end-extract.sh',
+        'timeout': 120,
+    }]
+}
 
-# Always write the desired config so upgrades propagate (timeout, command, etc.)
+existing_precompact = d.get('hooks', {}).get('PreCompact')
+existing_session_end = d.get('hooks', {}).get('SessionEnd')
+
+# Always write so upgrades propagate
 d.setdefault('hooks', {})['PreCompact'] = [DESIRED]
+d.setdefault('hooks', {})['SessionEnd'] = [DESIRED_SESSION_END]
 
 path.parent.mkdir(parents=True, exist_ok=True)
 with open(path, 'w') as f:
     json.dump(d, f, indent=2)
     f.write('\n')
 
-if existing is None:
+if existing_precompact is None:
     print(f'  [OK] PreCompact hook registered in {path}')
-elif existing == [DESIRED]:
-    print(f'  [OK] PreCompact hook already up to date')
 else:
-    print(f'  [OK] PreCompact hook updated in {path}')
+    print(f'  [OK] PreCompact hook up to date')
+
+if existing_session_end is None:
+    print(f'  [OK] SessionEnd hook registered in {path}')
+else:
+    print(f'  [OK] SessionEnd hook up to date')
 " "$CLAUDE_DIR/settings.json"
 
 # ---------------------------------------------------------------------------
@@ -191,9 +214,10 @@ fi
 # Install MCP package into a dedicated venv (avoids system/conda Python conflicts)
 MCP_VENV="$CLAUDE_DIR/mcp-venv"
 MCP_PYTHON=""
-for candidate in /opt/homebrew/bin/python3 /usr/local/bin/python3 python3; do
+# Prefer Python 3.11/3.12 — mcp wheels are not yet available for Python 3.14+
+for candidate in python3.12 python3.11 /opt/homebrew/bin/python3.12 /opt/homebrew/bin/python3.11 /opt/homebrew/bin/python3 /usr/local/bin/python3 python3; do
   if command -v "$candidate" &>/dev/null && "$candidate" -m venv --help &>/dev/null; then
-    MCP_PYTHON="$candidate"
+    MCP_PYTHON=$(command -v "$candidate")
     break
   fi
 done
@@ -202,10 +226,17 @@ if [ -n "$MCP_PYTHON" ]; then
   if [ ! -d "$MCP_VENV" ]; then
     "$MCP_PYTHON" -m venv "$MCP_VENV"
   fi
-  if "$MCP_VENV/bin/pip" install mcp -q 2>/dev/null; then
-    echo "  [OK] mcp venv ready at $MCP_VENV"
+  echo "  Installing mcp into venv ($MCP_PYTHON)..."
+  if "$MCP_VENV/bin/pip" install mcp -q; then
+    if "$MCP_VENV/bin/python3" -c "from mcp.server.fastmcp import FastMCP" 2>/dev/null; then
+      echo "  [OK] mcp venv ready at $MCP_VENV"
+    else
+      echo "  [ERROR] FastMCP import failed after install — MCP server will not work."
+      echo "          Try: $MCP_PYTHON -m venv $MCP_VENV && $MCP_VENV/bin/pip install mcp"
+    fi
   else
-    echo "  [WARN] mcp install into venv failed. Run: $MCP_PYTHON -m venv $MCP_VENV && $MCP_VENV/bin/pip install mcp"
+    echo "  [ERROR] pip install mcp failed — see output above."
+    echo "          Try: $MCP_PYTHON -m venv $MCP_VENV && $MCP_VENV/bin/pip install mcp"
   fi
 else
   echo "  [WARN] Could not find a suitable Python for the MCP venv. Install python3 via Homebrew."

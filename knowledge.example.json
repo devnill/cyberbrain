@@ -4,6 +4,7 @@
   "staging_folder": "AI/Claude-Inbox",
   "backend": "claude-cli",
   "autofile": false,
+  "autofile_model": "claude-haiku-4-5",
   "daily_journal": false,
   "journal_folder": "AI/Journal",
   "journal_name": "%Y-%m-%d"

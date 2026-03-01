@@ -40,10 +40,26 @@ generating — preserve any custom sections the user has added.
 ## Step 1 — Run the Vault Analyzer Script
 
 The `scripts/analyze_vault.py` script performs a full structural scan without requiring
-manual file reads. Locate the script relative to this SKILL.md file and run it:
+manual file reads. Locate the script using the Bash tool, then run it:
 
 ```bash
-python <skill_dir>/scripts/analyze_vault.py "<vault_path>" --output /tmp/vault_report.json
+# Try installed path first, then plugin-mode path
+ls ~/.claude/skills/kg-claude-md/scripts/analyze_vault.py 2>/dev/null \
+  || ls "${CLAUDE_PLUGIN_ROOT}/skills/kg-claude-md/scripts/analyze_vault.py" 2>/dev/null
+```
+
+Use whichever path exists. If neither exists, tell the user:
+"The analyze_vault.py script was not found. Run `bash install.sh` from the
+knowledge-graph repository to reinstall."
+
+Also verify pyyaml is available:
+```bash
+python3 -c "import yaml" 2>/dev/null || pip install pyyaml -q
+```
+
+Then run the script with the resolved path:
+```bash
+python3 <resolved_path> "<vault_path>" --output /tmp/vault_report.json
 cat /tmp/vault_report.json
 ```
 
