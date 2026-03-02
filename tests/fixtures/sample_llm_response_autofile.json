@@ -1,0 +1,5 @@
+{
+  "action": "create",
+  "path": "AI/Claude-Sessions/subprocess Text Mode Binary Failure.md",
+  "content": "---\ntype: problem\ndate: 2026-03-01T14:32:00\ntags: [\"subprocess\", \"python\", \"encoding\", \"unicode\"]\nsummary: subprocess.run with text=True raises UnicodeDecodeError on binary output; fix is to omit text=True and decode manually with errors='replace'.\n---\n\n## Problem\n\nUnicodeDecodeError when calling subprocess.run with text=True on a command that outputs binary data.\n\n## Fix\n\nRemove `text=True`. Capture as bytes and decode with `output.decode('utf-8', errors='replace')`.\n\n```python\nresult = subprocess.run(cmd, capture_output=True)\noutput = result.stdout.decode('utf-8', errors='replace')\n```\n"
+}

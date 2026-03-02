@@ -1,0 +1,149 @@
+[
+  {
+    "id": "chatgpt-conv-001",
+    "title": "Redis cache eviction strategy",
+    "create_time": 1738800000.0,
+    "update_time": 1738806000.0,
+    "current_node": "msg-006",
+    "mapping": {
+      "msg-001": {
+        "id": "msg-001",
+        "parent": null,
+        "children": ["msg-002"],
+        "message": {
+          "id": "msg-001",
+          "author": {"role": "system", "name": null},
+          "content": {"content_type": "text", "parts": ["You are a helpful assistant."]}
+        }
+      },
+      "msg-002": {
+        "id": "msg-002",
+        "parent": "msg-001",
+        "children": ["msg-003"],
+        "message": {
+          "id": "msg-002",
+          "author": {"role": "user", "name": null},
+          "content": {"content_type": "text", "parts": ["We're using Redis for session caching and seeing high eviction rates. What eviction policy should we use?"]}
+        }
+      },
+      "msg-003": {
+        "id": "msg-003",
+        "parent": "msg-002",
+        "children": ["msg-004"],
+        "message": {
+          "id": "msg-003",
+          "author": {"role": "assistant", "name": null},
+          "content": {"content_type": "text", "parts": ["For session caching, allkeys-lru is usually the right choice. It evicts the least-recently-used keys across all keys when memory is full, which aligns with session access patterns — inactive sessions get evicted first. Avoid volatile-lru unless you've set explicit TTLs on all keys, which adds management overhead."]}
+        }
+      },
+      "msg-004": {
+        "id": "msg-004",
+        "parent": "msg-003",
+        "children": ["msg-005"],
+        "message": {
+          "id": "msg-004",
+          "author": {"role": "user", "name": null},
+          "content": {"content_type": "text", "parts": ["What about maxmemory? We're seeing OOM errors sometimes."]}
+        }
+      },
+      "msg-005": {
+        "id": "msg-005",
+        "parent": "msg-004",
+        "children": ["msg-006"],
+        "message": {
+          "id": "msg-005",
+          "author": {"role": "assistant", "name": null},
+          "content": {"content_type": "text", "parts": ["Set maxmemory to ~75% of available RAM to leave headroom for the Redis process itself and OS buffers. Pair that with maxmemory-policy allkeys-lru. Example: if you have 8GB, set maxmemory 6gb. This prevents OOM kills while letting Redis evict aggressively before hitting the hard limit."]}
+        }
+      },
+      "msg-006": {
+        "id": "msg-006",
+        "parent": "msg-005",
+        "children": [],
+        "message": {
+          "id": "msg-006",
+          "author": {"role": "user", "name": null},
+          "content": {"content_type": "text", "parts": ["Perfect, implementing this now. Thanks."]}
+        }
+      }
+    }
+  },
+  {
+    "id": "chatgpt-conv-002",
+    "title": "GraphQL fragment patterns",
+    "create_time": 1739000000.0,
+    "update_time": 1739005000.0,
+    "current_node": "msg-b004",
+    "mapping": {
+      "msg-b001": {
+        "id": "msg-b001",
+        "parent": null,
+        "children": ["msg-b002"],
+        "message": {
+          "id": "msg-b001",
+          "author": {"role": "user", "name": null},
+          "content": {"content_type": "text", "parts": ["How should I reuse common field sets across multiple GraphQL queries to avoid duplication?"]}
+        }
+      },
+      "msg-b002": {
+        "id": "msg-b002",
+        "parent": "msg-b001",
+        "children": ["msg-b003"],
+        "message": {
+          "id": "msg-b002",
+          "author": {"role": "assistant", "name": null},
+          "content": {"content_type": "text", "parts": ["Use named fragments. Define shared field sets in a fragments.graphql file and spread them into your queries with the spread operator. Example:\n\nfragment UserFields on User {\n  id\n  name\n  email\n}\n\nquery GetUser($id: ID!) {\n  user(id: $id) {\n    ...UserFields\n  }\n}\n\nThis keeps field definitions in one place — when the User type changes, you update the fragment, not every query."]}
+        }
+      },
+      "msg-b003": {
+        "id": "msg-b003",
+        "parent": "msg-b002",
+        "children": ["msg-b004"],
+        "message": {
+          "id": "msg-b003",
+          "author": {"role": "user", "name": null},
+          "content": {"content_type": "text", "parts": ["Can fragments be nested? We have deeply nested objects."]}
+        }
+      },
+      "msg-b004": {
+        "id": "msg-b004",
+        "parent": "msg-b003",
+        "children": [],
+        "message": {
+          "id": "msg-b004",
+          "author": {"role": "assistant", "name": null},
+          "content": {"content_type": "text", "parts": ["Yes, fragments can spread other fragments. Avoid cycles, but composition is fine. Keep fragment granularity coarse enough to be reusable across multiple query shapes — overly fine-grained fragments (one per field) create more noise than they solve."]}
+        }
+      }
+    }
+  },
+  {
+    "id": "chatgpt-conv-003",
+    "title": "Short test conversation",
+    "create_time": 1739100000.0,
+    "update_time": 1739100060.0,
+    "current_node": "msg-c002",
+    "mapping": {
+      "msg-c001": {
+        "id": "msg-c001",
+        "parent": null,
+        "children": ["msg-c002"],
+        "message": {
+          "id": "msg-c001",
+          "author": {"role": "user", "name": null},
+          "content": {"content_type": "text", "parts": ["What is 2+2?"]}
+        }
+      },
+      "msg-c002": {
+        "id": "msg-c002",
+        "parent": "msg-c001",
+        "children": [],
+        "message": {
+          "id": "msg-c002",
+          "author": {"role": "assistant", "name": null},
+          "content": {"content_type": "text", "parts": ["4"]}
+        }
+      }
+    }
+  }
+]

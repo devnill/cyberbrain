@@ -44,28 +44,7 @@ python3 "$EXTRACTOR" \
   --cwd "$CWD" \
   2>&1
 
-# Write session registry entry so the SessionEnd hook can skip already-captured sessions
-if [ -n "$SESSION_ID" ]; then
-  python3 -c "
-import json, os
-from pathlib import Path
-from datetime import datetime, timezone
-
-registry_path = Path.home() / '.claude' / 'kg-sessions.json'
-try:
-    data = json.loads(registry_path.read_text()) if registry_path.exists() else {'version': 1, 'sessions': {}}
-    data.setdefault('sessions', {})['$SESSION_ID'] = {
-        'extracted_at': datetime.now(timezone.utc).isoformat(),
-        'trigger': '$TRIGGER',
-        'cwd': '$CWD',
-    }
-    tmp = str(registry_path) + '.tmp'
-    with open(tmp, 'w') as f:
-        json.dump(data, f, indent=2)
-    os.replace(tmp, str(registry_path))
-except Exception:
-    pass  # Never fail on registry write
-" 2>/dev/null
-fi
+# The extractor writes its own log entry to ~/.claude/logs/kg-extract.log.
+# No separate registry write needed here.
 
 exit 0

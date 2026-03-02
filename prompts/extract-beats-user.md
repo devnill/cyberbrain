@@ -5,6 +5,7 @@ Session context:
 - Working directory: {cwd}
 - Trigger: {trigger}
 
+{vault_claude_md_section}
 <transcript>
 {transcript}
 </transcript>

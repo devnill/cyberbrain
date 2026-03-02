@@ -1,0 +1,106 @@
+[
+  {
+    "uuid": "conv-abc-001",
+    "name": "Postgres connection pool debugging",
+    "created_at": "2026-02-10T09:00:00Z",
+    "updated_at": "2026-02-10T10:30:00Z",
+    "summary": "Investigated silent job drops under sustained load; root cause was pool timeout misconfiguration.",
+    "chat_messages": [
+      {
+        "sender": "human",
+        "text": "Jobs are silently dropping under load. No errors in the logs.",
+        "content": [
+          {"type": "text", "text": "Jobs are silently dropping under load. No errors in the logs."}
+        ]
+      },
+      {
+        "sender": "assistant",
+        "text": "This pattern is typical of connection pool exhaustion. When the pool is full and a checkout times out, many frameworks swallow the error silently. What's your pool_timeout setting?",
+        "content": [
+          {"type": "text", "text": "This pattern is typical of connection pool exhaustion. When the pool is full and a checkout times out, many frameworks swallow the error silently. What's your pool_timeout setting?"}
+        ]
+      },
+      {
+        "sender": "human",
+        "text": "It's set to 5 seconds. Should I increase it?",
+        "content": [
+          {"type": "text", "text": "It's set to 5 seconds. Should I increase it?"}
+        ]
+      },
+      {
+        "sender": "assistant",
+        "text": "Yes. Under sustained load with slow queries, 5s is too short. Set pool_timeout to 10 in config/database.yml. Also increase pool size if you have headroom. This confirmed the fix in your case — jobs stopped dropping after the change.",
+        "content": [
+          {"type": "text", "text": "Yes. Under sustained load with slow queries, 5s is too short. Set pool_timeout to 10 in config/database.yml. Also increase pool size if you have headroom. This confirmed the fix in your case — jobs stopped dropping after the change."}
+        ]
+      }
+    ]
+  },
+  {
+    "uuid": "conv-abc-002",
+    "name": "Auth middleware ordering decision",
+    "created_at": "2026-02-15T14:00:00Z",
+    "updated_at": "2026-02-15T15:45:00Z",
+    "summary": "Decided to run auth middleware before rate limiter to prevent unauthenticated requests from consuming quota.",
+    "chat_messages": [
+      {
+        "sender": "human",
+        "text": "Should we run auth before or after rate limiting in the Express middleware stack?",
+        "content": [
+          {"type": "text", "text": "Should we run auth before or after rate limiting in the Express middleware stack?"}
+        ]
+      },
+      {
+        "sender": "assistant",
+        "text": "Auth should run before rate limiting. If rate limiting comes first, unauthenticated requests consume per-user quota before being rejected — this means a malicious actor could exhaust a legitimate user's quota without ever authenticating. Run auth first so only authenticated requests reach the rate limiter.",
+        "content": [
+          {"type": "text", "text": "Auth should run before rate limiting. If rate limiting comes first, unauthenticated requests consume per-user quota before being rejected — this means a malicious actor could exhaust a legitimate user's quota without ever authenticating. Run auth first so only authenticated requests reach the rate limiter."}
+        ]
+      },
+      {
+        "sender": "human",
+        "text": "That makes sense. We'll update the middleware order. Should this be documented?",
+        "content": [
+          {"type": "text", "text": "That makes sense. We'll update the middleware order. Should this be documented?"}
+        ]
+      },
+      {
+        "sender": "assistant",
+        "text": "Yes — this is a non-obvious security decision. Document it in your architecture notes with the rationale. The key insight is: rate limiting is only meaningful when applied to authenticated identities.",
+        "content": [
+          {"type": "text", "text": "Yes — this is a non-obvious security decision. Document it in your architecture notes with the rationale. The key insight is: rate limiting is only meaningful when applied to authenticated identities."}
+        ]
+      },
+      {
+        "sender": "human",
+        "text": "Great, done. I'll add it to our decision log.",
+        "content": [
+          {"type": "text", "text": "Great, done. I'll add it to our decision log."}
+        ]
+      }
+    ]
+  },
+  {
+    "uuid": "conv-abc-003",
+    "name": "Quick question",
+    "created_at": "2026-02-20T08:00:00Z",
+    "updated_at": "2026-02-20T08:01:00Z",
+    "summary": "",
+    "chat_messages": [
+      {
+        "sender": "human",
+        "text": "hi",
+        "content": [
+          {"type": "text", "text": "hi"}
+        ]
+      },
+      {
+        "sender": "assistant",
+        "text": "Hello! How can I help?",
+        "content": [
+          {"type": "text", "text": "Hello! How can I help?"}
+        ]
+      }
+    ]
+  }
+]

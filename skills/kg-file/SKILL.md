@@ -1,128 +1,222 @@
 ---
 name: kg-file
 description: >
-  File a piece of information into a personal knowledge graph stored as Obsidian markdown.
-  Use this skill whenever the user wants to capture, store, log, or save information into
-  their knowledge base — including insights, decisions, problems, project notes, Claude
-  context summaries, concepts learned, or any other information that deserves a permanent
-  home. Trigger on phrases like "save this", "add this to my notes", "file this", "capture
-  this", "make a note of", "log this", "add to my knowledge base", or whenever the user
-  shares a piece of information and implies they want it preserved. Also trigger when the
-  user asks Claude to summarize a session or conversation for later retrieval.
+  File a specific piece of knowledge into the personal vault right now. Trigger on:
+  "Save this.", "File this.", "Remember this.", "Add this to my notes.", "Capture this.",
+  or any phrasing that implies the user wants a specific piece of information preserved.
+  Also trigger on dry-run variants: "Show me what you'd file", "Preview this",
+  "What beat would this become?", "Test the filing".
+allowed-tools: Bash, Glob, Grep, Read
 ---
 
-# Knowledge Graph Filing Skill
+# Knowledge Filing
 
-Produces a complete, ready-to-paste Obsidian markdown note for a personal knowledge graph
-built on the ontology defined in `references/ontology.md`.
-
-## Core Behavior
-
-When invoked, Claude should:
-
-1. **Classify** the input into the correct entity type and domain
-2. **Extract** structured fields (relationships, status, confidence, source)
-3. **Generate** a complete Obsidian note: YAML frontmatter + formatted body
-4. **Suggest** the canonical file path for the note
-5. **Identify** likely wikilinks to existing or needed stub notes
-6. **Ask** one clarifying question only if critical information is truly missing — otherwise make reasonable inferences and proceed
-
-Read `references/ontology.md` for the full entity type definitions, field schemas, and relationship vocabulary.
+Arguments: $ARGUMENTS
 
 ---
 
-## Process
+## Step 1 — Detect Dry-Run Mode
 
-### Step 1 — Classify the input
+Check `$ARGUMENTS` for `--dry-run` flag, or check the invocation context for natural-
+language dry-run phrases: "preview", "what would happen", "show me what you'd file",
+"test the filing", "don't actually write".
 
-Determine the primary entity type by asking: *what kind of thing is this note fundamentally about?*
+If dry-run mode is active, confirm at the start of output:
+`[DRY RUN] No files will be written.`
 
-| If the input describes... | Use type |
-|---|---|
-| Something actively being worked on | `project` |
-| A principle, method, or technique | `concept` |
-| A specific tool, app, device, or library | `tool` |
-| A choice made with reasoning | `decision` |
-| A lesson, realization, or pattern noticed | `insight` |
-| Something broken, unknown, or unsolved | `problem` |
-| A book, article, doc, URL | `resource` |
-| A person | `person` |
-| A one-time or recurring occurrence | `event` |
-| Claude session context for a domain | `claude-context` |
-| A broad area of knowledge or practice | `domain` |
-| A capability possessed or being developed | `skill` |
-| A physical or logical location | `place` |
-
-When ambiguous between two types, prefer the more specific one. A realization from working on a project is an `insight`, not a `project`.
-
-### Step 2 — Extract structured fields
-
-From the input, identify:
-
-- **domain**: The broad topic area (e.g., `amateur-radio`, `electronics`, `landscaping`, `iOS-dev`, `home`, `personal`, `woodworking`). Infer from context.
-- **status**: Current state of this thing. Default to `active` for projects/problems, `evergreen` for concepts/insights.
-- **confidence**: How certain is this information? `high` if from direct experience or verified docs. `medium` if recalled or inferred. `low` if speculative.
-- **source**: Where this came from. Options: `personal-experience`, `claude-context`, `documentation`, `book`, `conversation`, `research`.
-- **relationships**: What other notes does this connect to? Generate wikilinks even as stubs — the link matters even if the target note doesn't exist yet.
-
-### Step 3 — Draft the note
-
-Produce the note in this structure:
-
-```
----
-[YAML frontmatter per ontology schema for this type]
 ---
 
-[one-sentence summary of what this note is about]
+## Step 2 — Extract Content and Flags
 
-[body content — see formatting rules below]
+Parse `$ARGUMENTS` for:
+- `--type <type>` — override type assignment
+- `--folder <path>` — override filing destination (vault-relative path)
+- `--dry-run` — dry-run mode (already detected in Step 1)
+- Remaining text after flag parsing is the content to file
+
+If content is present in `$ARGUMENTS` (after removing flags), use it.
+
+If no content is provided, use the last few exchanges of the current conversation as the
+content to extract from.
+
+---
+
+## Step 3 — Load Config
+
+```bash
+python3 -c "
+import json, os
+cfg = json.load(open(os.path.expanduser('~/.claude/knowledge.json')))
+print(cfg.get('vault_path', ''))
+print(cfg.get('inbox', 'AI/Claude-Sessions'))
+print(cfg.get('staging_folder', 'AI/Claude-Inbox'))
+print(str(cfg.get('autofile', False)).lower())
+"
 ```
 
-#### Body Formatting Rules
+Capture as `VAULT_PATH`, `INBOX_FOLDER`, `STAGING_FOLDER`, `AUTOFILE`.
 
-- Use **explicit wikilinks**: `[[concept/fft-analysis]]` not bare mentions
-- Express relationships in the sentence around the link: *"This decision was made to resolve [[problem/ctcss-false-triggers]]"*
-- Keep the body focused — this is a permanent note, not a journal entry
-- For `insight` and `decision` notes, always include a **Rationale** or **Why This Matters** section
-- For `problem` notes, always include a **Symptoms** section and a **Possible Causes** section if known
-- For `claude-context` notes, use a structured template (see ontology reference)
-- For `concept` notes, include a brief definition, then practical application
+Check for per-project vault folder:
 
-### Step 4 — Output
+```bash
+python3 -c "
+import json, os
+from pathlib import Path
+cwd = Path(os.getcwd()).resolve()
+for d in [cwd, *cwd.parents]:
+    candidate = d / '.claude' / 'knowledge.local.json'
+    if candidate.exists():
+        cfg = json.load(open(candidate))
+        print(cfg.get('vault_folder', ''))
+        print(cfg.get('project_name', ''))
+        break
+    if d == Path.home():
+        break
+"
+```
 
-Present the result as:
-
-1. **Suggested path**: `type/kebab-case-title.md`
-2. **Complete note**: Full markdown including frontmatter, ready to paste
-3. **Stub notes needed**: A list of wikilinked notes that don't exist yet but should be created
-4. **One optional follow-up**: If there's a natural next action (e.g., "this problem note suggests creating a related decision note"), mention it briefly
-
----
-
-## Tone and Style
-
-- Be direct and terse in the generated note — this is reference material, not prose
-- Use present tense for facts, past tense for events
-- Prefer concrete specifics over vague generalities
-- The note should read as if written by the user, not by an AI assistant
+Capture as `PROJECT_FOLDER` and `PROJECT_NAME` (may be empty).
 
 ---
 
-## Edge Cases
+## Step 4 — Read Vault CLAUDE.md
 
-**Input is a conversation or session summary**: Classify as `claude-context`. Structure it by domain with subsections for active projects, known concepts, and open problems.
+Check for a `CLAUDE.md` at the vault root:
 
-**Input spans multiple entity types**: File the dominant entity type as the main note. Create brief stub notes (frontmatter only, one-line description) for the secondary entities. List them in the output.
+```bash
+ls "$VAULT_PATH/CLAUDE.md" 2>/dev/null
+```
 
-**Input is very short / low context**: Make reasonable inferences and proceed. State your assumptions clearly in a comment at the top of the output (not inside the note itself). Do not interrogate the user with multiple questions.
+If it exists, read it using the Read tool. Extract:
+- Type vocabulary (valid types for this vault)
+- Filing rules (which types go where)
+- Required frontmatter fields
+- Tag vocabulary and conventions
+- Naming conventions
 
-**Input already has structure** (e.g., bullet list, existing frontmatter): Preserve the structure, normalize to the schema, fill any missing required fields.
+If no `CLAUDE.md` exists, warn the user:
+"No vault CLAUDE.md found. Filing with default type vocabulary (decision, insight,
+problem, reference). Run `/kg-setup` to configure your vault's conventions."
 
-**Domain is unknown**: Default to `personal` and flag it for the user to correct.
+Use the four-type default vocabulary: `decision`, `insight`, `problem`, `reference`.
+
+If a `CLAUDE.md` exists but no type vocabulary can be identified from its content, warn:
+"CLAUDE.md found but no type vocabulary could be identified — filing with default types
+(decision, insight, problem, reference)."
 
 ---
 
-## Reference Files
+## Step 5 — Extract Beats
 
-- `references/ontology.md` — Full entity type schemas, relationship vocabulary, domain taxonomy, and example notes. Read before generating output for unfamiliar entity types.
+From the content (Step 2), extract beats. A short one-liner yields one beat. A richer
+passage may yield 1–3. Be selective — do not over-extract.
+
+For each beat, determine:
+- **title** — brief and descriptive (5–10 words)
+- **type** — from the CLAUDE.md vocabulary (or 4-type default); use `--type` override if provided
+- **summary** — one information-dense sentence, optimized for future search and retrieval
+- **tags** — 2–6 lowercase keywords
+- **scope** — `project` (only useful in this specific codebase) or `general`
+- **body** — full markdown; self-contained; a future reader needs no other context
+
+If `--type` was provided, use it for all beats (do not override individual assignments).
+
+---
+
+## Step 6 — Determine Filing Destination
+
+For each beat:
+
+1. If `--folder` was provided, use it as the filing destination (vault-relative).
+2. Otherwise, determine routing:
+   - `autofile: true` → LLM routing: extend an existing note or create a new one,
+     guided by CLAUDE.md conventions
+   - `autofile: false` (default) → drop in inbox:
+     - `scope: project` AND `PROJECT_FOLDER` is set → `PROJECT_FOLDER`
+     - `scope: general` → `INBOX_FOLDER`
+     - No project config → `STAGING_FOLDER`
+
+---
+
+## Step 7 — File via Extractor (or Dry-Run Preview)
+
+### Dry-run mode
+
+Do not invoke the extractor. Instead, for each beat, output a full preview block:
+
+```
+[DRY RUN] Would file 1 beat
+
+━━━ Beat 1 of 1 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Title:   [title]
+  Type:    [type]
+  Tags:    [tags]
+  Summary: [summary]
+  Action:  would create → [destination folder]/[Title].md
+
+  Body preview:
+  > [full beat body]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1 would be filed · 0 skipped
+  No files were written. Run without --dry-run to apply.
+```
+
+### Normal mode
+
+Write all beats as a JSON array to a temp file:
+
+```bash
+python3 -c "import uuid; print(f'/tmp/kg-file-{uuid.uuid4()}.json')"
+```
+
+Then invoke the extractor:
+
+```bash
+python3 ~/.claude/extractors/extract_beats.py \
+  --beats-json "$TEMP_FILE" \
+  --session-id "manual-$(date +%s)" \
+  --trigger manual \
+  --cwd "$(pwd)" \
+  2>&1
+
+rm -f "$TEMP_FILE"
+```
+
+Collect the written paths from `[extract_beats] Wrote: ...` lines in the output.
+
+The JSON array format for `--beats-json`:
+```json
+[
+  {
+    "title": "...",
+    "type": "...",
+    "scope": "project|general",
+    "summary": "...",
+    "tags": ["tag1", "tag2"],
+    "body": "..."
+  }
+]
+```
+
+---
+
+## Step 8 — Report
+
+### Normal mode output
+
+```
+Filed: "[title]"
+  Type:   [type]
+  Action: created [vault-relative/path/to/Note.md]
+  Tags:   [tag1, tag2, tag3]
+```
+
+One block per beat. If multiple beats were filed, list each.
+
+### Error handling
+
+If the extractor reports an error, surface it clearly:
+"Filing failed: [error message]. The beat was not saved."
+
+Do not retry silently. Report the error and stop.

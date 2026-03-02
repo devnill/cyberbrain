@@ -1,19 +1,21 @@
 ---
 name: kg-enrich
 description: >
-  Scan vault notes and enrich those missing structured metadata (type, summary, tags)
-  so they surface correctly in /kg-recall queries. Run /kg-enrich to bridge the gap
-  between human-authored notes and beat-style recall-ready notes.
-allowed-tools: Bash, Glob, Grep, Read, Edit, Write
+  Scan vault notes for missing or invalid metadata and enrich them so they surface
+  correctly in /kg-recall. Trigger on: "Clean up the vault.", "Enrich missing metadata.",
+  "My manually-added notes need metadata.", "Tidy up my notes.",
+  "Do a dry run of the enrichment."
+allowed-tools: Bash, Glob, Grep, Read, Edit
 ---
 
 # Knowledge Vault Enrichment
 
 Arguments: $ARGUMENTS
 
-Scans the Obsidian vault for notes missing `type`, `summary`, or `tags` fields and
-adds them using in-context classification — making human-authored notes findable via
-`/kg-recall`.
+Scans the Obsidian vault for notes missing required metadata (`type`, `summary`, `tags`)
+and adds them using in-context classification — making human-authored notes findable via
+`/kg-recall`. Additive-only by default: existing fields are never overwritten unless
+`--overwrite` is set.
 
 ---
 
@@ -25,13 +27,21 @@ Parse `$ARGUMENTS` for the following flags:
 |---|---|---|
 | `--folder <path>` | (entire vault) | Vault-relative folder to scan |
 | `--dry-run` | false | Report what would change without modifying any files |
-| `--since <YYYY-MM-DD>` | (all) | Only process files modified on or after this date |
+| `--since <YYYY-MM-DD>` | (all) | Only notes modified on or after this date (filesystem mtime) |
 | `--limit <n>` | (unlimited) | Process at most N notes needing enrichment |
-| `--overwrite` | false | Overwrite existing `type`, `summary`, `tags` values; default is additive-only |
+| `--overwrite` | false | Replace existing type/summary/tags values instead of additive-only |
+
+Check the invocation context for natural-language dry-run phrases: "dry run",
+"what would change", "preview", "don't modify", "show me what needs enrichment".
+
+If dry-run mode is active, confirm at the start:
+`[DRY RUN] No files will be written.`
 
 ---
 
-## Step 2 — Load Config
+## Step 2 — Load Config and Vault CLAUDE.md
+
+### Load vault path
 
 ```bash
 python3 -c "
@@ -41,14 +51,35 @@ print(cfg.get('vault_path', ''))
 "
 ```
 
-Set `VAULT_PATH` from the output. If empty or the path does not exist, report an error
-and stop.
+Set `VAULT_PATH`. If empty or the path does not exist, report an error and stop.
+
+### Load type vocabulary from CLAUDE.md
+
+Check for `CLAUDE.md` at the vault root:
+
+```bash
+ls "$VAULT_PATH/CLAUDE.md" 2>/dev/null
+```
+
+If it exists, read it using the Read tool. Extract the valid type vocabulary — the list
+of types that are recognized in this vault.
+
+If no `CLAUDE.md` exists, warn the user:
+"No vault CLAUDE.md found. Using the 4-type default vocabulary (decision, insight,
+problem, reference). Run `/kg-setup` to configure your vault's type vocabulary."
+Use the four-type default: `decision`, `insight`, `problem`, `reference`.
+
+If a `CLAUDE.md` exists but no type vocabulary can be identified from its content, warn:
+"CLAUDE.md found but no type vocabulary could be identified — using default types
+(decision, insight, problem, reference)."
+Use the four-type default.
+
+Set `VALID_TYPES` to the resolved vocabulary. This is the authoritative list for all
+type validation in this run.
 
 ---
 
 ## Step 3 — Find Candidate Files
-
-Run the following to get a sorted list of `.md` files to evaluate:
 
 ```bash
 python3 -c "
@@ -57,8 +88,8 @@ from pathlib import Path
 from datetime import datetime
 
 vault = sys.argv[1]
-folder = sys.argv[2] if len(sys.argv) > 2 else ''
-since = sys.argv[3] if len(sys.argv) > 3 else ''
+folder = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else ''
+since = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else ''
 
 base = Path(vault) / folder if folder else Path(vault)
 since_dt = datetime.fromisoformat(since) if since else None
@@ -70,45 +101,37 @@ for p in sorted(base.rglob('*.md')):
 " "\$VAULT_PATH" "\$FOLDER" "\$SINCE_DATE"
 ```
 
-This produces a full list of candidate paths. You will process them in Step 4.
+This produces a full list of candidate paths.
 
 ---
 
 ## Step 4 — Detect Notes Needing Enrichment
 
 For each candidate file, read the **first 40 lines** using the Read tool with
-`limit: 40`. This is sufficient to read the YAML frontmatter without loading the
-full body.
+`limit: 40`. This is sufficient to read the YAML frontmatter without loading the full
+body.
 
-### Skip conditions (do not process, do not count as needing enrichment)
+### Skip conditions (do not process; count as skipped)
 
 - Frontmatter contains `enrich: skip`
 - Filename matches `YYYY-MM-DD.md` (daily journal files)
 - File path contains `/templates/` or `/_templates/`
-- `type:` is `journal` or `moc`
+- `type:` value is `journal` or `moc`
 
 ### Needs enrichment if ANY of these is true
 
 1. No frontmatter (file does not start with `---`)
 2. Frontmatter exists but `type:` field is absent
-3. `type:` is present but not in VALID_TYPES (see below)
-4. Valid `type:` present but `summary:` is absent or empty
-5. Valid `type:` and non-empty `summary:` but `tags:` is absent, empty (`[]`), or
-   contains only domain-level terms: `personal`, `work`, `home`
-
-### VALID_TYPES
-
-```
-decision, insight, task, problem-solution, error-fix, reference,
-project, concept, tool, problem, resource, person, event,
-claude-context, domain, skill, place
-```
+3. `type:` is present but its value is not in `VALID_TYPES`
+4. `type:` is valid but `summary:` is absent or empty
+5. `type:` is valid, `summary:` is non-empty, but `tags:` is absent, empty (`[]`), or
+   contains only domain-level terms (`personal`, `work`, `home`)
 
 ### Tracking
 
 Maintain running counts:
 - `needs_enrichment` — list of file paths that pass the detection check
-- `already_done` — count of files with all required fields already present
+- `already_done` — count of files with all required fields already present and valid
 - `skipped` — count of files matching a skip condition
 
 Apply `--limit` to the `needs_enrichment` list before proceeding to Step 5.
@@ -117,36 +140,33 @@ Apply `--limit` to the `needs_enrichment` list before proceeding to Step 5.
 
 ## Step 5 — Enrich Each Note
 
+### If `--dry-run`
+
+For each file in `needs_enrichment`, record the file path and the specific reason it
+needs enrichment (missing `type`, invalid `type`, empty `summary`, etc.). Do not read
+full content or modify anything. Skip to Step 6 for the dry-run report.
+
+### Otherwise (normal mode)
+
 For each file in `needs_enrichment`:
 
-**If `--dry-run`:** Record the file and detection reason, but do not read or modify it.
-Skip to Step 6 for the report.
-
-**Otherwise:**
-
-### 5a. Read the full note
+#### 5a. Read the full note
 
 Use the Read tool to load the complete file content.
 
-### 5b. Classify the note
+#### 5b. Classify the note
 
-Using the classification criteria below, determine the appropriate values for the
-missing or invalid fields. Work entirely in-context — do not call any external process.
+Using the `VALID_TYPES` vocabulary loaded from CLAUDE.md, determine the appropriate
+values for missing or invalid fields. Work entirely in-context.
 
-**Type definitions:**
-- `decision` — a choice made between alternatives, with rationale recorded
-- `insight` — a non-obvious understanding or pattern about a system, tool, or approach
-- `task` — a completed unit of work and its outcome
-- `problem-solution` — a problem that required judgment to diagnose and solve
-- `error-fix` — a specific error or bug and the exact fix that resolved it
-- `reference` — a fact, command, config value, API detail, or snippet to look up later
-
-If the note is a draft, journal entry, meeting notes, reading list, or otherwise does
-not fit any type: mark it as skipped (reason: "null type") and move on.
+**Type assignment:** Choose the type from `VALID_TYPES` that best describes what kind
+of thinking produced this note. If the note is a draft, journal entry, meeting notes,
+reading list, or otherwise cannot be meaningfully classified into any of the valid types,
+mark it as skipped with reason "cannot classify — no matching type" and move on.
 
 **Summary rules:**
 - One information-dense sentence
-- Start with what the note covers — not "This note...", not "A guide to..."
+- Start with the key concept — not "This note...", not "A guide to..."
 - Front-load the key noun or concept
 - Include terms a future searcher would use
 
@@ -154,53 +174,42 @@ not fit any type: mark it as skipped (reason: "null type") and move on.
 - 2–6 lowercase keywords
 - Most distinguishing terms only
 - Omit generic words: `note`, `guide`, `tips`, `overview`
-- Omit domain-level terms: `personal`, `work`, `home`
+- Omit domain-level terms already covered by vault structure: `personal`, `work`, `home`
 
-**Scope:**
-- `project` — only useful in one specific codebase or project context
-- `general` — applicable broadly across contexts
-
-### 5c. Apply additive-only frontmatter update
+#### 5c. Apply frontmatter update (additive-only by default)
 
 **If frontmatter exists** (file starts with `---`):
 
-For each field that is absent or invalid (and not `--overwrite`):
-- Add the field at the end of the frontmatter block, immediately before the closing `---`
-- Do not modify existing fields unless `--overwrite` is set
+Identify which fields are missing or invalid. For each such field:
+- If `--overwrite` is set: replace the existing value
+- Otherwise: add only absent/invalid fields; leave existing fields untouched
 
-Use the Edit tool. The `old_string` should be the closing `---` of the frontmatter;
-`new_string` inserts the new fields before it:
+Use the Edit tool to insert new fields immediately before the closing `---` of the
+frontmatter block.
+
+Example — adding `type`, `summary`, and `tags` before the closing `---`:
 
 ```
-old_string:  "---\n\n## Note title"   (the closing --- plus first body line)
-new_string:  "type: error-fix\nsummary: \"...\"\ntags: [\"a\", \"b\"]\nscope: general\n---\n\n## Note title"
+old_string:  "---\n\n## [first body line or heading]"
+new_string:  "type: insight\nsummary: \"One-sentence summary here.\"\ntags: [keyword1, keyword2]\n---\n\n## [first body line or heading]"
 ```
+
+Adjust to match only the fields actually being added.
 
 **If no frontmatter exists** (file does not start with `---`):
 
-Prepend a complete frontmatter block using the Edit tool on the first line of the file:
-
-```yaml
----
-id: <new-uuid>
-type: error-fix
-summary: "One-sentence summary."
-tags: ["keyword1", "keyword2"]
-scope: general
----
-```
-
-Generate a UUID with:
+Generate a UUID:
 ```bash
 python3 -c "import uuid; print(uuid.uuid4())"
 ```
 
-### 5d. Record result
+Prepend a complete frontmatter block using the Edit tool on the first line of the file.
+
+#### 5d. Record result
 
 For each successfully enriched note, record:
 - File path (vault-relative)
-- Fields added/changed
-- The assigned type and tags
+- Fields added or changed and their new values
 
 For each error (failed to parse, Edit tool failed, etc.): record the path and reason.
 
@@ -208,26 +217,40 @@ For each error (failed to parse, Edit tool failed, etc.): record the path and re
 
 ## Step 6 — Report Results
 
-Print a summary in this format:
+### Normal mode
 
 ```
 /kg-enrich complete — N notes scanned
 
-  Enriched:     N notes
-  Already done: N notes (all required fields present)
-  Skipped:      N notes (enrich: skip or null type or excluded pattern)
-  Errors:        N notes (parse or edit failure)
+  Enriched:      N notes
+  Already done:  N notes
+  Skipped:       N notes (templates, daily journals, enrich:skip)
+  Errors:         N notes (parse or edit failure)
 
 Enriched:
-  + filename.md → type: error-fix, tags: [hook, python, pre-compact]
-  + Another Note.md → type: decision, tags: [architecture, api-design]
-  ...
+  + Note Title.md  → type: insight, tags: [keyword1, keyword2]
+  + Another Note.md → type: decision, tags: [arch, api-design]
 ```
 
-If `--dry-run`, replace the "Enriched" section with a "Would enrich" section listing the
-files and the detection reason for each (missing field, invalid type, etc.).
-
-If no notes needed enrichment, report:
+If no notes needed enrichment:
 ```
 /kg-enrich complete — N notes scanned. All notes already have required metadata.
+```
+
+### Dry-run mode
+
+```
+[DRY RUN] Would enrich N of M notes scanned
+
+Would enrich:
+  + Note Title.md  — missing: type, summary
+  + Another Note.md — invalid type: "mytopic" (not in vocabulary)
+  + Third Note.md  — missing: tags
+
+Would skip:
+  - Daily Journal.md (daily journal)
+  - Template.md (in /templates/ folder)
+
+Already done:  N notes
+No files were modified. Run without --dry-run to apply.
 ```

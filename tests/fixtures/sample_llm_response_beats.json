@@ -1,0 +1,26 @@
+[
+  {
+    "title": "subprocess.run text=True fails on binary stdout",
+    "type": "problem",
+    "scope": "general",
+    "summary": "subprocess.run with text=True raises UnicodeDecodeError on binary output; fix is to omit text=True and decode manually with errors='replace'.",
+    "tags": ["subprocess", "python", "encoding", "unicode"],
+    "body": "## Problem\n\nUnicodeDecodeError when calling subprocess.run with text=True on a command that outputs binary data.\n\n## Fix\n\nRemove `text=True`. Capture as bytes and decode with `output.decode('utf-8', errors='replace')`.\n\n```python\nresult = subprocess.run(cmd, capture_output=True)\noutput = result.stdout.decode('utf-8', errors='replace')\n```"
+  },
+  {
+    "title": "Use claude-code backend to avoid API key requirement",
+    "type": "decision",
+    "scope": "project",
+    "summary": "Made claude-code the default backend so users with Claude Pro can run extraction without a separate ANTHROPIC_API_KEY, using their active session credentials instead.",
+    "tags": ["backend", "claude-code", "api-key", "authentication", "config"],
+    "body": "## Decision\n\nDefault backend set to `claude-code` in knowledge.json.\n\n## Rationale\n\nMost users have Claude Pro but not necessarily an API key. The claude-code path reuses active session auth and requires no credential setup.\n\n## Alternatives Considered\n\n- `anthropic` backend: requires ANTHROPIC_API_KEY setup — friction for most users.\n- `bedrock` backend: requires AWS credentials — only appropriate for enterprise users."
+  },
+  {
+    "title": "Claude Code subprocess env vars must be stripped before claude -p",
+    "type": "reference",
+    "scope": "general",
+    "summary": "Strip CLAUDECODE, CLAUDE_CODE_ENTRYPOINT, CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY, and CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC before spawning claude -p to prevent nested-session hangs.",
+    "tags": ["claude-code", "subprocess", "environment", "nested-session"],
+    "body": "## Reference\n\nWhen spawning `claude -p` from inside a Claude Code session, these four environment variables must be stripped from the subprocess environment:\n\n- `CLAUDECODE` — triggers nested-session guard\n- `CLAUDE_CODE_ENTRYPOINT` — prevents API connections\n- `CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY` — contributes to API failures\n- `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` — contributes to API failures\n\nSee: https://github.com/anthropics/claude-code/issues/26190"
+  }
+]
