@@ -3,8 +3,8 @@
 ## Install
 
 ```bash
-git clone https://github.com/your-org/knowledge-graph
-cd knowledge-graph
+git clone https://github.com/your-org/cyberbrain
+cd cyberbrain
 bash install.sh
 ```
 
@@ -14,13 +14,12 @@ bash install.sh
 
 ### Step 1 — Point at a vault
 
-Edit `~/.claude/knowledge.json`:
+Edit `~/.claude/cyberbrain.json`:
 
 ```json
 {
   "vault_path": "/absolute/path/to/your/vault",
   "inbox": "AI/Claude-Sessions",
-  "staging_folder": "AI/Claude-Inbox"
 }
 ```
 
@@ -69,7 +68,7 @@ Start a Claude Code session in any project. Run `/compact` (or let context fill 
 
 To preview what would be extracted from the current session without writing anything:
 ```
-/kg-extract --dry-run
+/cb-extract --dry-run
 ```
 
 ---
@@ -106,7 +105,7 @@ python3 scripts/import.py --export ~/Downloads/export/ --format claude --dry-run
 
 ## Route beats to a project folder (optional)
 
-Without this, beats land in `AI/Claude-Inbox/`. To route a project's beats to a dedicated folder, add `.claude/knowledge.local.json` to the project root:
+Without this, all beats land in `AI/Claude-Sessions/`. To route a project's beats to a dedicated folder, add `.claude/cyberbrain.local.json` to the project root:
 
 ```json
 {
@@ -121,10 +120,10 @@ The system walks up from the session's working directory to find this file.
 
 ## Generate vault filing instructions (optional)
 
-If you have an existing vault, run this once to generate a `CLAUDE.md` at the vault root. It teaches Claude your vault's structure so that `/kg-file` and future extractions stay consistent with your conventions:
+If you have an existing vault, run this once to generate a `CLAUDE.md` at the vault root. It teaches Claude your vault's structure so that `/cb-file` and future extractions stay consistent with your conventions:
 
 ```
-/kg-setup
+/cb-setup
 ```
 
 For a new vault, skip this until you have a few dozen notes.
@@ -135,24 +134,24 @@ For a new vault, skip this until you have a few dozen notes.
 
 | Command | What it does |
 |---|---|
-| `/kg-extract` | Extract beats from the current session (or a path to any `.jsonl`) |
-| `/kg-recall <query>` | Search your vault and inject context into the session |
-| `/kg-file` | Manually save any piece of information to the vault |
-| `/kg-enrich` | Backfill metadata on notes that are missing tags/summaries |
-| `/kg-setup` | Analyze vault and generate/update its `CLAUDE.md` |
+| `/cb-extract` | Extract beats from the current session (or a path to any `.jsonl`) |
+| `/cb-recall <query>` | Search your vault and inject context into the session |
+| `/cb-file` | Manually save any piece of information to the vault |
+| `/cb-enrich` | Backfill metadata on notes that are missing tags/summaries |
+| `/cb-setup` | Analyze vault and generate/update its `CLAUDE.md` |
 
 ---
 
 ## Troubleshooting
 
 **No beats appear after /compact**
-Check `vault_path` in `~/.claude/knowledge.json` points to a real directory, and that the hook is registered: `cat ~/.claude/settings.json | grep PreCompact`
+Check `vault_path` in `~/.claude/cyberbrain.json` points to a real directory, and that the hook is registered: `cat ~/.claude/settings.json | grep PreCompact`
 
 **"Reached max turns" or backend error**
-The transcript may be very long. Add `"claude_timeout": 180` to `~/.claude/knowledge.json` to extend the timeout.
+The transcript may be very long. Add `"claude_timeout": 180` to `~/.claude/cyberbrain.json` to extend the timeout.
 
 **Beats land in inbox instead of project folder**
-Confirm `.claude/knowledge.local.json` exists in the project root (or a parent directory up to `~`).
+Confirm `.claude/cyberbrain.local.json` exists in the project root (or a parent directory up to `~`).
 
 **Skills not found after install**
 Skills load at session start. Open a new Claude Code session after running `bash install.sh`.

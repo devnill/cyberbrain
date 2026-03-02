@@ -44,7 +44,7 @@ python3 "$EXTRACTOR" \
   --cwd "$CWD" \
   2>&1
 
-# The extractor writes its own log entry to ~/.claude/logs/kg-extract.log.
+# The extractor writes its own log entry to ~/.claude/logs/cb-extract.log.
 # No separate registry write needed here.
 
 exit 0

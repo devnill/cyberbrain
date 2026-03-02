@@ -27,9 +27,9 @@ if [ -z "$TRANSCRIPT_PATH" ] || [ ! -f "$TRANSCRIPT_PATH" ]; then
 fi
 
 # Deduplication check: skip if already captured by PreCompact hook.
-# The extractor logs to ~/.claude/logs/kg-extract.log; check it here as a
+# The extractor logs to ~/.claude/logs/cb-extract.log; check it here as a
 # fast pre-flight so we don't spawn the extractor unnecessarily.
-EXTRACT_LOG="$HOME/.claude/logs/kg-extract.log"
+EXTRACT_LOG="$HOME/.claude/logs/cb-extract.log"
 if [ -n "$SESSION_ID" ] && [ -f "$EXTRACT_LOG" ]; then
   if grep -qF "	${SESSION_ID}	" "$EXTRACT_LOG" 2>/dev/null; then
     echo "session-end-extract: session $SESSION_ID already captured, skipping" >&2
@@ -56,7 +56,7 @@ python3 "$EXTRACTOR" \
   --cwd "$CWD" \
   2>&1
 
-# The extractor writes its own log entry to ~/.claude/logs/kg-extract.log.
+# The extractor writes its own log entry to ~/.claude/logs/cb-extract.log.
 # No separate registry write needed here.
 
 exit 0

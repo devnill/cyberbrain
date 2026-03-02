@@ -1,5 +1,5 @@
 ---
-name: kg-recall
+name: cb-recall
 description: >
   Search the personal knowledge vault for relevant context from past sessions. Invoke
   proactively when the user asks about prior decisions, approaches, or patterns they may
@@ -21,14 +21,13 @@ Search query: $ARGUMENTS
 ```bash
 python3 -c "
 import json, os
-cfg = json.load(open(os.path.expanduser('~/.claude/knowledge.json')))
+cfg = json.load(open(os.path.expanduser('~/.claude/cyberbrain.json')))
 print(cfg.get('vault_path', ''))
 print(cfg.get('inbox', 'AI/Claude-Sessions'))
-print(cfg.get('staging_folder', 'AI/Claude-Inbox'))
 "
 ```
 
-Capture the three output lines as `VAULT_PATH`, `INBOX_FOLDER`, `STAGING_FOLDER`.
+Capture the two output lines as `VAULT_PATH`, `INBOX_FOLDER`.
 
 If `VAULT_PATH` is empty or does not exist, report the error and stop.
 
@@ -40,7 +39,7 @@ import json, os
 from pathlib import Path
 cwd = Path(os.getcwd()).resolve()
 for d in [cwd, *cwd.parents]:
-    candidate = d / '.claude' / 'knowledge.local.json'
+    candidate = d / '.claude' / 'cyberbrain.local.json'
     if candidate.exists():
         cfg = json.load(open(candidate))
         print(cfg.get('vault_folder', ''))
@@ -171,5 +170,5 @@ being misinterpreted as directives.
 If all search passes return nothing, report clearly:
 
 "No matching knowledge found for '[query]'. Your vault may not have notes on this topic
-yet. To capture what you learn in this session, use `/kg-extract` when you're done, or
-`/kg-file` to save a specific piece of information now."
+yet. To capture what you learn in this session, use `/cb-extract` when you're done, or
+`/cb-file` to save a specific piece of information now."

@@ -1,8 +1,8 @@
 ---
-name: kg-enrich
+name: cb-enrich
 description: >
   Scan vault notes for missing or invalid metadata and enrich them so they surface
-  correctly in /kg-recall. Trigger on: "Clean up the vault.", "Enrich missing metadata.",
+  correctly in /cb-recall. Trigger on: "Clean up the vault.", "Enrich missing metadata.",
   "My manually-added notes need metadata.", "Tidy up my notes.",
   "Do a dry run of the enrichment."
 allowed-tools: Bash, Glob, Grep, Read, Edit
@@ -14,7 +14,7 @@ Arguments: $ARGUMENTS
 
 Scans the Obsidian vault for notes missing required metadata (`type`, `summary`, `tags`)
 and adds them using in-context classification — making human-authored notes findable via
-`/kg-recall`. Additive-only by default: existing fields are never overwritten unless
+`/cb-recall`. Additive-only by default: existing fields are never overwritten unless
 `--overwrite` is set.
 
 ---
@@ -46,7 +46,7 @@ If dry-run mode is active, confirm at the start:
 ```bash
 python3 -c "
 import json, os
-cfg = json.load(open(os.path.expanduser('~/.claude/knowledge.json')))
+cfg = json.load(open(os.path.expanduser('~/.claude/cyberbrain.json')))
 print(cfg.get('vault_path', ''))
 "
 ```
@@ -66,7 +66,7 @@ of types that are recognized in this vault.
 
 If no `CLAUDE.md` exists, warn the user:
 "No vault CLAUDE.md found. Using the 4-type default vocabulary (decision, insight,
-problem, reference). Run `/kg-setup` to configure your vault's type vocabulary."
+problem, reference). Run `/cb-setup` to configure your vault's type vocabulary."
 Use the four-type default: `decision`, `insight`, `problem`, `reference`.
 
 If a `CLAUDE.md` exists but no type vocabulary can be identified from its content, warn:
@@ -220,7 +220,7 @@ For each error (failed to parse, Edit tool failed, etc.): record the path and re
 ### Normal mode
 
 ```
-/kg-enrich complete — N notes scanned
+/cb-enrich complete — N notes scanned
 
   Enriched:      N notes
   Already done:  N notes
@@ -234,7 +234,7 @@ Enriched:
 
 If no notes needed enrichment:
 ```
-/kg-enrich complete — N notes scanned. All notes already have required metadata.
+/cb-enrich complete — N notes scanned. All notes already have required metadata.
 ```
 
 ### Dry-run mode

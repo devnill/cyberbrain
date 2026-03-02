@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Knowledge Graph MCP Server
+Cyberbrain MCP Server
 
-Exposes kg_extract, kg_file, and kg_recall as MCP tools so Claude Desktop
+Exposes cb_extract, cb_file, and cb_recall as MCP tools so Claude Desktop
 can file beats into and search an Obsidian vault.
 
 Install: see install.sh — copies this file to ~/.claude/mcp/server.py and
@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path.home() / ".claude" / "extractors"))
 
 from mcp.server.fastmcp import FastMCP
 
-mcp = FastMCP("knowledge-graph")
+mcp = FastMCP("cyberbrain")
 
 
 # ---------------------------------------------------------------------------
@@ -65,7 +65,7 @@ def _parse_frontmatter(content: str) -> dict:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def kg_extract(
+def cb_extract(
     transcript_path: str = None,
     session_id: str = None,
 ) -> str:
@@ -128,8 +128,8 @@ def kg_extract(
     except BackendError as e:
         backend = config.get("backend", "claude-code")
         return (
-            f"kg_extract failed — backend error ({backend}):\n\n{e}\n\n"
-            "Check that the claude-code backend is configured correctly in ~/.claude/knowledge.json"
+            f"cb_extract failed — backend error ({backend}):\n\n{e}\n\n"
+            "Check that the claude-code backend is configured correctly in ~/.claude/cyberbrain.json"
         )
 
     if not beats:
@@ -175,7 +175,7 @@ def kg_extract(
 
 
 @mcp.tool()
-def kg_file(
+def cb_file(
     content: str,
     instructions: str = None,
 ) -> str:
@@ -225,8 +225,8 @@ def kg_file(
     except BackendError as e:
         backend = config.get("backend", "claude-code")
         return (
-            f"kg_file failed — backend error ({backend}):\n\n{e}\n\n"
-            "Check that the claude-code backend is configured correctly in ~/.claude/knowledge.json"
+            f"cb_file failed — backend error ({backend}):\n\n{e}\n\n"
+            "Check that the claude-code backend is configured correctly in ~/.claude/cyberbrain.json"
         )
 
     if not beats:
@@ -272,7 +272,7 @@ def kg_file(
             lines.append(f"Error filing '{beat.get('title', '?')}': {e}")
 
     if config.get("daily_journal", False) and written:
-        project = config.get("project_name", "kg-file")
+        project = config.get("project_name", "cb-file")
         write_journal_entry(written, config, session_id, project, now)
 
     if not written:
@@ -282,7 +282,7 @@ def kg_file(
 
 
 @mcp.tool()
-def kg_recall(query: str, max_results: int = 5) -> str:
+def cb_recall(query: str, max_results: int = 5) -> str:
     """
     Search the user's personal knowledge vault for relevant context from past sessions.
 

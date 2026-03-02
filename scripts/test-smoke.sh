@@ -21,21 +21,21 @@ MCP_VENV="${HOME}/.claude/mcp-venv"
 # Resolve vault_path and inbox from config
 VAULT_PATH=$(python3 -c "
 import json, os
-path = os.path.expanduser('~/.claude/knowledge.json')
+path = os.path.expanduser('~/.claude/cyberbrain.json')
 cfg = json.load(open(path)) if os.path.exists(path) else {}
 print(cfg.get('vault_path', ''))
 " 2>/dev/null || echo "")
 
 INBOX=$(python3 -c "
 import json, os
-path = os.path.expanduser('~/.claude/knowledge.json')
+path = os.path.expanduser('~/.claude/cyberbrain.json')
 cfg = json.load(open(path)) if os.path.exists(path) else {}
 print(cfg.get('inbox', 'AI/Claude-Sessions'))
 " 2>/dev/null || echo "AI/Claude-Sessions")
 
 AUTOFILE=$(python3 -c "
 import json, os
-path = os.path.expanduser('~/.claude/knowledge.json')
+path = os.path.expanduser('~/.claude/cyberbrain.json')
 cfg = json.load(open(path)) if os.path.exists(path) else {}
 print('true' if cfg.get('autofile', False) else 'false')
 " 2>/dev/null || echo "false")

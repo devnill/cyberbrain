@@ -1,6 +1,6 @@
-# Required for kg-claude-md vault analysis
+# Required for cb-setup vault analysis
 pyyaml>=6.0
 
-# Required only for backend=anthropic or backend=bedrock
-# Not needed if using the default backend=claude-cli
+# Required only for backend=bedrock
+# Not needed if using the default backend=claude-code
 anthropic>=0.40.0

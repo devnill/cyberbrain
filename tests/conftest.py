@@ -1,5 +1,5 @@
 """
-conftest.py — shared fixtures and helpers for the knowledge-graph test suite.
+conftest.py — shared fixtures and helpers for the cyberbrain test suite.
 """
 
 import json
@@ -30,7 +30,6 @@ def temp_vault(tmp_path):
     vault.mkdir()
     (vault / ".obsidian").mkdir()
     (vault / "AI" / "Claude-Sessions").mkdir(parents=True)
-    (vault / "AI" / "Claude-Inbox").mkdir(parents=True)
     return vault
 
 
@@ -57,14 +56,13 @@ def global_config(temp_vault, temp_home):
     config = {
         "vault_path": str(temp_vault),
         "inbox": "AI/Claude-Sessions",
-        "staging_folder": "AI/Claude-Inbox",
         "backend": "claude-code",
         "model": "claude-haiku-4-5",
         "claude_timeout": 30,
         "autofile": False,
         "daily_journal": False,
     }
-    config_path = config_dir / "knowledge.json"
+    config_path = config_dir / "cyberbrain.json"
     config_path.write_text(json.dumps(config), encoding="utf-8")
     return config
 

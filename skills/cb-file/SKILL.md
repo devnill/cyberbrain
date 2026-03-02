@@ -1,5 +1,5 @@
 ---
-name: kg-file
+name: cb-file
 description: >
   File a specific piece of knowledge into the personal vault right now. Trigger on:
   "Save this.", "File this.", "Remember this.", "Add this to my notes.", "Capture this.",
@@ -46,15 +46,14 @@ content to extract from.
 ```bash
 python3 -c "
 import json, os
-cfg = json.load(open(os.path.expanduser('~/.claude/knowledge.json')))
+cfg = json.load(open(os.path.expanduser('~/.claude/cyberbrain.json')))
 print(cfg.get('vault_path', ''))
 print(cfg.get('inbox', 'AI/Claude-Sessions'))
-print(cfg.get('staging_folder', 'AI/Claude-Inbox'))
 print(str(cfg.get('autofile', False)).lower())
 "
 ```
 
-Capture as `VAULT_PATH`, `INBOX_FOLDER`, `STAGING_FOLDER`, `AUTOFILE`.
+Capture as `VAULT_PATH`, `INBOX_FOLDER`, `AUTOFILE`.
 
 Check for per-project vault folder:
 
@@ -64,7 +63,7 @@ import json, os
 from pathlib import Path
 cwd = Path(os.getcwd()).resolve()
 for d in [cwd, *cwd.parents]:
-    candidate = d / '.claude' / 'knowledge.local.json'
+    candidate = d / '.claude' / 'cyberbrain.local.json'
     if candidate.exists():
         cfg = json.load(open(candidate))
         print(cfg.get('vault_folder', ''))
@@ -96,7 +95,7 @@ If it exists, read it using the Read tool. Extract:
 
 If no `CLAUDE.md` exists, warn the user:
 "No vault CLAUDE.md found. Filing with default type vocabulary (decision, insight,
-problem, reference). Run `/kg-setup` to configure your vault's conventions."
+problem, reference). Run `/cb-setup` to configure your vault's conventions."
 
 Use the four-type default vocabulary: `decision`, `insight`, `problem`, `reference`.
 
@@ -134,7 +133,7 @@ For each beat:
    - `autofile: false` (default) → drop in inbox:
      - `scope: project` AND `PROJECT_FOLDER` is set → `PROJECT_FOLDER`
      - `scope: general` → `INBOX_FOLDER`
-     - No project config → `STAGING_FOLDER`
+     - No project config → `INBOX_FOLDER`
 
 ---
 
@@ -167,7 +166,7 @@ Do not invoke the extractor. Instead, for each beat, output a full preview block
 Write all beats as a JSON array to a temp file:
 
 ```bash
-python3 -c "import uuid; print(f'/tmp/kg-file-{uuid.uuid4()}.json')"
+python3 -c "import uuid; print(f'/tmp/cb-file-{uuid.uuid4()}.json')"
 ```
 
 Then invoke the extractor:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install.sh — Set up the Claude Code Knowledge Graph Memory System
+# install.sh — Set up the Claude Code Cyberbrain Memory System
 # Run this once from the repo root to install into ~/.claude/
 
 set -euo pipefail
@@ -8,9 +8,9 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="$HOME/.claude"
 
 NEW_VERSION="$(cat "$REPO_DIR/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "unknown")"
-INSTALLED_VERSION="$(cat "$CLAUDE_DIR/extractors/.kg-version" 2>/dev/null | tr -d '[:space:]' || echo "")"
+INSTALLED_VERSION="$(cat "$CLAUDE_DIR/extractors/.cb-version" 2>/dev/null | tr -d '[:space:]' || echo "")"
 
-echo "Claude Code Knowledge Graph Memory System — Installer (v${NEW_VERSION})"
+echo "Claude Code Cyberbrain Memory System — Installer (v${NEW_VERSION})"
 echo "======================================================"
 if [ -z "$INSTALLED_VERSION" ]; then
   echo "Fresh install"
@@ -93,31 +93,30 @@ install_skill() {
   fi
 }
 
-install_skill kg-recall
-install_skill kg-file
-install_skill kg-claude-md
-install_skill kg-setup
-install_skill kg-extract
-install_skill kg-enrich
+install_skill cb-recall
+install_skill cb-file
+install_skill cb-setup
+install_skill cb-extract
+install_skill cb-enrich
 
 # MCP server
 cp "$REPO_DIR/mcp/server.py" "$CLAUDE_DIR/mcp/server.py"
 echo "  [OK] mcp/server.py"
 
 # Write version stamp so future installs can detect upgrades
-echo "$NEW_VERSION" > "$CLAUDE_DIR/extractors/.kg-version"
-echo "  [OK] extractors/.kg-version (v${NEW_VERSION})"
+echo "$NEW_VERSION" > "$CLAUDE_DIR/extractors/.cb-version"
+echo "  [OK] extractors/.cb-version (v${NEW_VERSION})"
 
 # ---------------------------------------------------------------------------
 # 3. Global config
 # ---------------------------------------------------------------------------
 echo ""
-GLOBAL_CONFIG="$CLAUDE_DIR/knowledge.json"
+GLOBAL_CONFIG="$CLAUDE_DIR/cyberbrain.json"
 if [ -f "$GLOBAL_CONFIG" ]; then
   echo "Global config already exists at $GLOBAL_CONFIG — skipping."
   echo "  Edit it manually if you need to update your vault path."
 else
-  cp "$REPO_DIR/knowledge.example.json" "$GLOBAL_CONFIG"
+  cp "$REPO_DIR/cyberbrain.example.json" "$GLOBAL_CONFIG"
   echo "Created $GLOBAL_CONFIG"
   echo ""
   echo "  *** ACTION REQUIRED ***"
@@ -194,13 +193,13 @@ else:
 echo ""
 BACKEND=$(python3 -c "
 import json, os
-path = os.path.expanduser('~/.claude/knowledge.json')
+path = os.path.expanduser('~/.claude/cyberbrain.json')
 cfg = json.load(open(path)) if os.path.exists(path) else {}
 print(cfg.get('backend', 'claude-code'))
-" 2>/dev/null || echo "claude-cli")
+" 2>/dev/null || echo "claude-code")
 
-if [ "$BACKEND" = "anthropic" ] || [ "$BACKEND" = "bedrock" ]; then
-  echo "Installing Python dependencies (anthropic backend)..."
+if [ "$BACKEND" = "bedrock" ]; then
+  echo "Installing Python dependencies (bedrock backend)..."
   if python3 -m pip install -r "$CLAUDE_DIR/extractors/requirements.txt" -q; then
     echo "  [OK] dependencies installed"
   else
@@ -208,7 +207,7 @@ if [ "$BACKEND" = "anthropic" ] || [ "$BACKEND" = "bedrock" ]; then
   fi
 else
   echo "  [skip] anthropic package not needed for backend=$BACKEND"
-  # Still install pyyaml (used by kg-setup/kg-claude-md)
+  # Still install pyyaml (used by cb-setup)
   python3 -m pip install pyyaml -q 2>/dev/null || true
 fi
 
@@ -296,17 +295,17 @@ if path.exists():
 else:
     cfg = {}
 
-existing = cfg.get('mcpServers', {}).get('knowledge-graph')
-cfg.setdefault('mcpServers', {})['knowledge-graph'] = ENTRY
+existing = cfg.get('mcpServers', {}).get('cyberbrain')
+cfg.setdefault('mcpServers', {})['cyberbrain'] = ENTRY
 
 path.write_text(json.dumps(cfg, indent=2) + '\n')
 
 if existing is None:
-    print(f'  [OK] knowledge-graph MCP server registered in Claude Desktop')
+    print(f'  [OK] cyberbrain MCP server registered in Claude Desktop')
 elif existing == ENTRY:
-    print(f'  [OK] knowledge-graph MCP server already up to date')
+    print(f'  [OK] cyberbrain MCP server already up to date')
 else:
-    print(f'  [OK] knowledge-graph MCP server updated in Claude Desktop')
+    print(f'  [OK] cyberbrain MCP server updated in Claude Desktop')
 print('  Restart Claude Desktop for the change to take effect.')
 " "$DESKTOP_CONFIG" "$CLAUDE_DIR/mcp/server.py" "${MCP_VENV:-}/bin/python3"
 else
@@ -321,14 +320,14 @@ echo "======================================================"
 echo "Installation complete."
 echo ""
 echo "Next steps:"
-echo "  1. Edit ~/.claude/knowledge.json — set vault_path to your Obsidian vault"
+echo "  1. Edit ~/.claude/cyberbrain.json — set vault_path to your Obsidian vault"
 echo "  2. Set backend (optional):"
 echo "       - claude-code (default): uses your Claude subscription — no API key needed"
-echo "       - bedrock: add \"backend\": \"bedrock\" to knowledge.json, configure AWS credentials"
-echo "       - ollama: add \"backend\": \"ollama\" to knowledge.json (local model, no API key)"
-echo "  3. (Optional) Copy knowledge.local.example.json to .claude/knowledge.local.json"
+echo "       - bedrock: add \"backend\": \"bedrock\" to cyberbrain.json, configure AWS credentials"
+echo "       - ollama: add \"backend\": \"ollama\" to cyberbrain.json (local model, no API key)"
+echo "  3. (Optional) Copy cyberbrain.local.example.json to .claude/cyberbrain.local.json"
 echo "     in any project and update project_name and vault_folder"
 echo "  4. Run /compact in a Claude Code session to test the hook"
-echo "  5. Use /kg-recall <query> to retrieve knowledge in any session"
-echo "  6. Use /kg-extract <path> to backfill beats from old session logs"
+echo "  5. Use /cb-recall <query> to retrieve knowledge in any session"
+echo "  6. Use /cb-extract <path> to backfill beats from old session logs"
 echo ""

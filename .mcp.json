@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "knowledge-graph": {
+    "cyberbrain": {
       "command": "uv",
       "args": ["run", "--with", "mcp", "python3", "mcp/server.py"]
     }

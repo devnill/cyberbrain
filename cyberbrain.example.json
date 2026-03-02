@@ -1,7 +1,6 @@
 {
   "vault_path": "/path/to/your/ObsidianVault",
   "inbox": "AI/Claude-Sessions",
-  "staging_folder": "AI/Claude-Inbox",
   "backend": "claude-code",
   "model": "claude-haiku-4-5",
   "claude_timeout": 120,

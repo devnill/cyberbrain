@@ -13,7 +13,7 @@
     "scope": "project",
     "summary": "Made claude-code the default backend so users with Claude Pro can run extraction without a separate ANTHROPIC_API_KEY, using their active session credentials instead.",
     "tags": ["backend", "claude-code", "api-key", "authentication", "config"],
-    "body": "## Decision\n\nDefault backend set to `claude-code` in knowledge.json.\n\n## Rationale\n\nMost users have Claude Pro but not necessarily an API key. The claude-code path reuses active session auth and requires no credential setup.\n\n## Alternatives Considered\n\n- `anthropic` backend: requires ANTHROPIC_API_KEY setup — friction for most users.\n- `bedrock` backend: requires AWS credentials — only appropriate for enterprise users."
+    "body": "## Decision\n\nDefault backend set to `claude-code` in cyberbrain.json.\n\n## Rationale\n\nMost users have Claude Pro but not necessarily an API key. The claude-code path reuses active session auth and requires no credential setup.\n\n## Alternatives Considered\n\n- `anthropic` backend: requires ANTHROPIC_API_KEY setup — friction for most users.\n- `bedrock` backend: requires AWS credentials — only appropriate for enterprise users."
   },
   {
     "title": "Claude Code subprocess env vars must be stripped before claude -p",

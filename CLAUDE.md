@@ -18,7 +18,7 @@ Read `.specs/v1_spec.md` before making any significant changes. It supersedes al
 
 A knowledge capture and retrieval system for LLM interactions. It automatically extracts durable knowledge ("beats") from Claude sessions and stores them as structured Obsidian markdown notes, making that knowledge searchable and injectable into future sessions.
 
-The system exposes five slash command skills (`/kg-recall`, `/kg-file`, `/kg-extract`, `/kg-setup`, `/kg-enrich`), an MCP server for Claude Desktop, a PreCompact hook for automatic capture, and CLI import scripts for Claude and ChatGPT data exports.
+The system exposes five slash command skills (`/cb-recall`, `/cb-file`, `/cb-extract`, `/cb-setup`, `/cb-enrich`), an MCP server for Claude Desktop, a PreCompact hook for automatic capture, and CLI import scripts for Claude and ChatGPT data exports.
 
 ---
 
@@ -71,8 +71,8 @@ Claude Code session
 ```
 
 Beat routing:
-- `scope: project` → project vault folder (from `.claude/knowledge.local.json`)
-- `scope: general` → `inbox` folder (or `staging_folder` if no project config found)
+- `scope: project` → project vault folder (from `.claude/cyberbrain.local.json`)
+- `scope: general` → `inbox` folder (warn and skip if inbox is not configured)
 
 ### Key Files
 
@@ -83,11 +83,11 @@ Beat routing:
 | `prompts/extract-beats-system.md` / `extract-beats-user.md` | Extraction LLM prompts — edit to change extraction behavior |
 | `prompts/autofile-system.md` / `autofile-user.md` | Autofile routing prompts |
 | `mcp/server.py` | FastMCP server for Claude Desktop; wraps extraction logic; runs in `~/.claude/mcp-venv/` |
-| `skills/kg-recall/SKILL.md` | `/kg-recall` slash command |
-| `skills/kg-file/SKILL.md` | `/kg-file` slash command |
-| `skills/kg-extract/SKILL.md` | `/kg-extract` slash command |
-| `skills/kg-setup/SKILL.md` | `/kg-setup` slash command (vault analyzer + CLAUDE.md generator) |
-| `skills/kg-enrich/SKILL.md` | `/kg-enrich` slash command |
+| `skills/cb-recall/SKILL.md` | `/cb-recall` slash command |
+| `skills/cb-file/SKILL.md` | `/cb-file` slash command |
+| `skills/cb-extract/SKILL.md` | `/cb-extract` slash command |
+| `skills/cb-setup/SKILL.md` | `/cb-setup` slash command (vault analyzer + CLAUDE.md generator) |
+| `skills/cb-enrich/SKILL.md` | `/cb-enrich` slash command |
 | `scripts/import.py` | Unified import for Claude Desktop and ChatGPT data exports |
 | `tests/` | Test suite — unit and integration tests with mocked LLM calls |
 
@@ -104,12 +104,11 @@ The extractor uses 4 types (defined by the vault's CLAUDE.md; these are the defa
 
 ### Configuration
 
-Global config at `~/.claude/knowledge.json`:
+Global config at `~/.claude/cyberbrain.json`:
 ```json
 {
   "vault_path": "/path/to/vault",
   "inbox": "AI/Claude-Sessions",
-  "staging_folder": "AI/Claude-Inbox",
   "backend": "claude-code",
   "model": "claude-haiku-4-5",
   "claude_timeout": 120,
@@ -120,7 +119,7 @@ Global config at `~/.claude/knowledge.json`:
 }
 ```
 
-Per-project config at `.claude/knowledge.local.json` (searched up the directory tree from the session's cwd):
+Per-project config at `.claude/cyberbrain.local.json` (searched up the directory tree from the session's cwd):
 ```json
 {
   "project_name": "my-project",
@@ -163,6 +162,6 @@ Skills are packaged as `.skill` zip archives. The release tarball includes hooks
 
 Plugin mode (no install required):
 ```bash
-claude --plugin-dir ~/code/knowledge-graph
+claude --plugin-dir ~/code/cyberbrain
 ```
-Skills appear namespaced: `/knowledge-graph:kg-recall` etc.
+Skills appear namespaced: `/cyberbrain:cb-recall` etc.

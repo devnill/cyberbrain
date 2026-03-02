@@ -1,5 +1,5 @@
 ---
-name: kg-extract
+name: cb-extract
 description: >
   Extract all knowledge beats from a session transcript and file them in the vault.
   Trigger on: "Extract everything from this session.", "Save this conversation.",
@@ -7,7 +7,7 @@ description: >
   "Preview the extraction", "Show me the beats without saving them."
   With no arguments, extracts from the current session. Accepts a path to a Claude Code
   JSONL transcript or plain-text conversation file for processing past sessions.
-  Examples: /kg-extract   or   /kg-extract ~/.claude/projects/.../abc123.jsonl
+  Examples: /cb-extract   or   /cb-extract ~/.claude/projects/.../abc123.jsonl
 allowed-tools: Bash, Glob, Grep, Read
 ---
 
@@ -90,7 +90,7 @@ Use the output to set `TRANSCRIPT_PATH`, `SESSION_ID`, and `CWD`.
 
 If the script fails, report clearly:
 "Could not locate a JSONL transcript for the current session. No extraction performed.
-If you have the transcript path, run `/kg-extract <path>` directly."
+If you have the transcript path, run `/cb-extract <path>` directly."
 Then stop.
 
 ### Case B — File path given
@@ -106,14 +106,13 @@ passed.
 ```bash
 python3 -c "
 import json, os
-cfg = json.load(open(os.path.expanduser('~/.claude/knowledge.json')))
+cfg = json.load(open(os.path.expanduser('~/.claude/cyberbrain.json')))
 print(cfg.get('vault_path', ''))
 print(cfg.get('inbox', 'AI/Claude-Sessions'))
-print(cfg.get('staging_folder', 'AI/Claude-Inbox'))
 "
 ```
 
-Capture as `VAULT_PATH`, `INBOX_FOLDER`, `STAGING_FOLDER`.
+Capture as `VAULT_PATH`, `INBOX_FOLDER`.
 
 ---
 
@@ -126,7 +125,7 @@ python3 -c "
 import os, sys
 from pathlib import Path
 session_id = sys.argv[1]
-log = Path.home() / '.claude' / 'logs' / 'kg-extract.log'
+log = Path.home() / '.claude' / 'logs' / 'cb-extract.log'
 if log.exists():
     for line in log.read_text().splitlines():
         parts = line.split('\t')
@@ -138,8 +137,8 @@ print('NOT_EXTRACTED')
 ```
 
 If `ALREADY_EXTRACTED`, report:
-"Session `$SESSION_ID` has already been extracted (found in kg-extract.log). Skipping
-to avoid duplicates. Use `/kg-extract --dry-run` to preview without the dedup check, or
+"Session `$SESSION_ID` has already been extracted (found in cb-extract.log). Skipping
+to avoid duplicates. Use `/cb-extract --dry-run` to preview without the dedup check, or
 delete the log entry to force re-extraction."
 Then stop.
 
@@ -218,7 +217,7 @@ directly. The format matches the standard dry-run output:
   No files were written. Run without --dry-run to apply.
 ```
 
-Note: `/kg-extract --dry-run` on the current session is the primary way to preview what
+Note: `/cb-extract --dry-run` on the current session is the primary way to preview what
 the PreCompact hook *would* capture before running `/compact`.
 
 ---

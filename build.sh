@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build.sh — Package knowledge-graph skills into .skill archives and produce a release tarball.
+# build.sh — Package cyberbrain skills into .skill archives and produce a release tarball.
 #
 # Usage:
 #   bash build.sh               # build all skills + release tarball
@@ -40,7 +40,7 @@ else
   VERSION="0.0.0"
 fi
 
-echo "Knowledge Graph Build — v${VERSION}"
+echo "Cyberbrain Build — v${VERSION}"
 echo "============================================"
 echo ""
 
@@ -101,13 +101,13 @@ fi
 echo ""
 echo "Building release tarball..."
 
-TARBALL="$DIST_DIR/knowledge-graph-${VERSION}.tar.gz"
+TARBALL="$DIST_DIR/cyberbrain-${VERSION}.tar.gz"
 
 # Assemble the tarball from repo root, including only distribution-relevant files.
 # dist/*.skill files are included so the release is self-contained.
 tar -czf "$TARBALL" \
   -C "$REPO_DIR" \
-  --exclude="./dist/knowledge-graph-*.tar.gz" \
+  --exclude="./dist/cyberbrain-*.tar.gz" \
   --exclude="./.git" \
   --exclude="./.gitignore" \
   --exclude="./.DS_Store" \
@@ -120,15 +120,15 @@ tar -czf "$TARBALL" \
   uninstall.sh \
   README.md \
   VERSION \
-  knowledge.example.json \
-  knowledge.local.example.json \
+  cyberbrain.example.json \
+  cyberbrain.local.example.json \
   hooks \
   extractors \
   prompts \
   dist
 
 tarball_size="$(du -sh "$TARBALL" | cut -f1)"
-echo "  [built] knowledge-graph-${VERSION}.tar.gz ($tarball_size)"
+echo "  [built] cyberbrain-${VERSION}.tar.gz ($tarball_size)"
 
 # ---------------------------------------------------------------------------
 # Summary
@@ -144,6 +144,6 @@ echo "To install:"
 echo "  bash install.sh"
 echo ""
 echo "To distribute:"
-echo "  Share dist/knowledge-graph-${VERSION}.tar.gz"
-echo "  Recipient runs: tar xzf knowledge-graph-${VERSION}.tar.gz && bash install.sh"
+echo "  Share dist/cyberbrain-${VERSION}.tar.gz"
+echo "  Recipient runs: tar xzf cyberbrain-${VERSION}.tar.gz && bash install.sh"
 echo ""

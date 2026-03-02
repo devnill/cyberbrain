@@ -1,5 +1,5 @@
 ---
-name: kg-setup
+name: cb-setup
 description: >
   Analyze an Obsidian vault, evaluate its ontology quality, and generate or update a
   CLAUDE.md at the vault root that provides durable guidance for filing, curating, and
@@ -43,11 +43,11 @@ If dry-run mode is active, confirm at the start:
 
 In order of preference:
 1. Path from `$ARGUMENTS` (if provided)
-2. `vault_path` from `~/.claude/knowledge.json`:
+2. `vault_path` from `~/.claude/cyberbrain.json`:
    ```bash
    python3 -c "
    import json, os
-   cfg = json.load(open(os.path.expanduser('~/.claude/knowledge.json')))
+   cfg = json.load(open(os.path.expanduser('~/.claude/cyberbrain.json')))
    print(cfg.get('vault_path', ''))
    "
    ```
@@ -90,8 +90,8 @@ update, not a replacement.
 
 Locate the script:
 ```bash
-ls ~/.claude/skills/kg-setup/scripts/analyze_vault.py 2>/dev/null \
-  || ls "${CLAUDE_PLUGIN_ROOT}/skills/kg-setup/scripts/analyze_vault.py" 2>/dev/null
+ls ~/.claude/skills/cb-setup/scripts/analyze_vault.py 2>/dev/null \
+  || ls "${CLAUDE_PLUGIN_ROOT}/skills/cb-setup/scripts/analyze_vault.py" 2>/dev/null
 ```
 
 Verify pyyaml is available:
@@ -249,7 +249,7 @@ mood throughout: "Use X", "Always include Y", "Do not Z."
    types where logically expected for the archetype.
 
 5. **Beat-to-Vault-Type Mapping** — ONLY if the vault uses its own type vocabulary
-   distinct from the 4-type beat default. Make explicit: when `/kg-extract` produces an
+   distinct from the 4-type beat default. Make explicit: when `/cb-extract` produces an
    `insight` beat, which vault type does it file under?
 
 6. **Frontmatter Schema** — required fields for all notes; type-specific required fields;
@@ -371,7 +371,7 @@ What was generated:
 CLAUDE.md [written to / displayed for] $VAULT_PATH/CLAUDE.md
 
 Recommended next action:
-  [One specific action — e.g., "Run `/kg-enrich --dry-run` to see how many notes are
+  [One specific action — e.g., "Run `/cb-enrich --dry-run` to see how many notes are
   missing metadata" or "Review the Known Issues section — the proposed type consolidation
   requires a migration path."]
 ```

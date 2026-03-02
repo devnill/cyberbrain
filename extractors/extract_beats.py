@@ -30,11 +30,11 @@ class BackendError(Exception):
 # Config loading
 # ---------------------------------------------------------------------------
 
-GLOBAL_CONFIG_PATH = Path.home() / ".claude" / "knowledge.json"
-PROJECT_CONFIG_NAME = "knowledge.local.json"
+GLOBAL_CONFIG_PATH = Path.home() / ".claude" / "cyberbrain.json"
+PROJECT_CONFIG_NAME = "cyberbrain.local.json"
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
-REQUIRED_GLOBAL_FIELDS = ["vault_path", "inbox", "staging_folder"]
+REQUIRED_GLOBAL_FIELDS = ["vault_path", "inbox"]
 
 DEFAULT_BACKEND = "claude-code"
 BEDROCK_DEFAULT_MODEL = "us.anthropic.claude-haiku-4-5-20251001"
@@ -46,7 +46,7 @@ def load_global_config() -> dict:
     if not GLOBAL_CONFIG_PATH.exists():
         print(
             f"[extract_beats] Global config not found at {GLOBAL_CONFIG_PATH}. "
-            "Create it with vault_path, inbox, and staging_folder.",
+            "Create it with vault_path and inbox.",
             file=sys.stderr,
         )
         sys.exit(0)
@@ -90,7 +90,7 @@ def load_global_config() -> dict:
 
 
 def find_project_config(cwd: str) -> dict:
-    """Walk up from cwd looking for .claude/knowledge.local.json."""
+    """Walk up from cwd looking for .claude/cyberbrain.local.json."""
     current = Path(cwd).resolve()
     for directory in [current, *current.parents]:
         candidate = directory / ".claude" / PROJECT_CONFIG_NAME
@@ -187,39 +187,6 @@ def _extract_text_blocks(content) -> str:
     return ""
 
 
-def parse_plain_transcript(text: str) -> str:
-    """
-    Parse a plain-text transcript, recognising Human:/Assistant: or You:/Claude: prefixes.
-    If no role prefixes are detected, returns the text as-is.
-    """
-    # Check if the text uses role prefixes
-    has_prefixes = bool(re.search(r'^(Human|Assistant|You|Claude)\s*:', text, re.MULTILINE))
-    if not has_prefixes:
-        return text
-
-    # Split on role-prefixed lines, preserving the structure
-    turns = []
-    current_role = None
-    current_lines = []
-
-    for line in text.splitlines():
-        m = re.match(r'^(Human|Assistant|You|Claude)\s*:\s*(.*)', line)
-        if m:
-            if current_role is not None and current_lines:
-                role_label = "USER" if current_role in ("Human", "You") else "ASSISTANT"
-                turns.append(f"[{role_label}]\n" + "\n".join(current_lines).strip())
-            current_role = m.group(1)
-            current_lines = [m.group(2)]
-        else:
-            if current_role is not None:
-                current_lines.append(line)
-
-    if current_role is not None and current_lines:
-        role_label = "USER" if current_role in ("Human", "You") else "ASSISTANT"
-        turns.append(f"[{role_label}]\n" + "\n".join(current_lines).strip())
-
-    return "\n\n---\n\n".join(turns)
-
 
 # ---------------------------------------------------------------------------
 # LLM backends
@@ -247,8 +214,8 @@ def _call_claude_code(system_prompt: str, user_message: str, config: dict) -> st
         raise BackendError(
             f"'claude' CLI not found at {claude_path!r} (backend=claude-code). "
             "Ensure Claude Code is installed and 'claude' is in PATH, "
-            "or set claude_path in knowledge.json, "
-            "or switch to backend=bedrock or backend=ollama in knowledge.json."
+            "or set claude_path in cyberbrain.json, "
+            "or switch to backend=bedrock or backend=ollama in cyberbrain.json."
         )
 
     model = config.get("model", CLI_DEFAULT_MODEL)
@@ -280,7 +247,7 @@ def _call_claude_code(system_prompt: str, user_message: str, config: dict) -> st
     except subprocess.TimeoutExpired:
         raise BackendError(
             f"claude -p timed out after {config.get('claude_timeout', 120)}s. "
-            "Increase claude_timeout in knowledge.json or switch to a faster backend."
+            "Increase claude_timeout in cyberbrain.json or switch to a faster backend."
         )
     except Exception as e:
         raise BackendError(f"claude -p failed to start: {e}")
@@ -307,7 +274,7 @@ def _call_claude_code(system_prompt: str, user_message: str, config: dict) -> st
         raise BackendError(
             f"claude -p returned a CLI error: {output}. "
             "If 'Reached max turns', the transcript may be too long — try raising "
-            "claude_timeout in knowledge.json, or reduce the transcript with --since."
+            "claude_timeout in cyberbrain.json, or reduce the transcript with --since."
         )
     return output
 
@@ -536,10 +503,10 @@ def make_filename(title: str) -> str:
     return clean + '.md'
 
 
-def resolve_output_dir(beat: dict, config: dict) -> Path:
+def resolve_output_dir(beat: dict, config: dict) -> Path | None:
     """
     Route a beat to the correct vault folder based on scope and project config.
-    Returns the absolute directory path (created if needed).
+    Returns the absolute directory path (created if needed), or None if inbox is not configured.
     """
     vault = Path(config["vault_path"])
     if beat.get("scope") == "project" and config.get("vault_folder"):
@@ -547,7 +514,12 @@ def resolve_output_dir(beat: dict, config: dict) -> Path:
     elif config.get("inbox"):
         folder = config["inbox"]
     else:
-        folder = config.get("staging_folder", "AI/Claude-Inbox")
+        print(
+            "[extract_beats] 'inbox' is not configured. "
+            f"Set 'inbox' in {GLOBAL_CONFIG_PATH} before writing beats.",
+            file=sys.stderr,
+        )
+        return None
     output_dir = vault / folder
     # Validate resolved path stays within vault
     if not _is_within_vault(vault, output_dir):
@@ -587,6 +559,8 @@ def write_beat(beat: dict, config: dict, session_id: str, cwd: str, now: datetim
     beat_id = str(uuid.uuid4())
 
     output_dir = resolve_output_dir(beat, config)
+    if output_dir is None:
+        return None
 
     # Handle filename collisions — prepend number so canonical name is unmodified
     output_path = output_dir / make_filename(title)
@@ -849,7 +823,7 @@ def _read_frontmatter_tags(path: Path) -> set:
 # Deduplication log
 # ---------------------------------------------------------------------------
 
-EXTRACT_LOG_PATH = Path.home() / ".claude" / "logs" / "kg-extract.log"
+EXTRACT_LOG_PATH = Path.home() / ".claude" / "logs" / "cb-extract.log"
 
 
 def is_session_already_extracted(session_id: str) -> bool:

@@ -41,13 +41,12 @@ class TestLoadGlobalConfig:
         config_data = {
             "vault_path": str(temp_vault),
             "inbox": "AI/Claude-Sessions",
-            "staging_folder": "AI/Claude-Inbox",
             "backend": "claude-code",
             "model": "claude-haiku-4-5",
         }
-        (config_dir / "knowledge.json").write_text(json.dumps(config_data))
+        (config_dir / "cyberbrain.json").write_text(json.dumps(config_data))
 
-        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "knowledge.json")
+        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
 
         config = eb.load_global_config()
 
@@ -56,7 +55,7 @@ class TestLoadGlobalConfig:
 
     def test_exits_cleanly_when_config_missing(self, temp_home, monkeypatch):
         """Missing config file produces sys.exit(0), not an exception."""
-        missing_path = temp_home / ".claude" / "knowledge.json"
+        missing_path = temp_home / ".claude" / "cyberbrain.json"
         monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", missing_path)
 
         with pytest.raises(SystemExit) as exc_info:
@@ -67,11 +66,11 @@ class TestLoadGlobalConfig:
         """Config missing required fields produces sys.exit(0)."""
         config_dir = temp_home / ".claude"
         config_dir.mkdir(parents=True, exist_ok=True)
-        # vault_path present but inbox and staging_folder missing
-        (config_dir / "knowledge.json").write_text(
+        # vault_path present but inbox missing
+        (config_dir / "cyberbrain.json").write_text(
             json.dumps({"vault_path": str(temp_vault)})
         )
-        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "knowledge.json")
+        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
 
         with pytest.raises(SystemExit) as exc_info:
             eb.load_global_config()
@@ -84,10 +83,9 @@ class TestLoadGlobalConfig:
         config_data = {
             "vault_path": str(temp_vault),
             "inbox": "AI/Claude-Sessions",
-            "staging_folder": "AI/Claude-Inbox",
         }
-        (config_dir / "knowledge.json").write_text(json.dumps(config_data))
-        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "knowledge.json")
+        (config_dir / "cyberbrain.json").write_text(json.dumps(config_data))
+        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
 
         config = eb.load_global_config()
         assert os.path.isabs(config["vault_path"])
@@ -99,10 +97,9 @@ class TestLoadGlobalConfig:
         config_data = {
             "vault_path": str(temp_home),
             "inbox": "AI/Claude-Sessions",
-            "staging_folder": "AI/Claude-Inbox",
         }
-        (config_dir / "knowledge.json").write_text(json.dumps(config_data))
-        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "knowledge.json")
+        (config_dir / "cyberbrain.json").write_text(json.dumps(config_data))
+        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
         # temp_home fixture already sets HOME env var so Path.home() returns temp_home
 
         with pytest.raises(SystemExit) as exc_info:
@@ -116,10 +113,9 @@ class TestLoadGlobalConfig:
         config_data = {
             "vault_path": "/",
             "inbox": "AI/Claude-Sessions",
-            "staging_folder": "AI/Claude-Inbox",
         }
-        (config_dir / "knowledge.json").write_text(json.dumps(config_data))
-        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "knowledge.json")
+        (config_dir / "cyberbrain.json").write_text(json.dumps(config_data))
+        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
 
         with pytest.raises(SystemExit) as exc_info:
             eb.load_global_config()
@@ -127,7 +123,7 @@ class TestLoadGlobalConfig:
 
 
 class TestFindProjectConfig:
-    """find_project_config() walks up the directory tree to find knowledge.local.json."""
+    """find_project_config() walks up the directory tree to find cyberbrain.local.json."""
 
     def test_finds_config_in_current_directory(self, tmp_path):
         """Project config in .claude/ of the current directory is found."""
@@ -135,7 +131,7 @@ class TestFindProjectConfig:
         config_dir = project_dir / ".claude"
         config_dir.mkdir(parents=True)
         config_data = {"project_name": "my-project", "vault_folder": "Projects/my-project"}
-        (config_dir / "knowledge.local.json").write_text(json.dumps(config_data))
+        (config_dir / "cyberbrain.local.json").write_text(json.dumps(config_data))
 
         result = eb.find_project_config(str(project_dir))
         assert result["project_name"] == "my-project"
@@ -148,7 +144,7 @@ class TestFindProjectConfig:
         sub_dir.mkdir(parents=True)
         config_dir.mkdir(parents=True)
         config_data = {"project_name": "my-project", "vault_folder": "Projects/my-project"}
-        (config_dir / "knowledge.local.json").write_text(json.dumps(config_data))
+        (config_dir / "cyberbrain.local.json").write_text(json.dumps(config_data))
 
         result = eb.find_project_config(str(sub_dir))
         assert result["project_name"] == "my-project"
@@ -210,29 +206,6 @@ class TestParseJsonlTranscript:
         assert "hello" in result
 
 
-class TestParsePlainTranscript:
-    """parse_plain_transcript() handles Human:/Assistant: and You:/Claude: role prefixes."""
-
-    def test_splits_on_human_assistant_prefixes(self):
-        """Human: / Assistant: prefixed turns are split into labeled blocks."""
-        text = "Human: What is X?\nAssistant: X is Y."
-        result = eb.parse_plain_transcript(text)
-        assert "[USER]" in result
-        assert "[ASSISTANT]" in result
-
-    def test_splits_on_you_claude_prefixes(self):
-        """You: / Claude: prefixed turns are split into labeled blocks."""
-        text = "You: How do I do X?\nClaude: Here is how."
-        result = eb.parse_plain_transcript(text)
-        assert "[USER]" in result
-        assert "[ASSISTANT]" in result
-
-    def test_returns_text_as_is_when_no_prefixes(self):
-        """Text without role prefixes is returned unchanged."""
-        text = "This is a plain paragraph with no role markers."
-        result = eb.parse_plain_transcript(text)
-        assert result == text
-
 
 # ===========================================================================
 # Beat writing
@@ -259,22 +232,22 @@ class TestWriteBeat:
 
         assert "Claude-Sessions" in str(path)
 
-    def test_routes_to_staging_when_no_project_config(self, temp_vault, temp_home, monkeypatch, fixed_now):
-        """When no project config exists and no inbox is configured, beat goes to staging_folder."""
+    def test_returns_none_when_inbox_not_configured(self, temp_vault, temp_home, monkeypatch, fixed_now, capsys):
+        """When inbox is not configured, write_beat returns None and prints a warning."""
         config_dir = temp_home / ".claude"
         config_dir.mkdir(parents=True, exist_ok=True)
         config = {
             "vault_path": str(temp_vault),
             "inbox": "",
-            "staging_folder": "AI/Claude-Inbox",
         }
-        (config_dir / "knowledge.json").write_text(json.dumps(config))
-        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "knowledge.json")
+        (config_dir / "cyberbrain.json").write_text(json.dumps(config))
+        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
 
         beat = make_beat(scope="general")
         path = eb.write_beat(beat, config, "sess001", "/cwd", fixed_now)
 
-        assert "Claude-Inbox" in str(path)
+        assert path is None
+        assert "inbox" in capsys.readouterr().err
 
     def test_produces_valid_yaml_frontmatter(self, global_config, temp_vault, fixed_now):
         """The written file has valid YAML frontmatter with the expected fields."""
@@ -541,14 +514,14 @@ class TestDeduplicationLog:
 
     def test_new_session_is_not_duplicate(self, tmp_path, monkeypatch):
         """A session ID not in the log is reported as not-yet-extracted."""
-        log_path = tmp_path / "logs" / "kg-extract.log"
+        log_path = tmp_path / "logs" / "cb-extract.log"
         monkeypatch.setattr(eb, "EXTRACT_LOG_PATH", log_path)
 
         assert eb.is_session_already_extracted("brand-new-session") is False
 
     def test_session_in_log_is_detected_as_duplicate(self, tmp_path, monkeypatch):
         """A session ID present in the log is reported as already extracted."""
-        log_path = tmp_path / "logs" / "kg-extract.log"
+        log_path = tmp_path / "logs" / "cb-extract.log"
         log_path.parent.mkdir(parents=True)
         log_path.write_text("2026-03-01T14:32:00\tabc12345\t3\n")
         monkeypatch.setattr(eb, "EXTRACT_LOG_PATH", log_path)
@@ -557,7 +530,7 @@ class TestDeduplicationLog:
 
     def test_different_session_id_not_detected_as_duplicate(self, tmp_path, monkeypatch):
         """A different session ID in the same log file is not a duplicate."""
-        log_path = tmp_path / "logs" / "kg-extract.log"
+        log_path = tmp_path / "logs" / "cb-extract.log"
         log_path.parent.mkdir(parents=True)
         log_path.write_text("2026-03-01T14:32:00\tabc12345\t3\n")
         monkeypatch.setattr(eb, "EXTRACT_LOG_PATH", log_path)
@@ -566,7 +539,7 @@ class TestDeduplicationLog:
 
     def test_write_log_entry_creates_file_and_directory(self, tmp_path, monkeypatch):
         """write_extract_log_entry creates the log file and parent directory if needed."""
-        log_path = tmp_path / "logs" / "kg-extract.log"
+        log_path = tmp_path / "logs" / "cb-extract.log"
         monkeypatch.setattr(eb, "EXTRACT_LOG_PATH", log_path)
 
         eb.write_extract_log_entry("newsession", 5)
@@ -578,7 +551,7 @@ class TestDeduplicationLog:
 
     def test_write_log_entry_format_is_tab_separated(self, tmp_path, monkeypatch):
         """Log entries are tab-separated: <ISO-timestamp>\t<session-id>\t<beat-count>."""
-        log_path = tmp_path / "logs" / "kg-extract.log"
+        log_path = tmp_path / "logs" / "cb-extract.log"
         log_path.parent.mkdir(parents=True)
         monkeypatch.setattr(eb, "EXTRACT_LOG_PATH", log_path)
 
@@ -592,7 +565,7 @@ class TestDeduplicationLog:
 
     def test_corrupt_log_warns_and_proceeds(self, tmp_path, monkeypatch, capsys):
         """A corrupt/unreadable log file warns to stderr and returns False (proceed)."""
-        log_path = tmp_path / "logs" / "kg-extract.log"
+        log_path = tmp_path / "logs" / "cb-extract.log"
         log_path.parent.mkdir(parents=True)
         log_path.write_text("corrupt\x00data\xFF")
         # Make the file unreadable
@@ -618,12 +591,11 @@ class TestVaultPathValidation:
         """A vault_path that does not exist on disk produces sys.exit(0)."""
         config_dir = temp_home / ".claude"
         config_dir.mkdir(parents=True, exist_ok=True)
-        (config_dir / "knowledge.json").write_text(json.dumps({
+        (config_dir / "cyberbrain.json").write_text(json.dumps({
             "vault_path": "/nonexistent/path/to/vault",
             "inbox": "AI/Claude-Sessions",
-            "staging_folder": "AI/Claude-Inbox",
         }))
-        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "knowledge.json")
+        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
 
         with pytest.raises(SystemExit) as exc_info:
             eb.load_global_config()

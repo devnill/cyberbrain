@@ -65,7 +65,7 @@ unless they are first-class structural elements.
 
 **Purpose**: Define every entity type found in the vault, with its schema and filing rules.
 
-**Content per type** (only include types actually present in the vault; add scaffolding for types from the kg-file ontology that are absent but logically expected):
+**Content per type** (only include types actually present in the vault; add scaffolding for types from the cb-file ontology that are absent but logically expected):
 
 ```markdown
 #### `type-name`

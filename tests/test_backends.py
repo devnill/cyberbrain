@@ -32,7 +32,6 @@ USER_MESSAGE = "Extract beats from this."
 BASE_CONFIG = {
     "vault_path": "/tmp/vault",
     "inbox": "AI/Claude-Sessions",
-    "staging_folder": "AI/Claude-Inbox",
     "model": "claude-haiku-4-5",
     "claude_timeout": 30,
 }
