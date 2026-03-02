@@ -592,6 +592,9 @@ def main() -> None:
     # Resolve config and inject project name
     config = dict(eb.resolve_config(args.cwd))
     config["project_name"] = args.project_name
+    # Run the claude-cli subprocess from $HOME so it doesn't inherit any
+    # project CLAUDE.md that would narrow extraction scope.
+    config["subprocess_cwd"] = str(Path.home())
     autofile_enabled = config.get("autofile", False)
     journal_enabled = config.get("daily_journal", False)
 

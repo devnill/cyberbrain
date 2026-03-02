@@ -1,9 +1,9 @@
-Extract knowledge beats from this Claude Code session transcript.
+Extract knowledge beats from this transcript.
 
 Session context:
 - Project: {project_name}
 - Working directory: {cwd}
-- Trigger: {trigger} compaction
+- Trigger: {trigger}
 
 <transcript>
 {transcript}

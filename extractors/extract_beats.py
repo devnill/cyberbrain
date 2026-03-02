@@ -225,6 +225,10 @@ def _call_claude_cli(system_prompt: str, user_message: str, config: dict) -> str
     }
     env = {k: v for k, v in os.environ.items() if k not in _STRIP_VARS}
 
+    # Allow callers to isolate the subprocess from any parent project's CLAUDE.md
+    # by setting subprocess_cwd in config (e.g. to str(Path.home())).
+    subprocess_cwd = config.get("subprocess_cwd") or None
+
     try:
         result = subprocess.run(
             cmd,
@@ -233,6 +237,7 @@ def _call_claude_cli(system_prompt: str, user_message: str, config: dict) -> str
             text=True,
             timeout=config.get("claude_timeout", 120),
             env=env,
+            cwd=subprocess_cwd,
         )
     except subprocess.TimeoutExpired:
         raise BackendError(
@@ -346,7 +351,8 @@ def extract_beats(transcript_text: str, config: dict, trigger: str, cwd: str) ->
     raw = re.sub(r"\s*```$", "", raw)
 
     try:
-        beats = json.loads(raw)
+        # Use raw_decode so trailing explanatory text after the JSON is ignored
+        beats, _ = json.JSONDecoder().raw_decode(raw.lstrip())
     except json.JSONDecodeError as e:
         print(f"[extract_beats] Failed to parse model response as JSON: {e}", file=sys.stderr)
         print(f"[extract_beats] Raw response: {raw[:500]}", file=sys.stderr)
@@ -364,11 +370,10 @@ def extract_beats(transcript_text: str, config: dict, trigger: str, cwd: str) ->
 # ---------------------------------------------------------------------------
 
 VALID_TYPES = {
-    # Beat schema (auto-extracted)
-    "decision", "insight", "task", "problem-solution", "error-fix", "reference",
-    # kg-file ontology (human-authored) — pass through without remapping
-    "project", "concept", "tool", "problem", "resource",
-    "person", "event", "claude-context", "domain", "skill", "place",
+    # Beat schema (auto-extracted) — 5-type collapsed vocabulary
+    "decision", "insight", "action", "problem", "reference",
+    # Vault note types (human-authored via kg-file) — pass through without remapping
+    "project", "note", "resource", "archived", "claude-context",
 }
 VALID_SCOPES = {"project", "general"}
 
