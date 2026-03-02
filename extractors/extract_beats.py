@@ -256,8 +256,10 @@ def _call_claude_code(system_prompt: str, user_message: str, config: dict) -> st
 
     # Always pass --allowedTools "" for extraction — enforced in code, not config (M1 security).
     # This prevents the subprocess from sending PermissionRequest IPC events to the parent TUI.
+    # --max-turns 3: haiku occasionally needs >1 internal turn on large transcripts; 3 is
+    # enough headroom without opening up tool-use loops (allowedTools "" blocks all tools).
     cmd = [claude_path, "-p", "--allowedTools", "", "--model", model,
-           "--no-session-persistence", "--max-turns", "1"]
+           "--no-session-persistence", "--max-turns", "3"]
     print(f"[extract_beats] Using claude-code backend (model={model})", file=sys.stderr)
 
     # Strip Claude Code session vars so claude -p can run as a clean subprocess.
@@ -298,7 +300,14 @@ def _call_claude_code(system_prompt: str, user_message: str, config: dict) -> st
             f"Stderr: {stderr_snippet}. "
             "This may indicate an auth issue, rate limiting, or an incompatible "
             "claude CLI version. Try: claude -p --model claude-haiku-4-5 "
-            "--no-session-persistence --max-turns 1 'respond with: ok'"
+            "--no-session-persistence --max-turns 3 'respond with: ok'"
+        )
+    # Detect CLI-level error messages written to stdout (e.g. "Error: Reached max turns (3)")
+    if output.startswith("Error:"):
+        raise BackendError(
+            f"claude -p returned a CLI error: {output}. "
+            "If 'Reached max turns', the transcript may be too long — try raising "
+            "claude_timeout in knowledge.json, or reduce the transcript with --since."
         )
     return output
 
