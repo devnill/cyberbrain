@@ -59,7 +59,7 @@ The installer:
 1. Builds and installs all skills, hooks, prompts, and the extractor into `~/.claude/`
 2. Registers the `PreCompact` and `SessionEnd` hooks in `~/.claude/settings.json`
 3. Creates `~/.claude/cyberbrain.json` with a placeholder vault path (if not already present)
-4. Installs the MCP server into `~/.claude/mcp-venv/` and registers it in Claude Desktop (macOS)
+4. Installs the MCP server into `~/.claude/cyberbrain/` and registers it in Claude Desktop (macOS)
 
 After installation, set `vault_path` in `~/.claude/cyberbrain.json` before the system will run.
 

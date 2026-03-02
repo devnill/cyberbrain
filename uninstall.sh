@@ -37,7 +37,7 @@ if [ "$YES" -eq 0 ]; then
   echo "  $CLAUDE_DIR/prompts/enrich-*.md"
   echo "  $CLAUDE_DIR/prompts/claude-desktop-project.md"
   echo "  $CLAUDE_DIR/skills/cb-*/"
-  echo "  $CLAUDE_DIR/mcp/server.py"
+  echo "  $CLAUDE_DIR/cyberbrain/mcp/server.py"
   echo "  $CLAUDE_DIR/cyberbrain.json"
   echo "  PreCompact and SessionEnd hook entries from $CLAUDE_DIR/settings.json"
   echo ""
@@ -124,8 +124,9 @@ remove_dir "$CLAUDE_DIR/skills/cb-claude-md"  # legacy: removed in v0.2
 # ---------------------------------------------------------------------------
 echo ""
 echo "Removing MCP server..."
-remove_file "$CLAUDE_DIR/mcp/server.py"
-prune_empty_dir "$CLAUDE_DIR/mcp"
+remove_file "$CLAUDE_DIR/cyberbrain/mcp/server.py"
+prune_empty_dir "$CLAUDE_DIR/cyberbrain/mcp"
+prune_empty_dir "$CLAUDE_DIR/cyberbrain"
 
 # ---------------------------------------------------------------------------
 # 6. Global config

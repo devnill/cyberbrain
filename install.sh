@@ -36,12 +36,12 @@ mkdir -p "$CLAUDE_DIR/hooks"
 mkdir -p "$CLAUDE_DIR/extractors"
 mkdir -p "$CLAUDE_DIR/prompts"
 mkdir -p "$CLAUDE_DIR/skills"
-mkdir -p "$CLAUDE_DIR/mcp"
+mkdir -p "$CLAUDE_DIR/cyberbrain/mcp"
 echo "  $CLAUDE_DIR/hooks/"
 echo "  $CLAUDE_DIR/extractors/"
 echo "  $CLAUDE_DIR/prompts/"
 echo "  $CLAUDE_DIR/skills/"
-echo "  $CLAUDE_DIR/mcp/"
+echo "  $CLAUDE_DIR/cyberbrain/mcp/"
 
 # ---------------------------------------------------------------------------
 # 2. Install files
@@ -100,8 +100,8 @@ install_skill cb-extract
 install_skill cb-enrich
 
 # MCP server
-cp "$REPO_DIR/mcp/server.py" "$CLAUDE_DIR/mcp/server.py"
-echo "  [OK] mcp/server.py"
+cp "$REPO_DIR/mcp/server.py" "$CLAUDE_DIR/cyberbrain/mcp/server.py"
+echo "  [OK] cyberbrain/mcp/server.py"
 
 # Write version stamp so future installs can detect upgrades
 echo "$NEW_VERSION" > "$CLAUDE_DIR/extractors/.cb-version"
@@ -212,7 +212,7 @@ else
 fi
 
 # Install MCP package into a dedicated venv (avoids system/conda Python conflicts)
-MCP_VENV="$CLAUDE_DIR/mcp-venv"
+MCP_VENV="$CLAUDE_DIR/cyberbrain/venv"
 MCP_PYTHON=""
 # Prefer Python 3.11/3.12 — mcp wheels are not yet available for Python 3.14+
 for candidate in python3.12 python3.11 /opt/homebrew/bin/python3.12 /opt/homebrew/bin/python3.11 /opt/homebrew/bin/python3 /usr/local/bin/python3 python3; do
@@ -307,7 +307,7 @@ elif existing == ENTRY:
 else:
     print(f'  [OK] cyberbrain MCP server updated in Claude Desktop')
 print('  Restart Claude Desktop for the change to take effect.')
-" "$DESKTOP_CONFIG" "$CLAUDE_DIR/mcp/server.py" "${MCP_VENV:-}/bin/python3"
+" "$DESKTOP_CONFIG" "$CLAUDE_DIR/cyberbrain/mcp/server.py" "${MCP_VENV:-}/bin/python3"
 else
   echo "  [skip] Claude Desktop not found (macOS only)"
 fi

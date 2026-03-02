@@ -5,7 +5,7 @@ Cyberbrain MCP Server
 Exposes cb_extract, cb_file, and cb_recall as MCP tools so Claude Desktop
 can file beats into and search an Obsidian vault.
 
-Install: see install.sh — copies this file to ~/.claude/mcp/server.py and
+Install: see install.sh — copies this file to ~/.claude/cyberbrain/mcp/server.py and
 registers it in ~/Library/Application Support/Claude/claude_desktop_config.json.
 """
 

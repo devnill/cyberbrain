@@ -82,7 +82,7 @@ Beat routing:
 | `extractors/extract_beats.py` | Core engine; parses JSONL/text transcripts, calls LLM backend, writes vault notes, daily journal |
 | `prompts/extract-beats-system.md` / `extract-beats-user.md` | Extraction LLM prompts — edit to change extraction behavior |
 | `prompts/autofile-system.md` / `autofile-user.md` | Autofile routing prompts |
-| `mcp/server.py` | FastMCP server for Claude Desktop; wraps extraction logic; runs in `~/.claude/mcp-venv/` |
+| `mcp/server.py` | FastMCP server for Claude Desktop; wraps extraction logic; runs in `~/.claude/cyberbrain/venv/` |
 | `skills/cb-recall/SKILL.md` | `/cb-recall` slash command |
 | `skills/cb-file/SKILL.md` | `/cb-file` slash command |
 | `skills/cb-extract/SKILL.md` | `/cb-extract` slash command |

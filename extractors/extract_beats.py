@@ -286,7 +286,7 @@ def _call_bedrock(system_prompt: str, user_message: str, config: dict) -> str:
     except ImportError:
         raise BackendError(
             "'anthropic' package not installed. "
-            "Run: pip install anthropic[bedrock]  (in the MCP venv: ~/.claude/mcp-venv/bin/pip install anthropic[bedrock])"
+            "Run: pip install anthropic[bedrock]  (in the MCP venv: ~/.claude/cyberbrain/venv/bin/pip install anthropic[bedrock])"
         )
 
     region = config.get("bedrock_region", "us-east-1")

@@ -16,7 +16,7 @@ PASS=0
 FAIL=0
 EXTRACTOR="${HOME}/.claude/extractors/extract_beats.py"
 HOOK="${HOME}/.claude/hooks/pre-compact-extract.sh"
-MCP_VENV="${HOME}/.claude/mcp-venv"
+MCP_VENV="${HOME}/.claude/cyberbrain/venv"
 
 # Resolve vault_path and inbox from config
 VAULT_PATH=$(python3 -c "
