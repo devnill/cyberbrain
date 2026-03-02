@@ -2,6 +2,8 @@
 
 A knowledge capture and retrieval system for LLM interactions. It extracts structured knowledge from Claude sessions automatically, stores it as Obsidian-compatible markdown, and makes it retrievable in future sessions via slash commands. While it integrates tightly with Claude Code, the vault is designed to hold knowledge from any source — technical work, research, writing, or any domain where you want to remember what you've learned.
 
+→ **New here? See [QUICKSTART.md](QUICKSTART.md).**
+
 ---
 
 ## How it works
@@ -18,7 +20,7 @@ PreCompact hook fires
        ▼
 ~/.claude/extractors/extract_beats.py
        │  parses transcript JSONL
-       │  calls Claude API (Haiku) to extract "beats"
+       │  calls Claude (Haiku) to extract "beats"
        │  routes beats by scope (project vs. general)
        ▼
 Obsidian vault/
@@ -35,7 +37,7 @@ Relevant beats injected into context
 
 Extraction happens automatically on every compaction — both auto and manual. You'll see **"Extracting knowledge before compaction..."** in the Claude Code status bar while it runs.
 
-Three skills are also included for manual knowledge management: `/kg-recall` (retrieve), `/kg-file` (manually save anything), and `/kg-claude-md` (generate a guidance document for your vault).
+A `SessionEnd` hook also fires when a session ends without compacting, so no session is missed.
 
 ---
 
@@ -43,27 +45,24 @@ Three skills are also included for manual knowledge management: `/kg-recall` (re
 
 - Python 3.8+
 - Claude Code (the `claude` CLI)
-- An Obsidian vault (existing or new — see setup sections below)
-- **Optional**: `ANTHROPIC_API_KEY` for the `anthropic` backend, or AWS credentials for the `bedrock` backend. The default `claude-cli` backend uses your active Claude Code session — no separate API key needed.
+- An Obsidian vault, or any directory for plain-markdown storage
+- **Optional**: AWS credentials for the `bedrock` backend, or Ollama for the `ollama` backend. The default `claude-code` backend uses your active Claude Code session — no separate API key needed.
 
 ---
 
 ## Installation
-
-Run the installer from the repo root:
 
 ```bash
 bash install.sh
 ```
 
 The installer:
-1. Creates `~/.claude/hooks/`, `~/.claude/extractors/`, `~/.claude/prompts/`, `~/.claude/skills/`
-2. Copies all files into place
-3. Registers the `PreCompact` hook in `~/.claude/settings.json`
-4. Creates `~/.claude/knowledge.json` with a placeholder vault path (if not already present)
-5. Installs Python dependencies (`anthropic`, `pyyaml`)
+1. Builds and installs all skills, hooks, prompts, and the extractor into `~/.claude/`
+2. Registers the `PreCompact` and `SessionEnd` hooks in `~/.claude/settings.json`
+3. Creates `~/.claude/knowledge.json` with a placeholder vault path (if not already present)
+4. Installs the MCP server into `~/.claude/mcp-venv/` and registers it in Claude Desktop (macOS)
 
-After installation, complete the steps in the **Configuration** section below before the system will run.
+After installation, set `vault_path` in `~/.claude/knowledge.json` before the system will run.
 
 ---
 
@@ -73,13 +72,7 @@ After installation, complete the steps in the **Configuration** section below be
 bash uninstall.sh
 ```
 
-Pass `--yes` to skip the confirmation prompt:
-
-```bash
-bash uninstall.sh --yes
-```
-
-The uninstaller removes all files copied by `install.sh`, surgically removes the `PreCompact` hook entry from `~/.claude/settings.json` (preserving other hooks and settings), and prunes any directories that are left empty. It does not uninstall pip packages (`anthropic`, `pyyaml`), since those may be used by other tools.
+Pass `--yes` to skip the confirmation prompt. The uninstaller removes all installed files and surgically removes the hook entries from `~/.claude/settings.json`.
 
 ---
 
@@ -87,122 +80,90 @@ The uninstaller removes all files copied by `install.sh`, surgically removes the
 
 ### Global config — `~/.claude/knowledge.json`
 
-This is created by the installer. Edit it to point at your vault:
-
 ```json
 {
   "vault_path": "/Users/you/Documents/MyVault",
   "inbox": "AI/Claude-Sessions",
-  "staging_folder": "AI/Claude-Inbox"
+  "staging_folder": "AI/Claude-Inbox",
+  "backend": "claude-code",
+  "model": "claude-haiku-4-5",
+  "claude_timeout": 120,
+  "autofile": false,
+  "daily_journal": false,
+  "journal_folder": "AI/Journal",
+  "journal_name": "%Y-%m-%d"
 }
 ```
 
-| Field | Required | Description |
+| Field | Default | Description |
 |---|---|---|
-| `vault_path` | yes | Absolute path to your Obsidian vault root |
-| `inbox` | yes | Where general beats go (not project-specific) |
-| `staging_folder` | yes | Where beats land when there's no project config |
-| `backend` | no | `"claude-cli"` *(default)*, `"anthropic"`, or `"bedrock"` |
-| `claude_model` | no | Model for `claude-cli` backend; default `"claude-haiku-4-5"` |
-| `model` | no | Model for `anthropic` or `bedrock` backends; defaults to `claude-haiku-4-5` (direct) or `us.anthropic.claude-haiku-4-5-20251001` (Bedrock) |
-| `autofile_model` | no | Model used specifically for autofile filing decisions; falls back to `claude_model` / `model` if unset. Set to `"claude-sonnet-4-5"` for higher-quality filing at increased cost. |
-| `bedrock_region` | no | AWS region for Bedrock *(default: `"us-east-1"`)*; only used when `backend` is `"bedrock"` |
+| `vault_path` | *(required)* | Absolute path to your Obsidian vault root |
+| `inbox` | `"AI/Claude-Sessions"` | Where general beats go (not project-specific) |
+| `staging_folder` | `"AI/Claude-Inbox"` | Where beats land when there's no project config |
+| `backend` | `"claude-code"` | LLM backend: `"claude-code"`, `"bedrock"`, or `"ollama"` |
+| `model` | `"claude-haiku-4-5"` | Model name passed to the backend |
+| `claude_timeout` | `120` | Seconds before the LLM call times out |
+| `autofile` | `false` | Use LLM to route beats into existing vault folders instead of flat inbox |
+| `daily_journal` | `false` | Append a session entry to a daily journal note after each extraction |
+| `journal_folder` | `"AI/Journal"` | Vault-relative folder for journal notes |
+| `journal_name` | `"%Y-%m-%d"` | Journal filename pattern (strftime format) |
+| `bedrock_region` | `"us-east-1"` | AWS region — only used when `backend` is `"bedrock"` |
+| `ollama_url` | `"http://localhost:11434"` | Ollama endpoint — only used when `backend` is `"ollama"` |
 
-The extractor will not run until `vault_path` is set to a real, existing directory.
+---
+
+### Per-project config — `.claude/knowledge.local.json`
+
+Add this file to a project root to route that project's beats into a dedicated vault folder:
+
+```json
+{
+  "project_name": "my-app",
+  "vault_folder": "Projects/my-app/Claude-Notes"
+}
+```
+
+Copy `knowledge.local.example.json` from this repo as a starting point. Add `knowledge.local.json` to your project's `.gitignore` — it contains local paths and is not meant to be committed.
+
+The extractor walks up from the session's working directory to find this file. Project-scoped beats go to `vault_folder`; general beats still go to `inbox`. Without this file, all beats land in `staging_folder`.
 
 ---
 
 ## Setting up with an existing Obsidian vault
 
-1. Open `~/.claude/knowledge.json` and set `vault_path` to your vault root:
-
-   ```json
-   {
-     "vault_path": "/Users/you/Documents/MyVault",
-     "inbox": "AI/Claude-Sessions",
-     "staging_folder": "AI/Claude-Inbox"
-   }
-   ```
-
-2. The folders named in `inbox` and `staging_folder` will be created automatically inside your vault the first time beats are written. They don't need to exist in advance.
-
-3. Optionally, run `/kg-claude-md` in a Claude Code session to analyze your vault's existing structure and generate a `CLAUDE.md` at the vault root. This document teaches Claude your vault's conventions so that `/kg-file` and future notes stay consistent with what you already have.
-
-4. To connect a specific project, see **Per-project configuration** below.
+1. Set `vault_path` in `~/.claude/knowledge.json`
+2. The `inbox` and `staging_folder` directories will be created automatically on first write — they don't need to exist in advance
+3. Run `/kg-setup` in a Claude Code session to analyze your vault's existing structure and generate a `CLAUDE.md` at the vault root. This document teaches Claude your vault's conventions so that future beats and `/kg-file` notes stay consistent with what you already have
 
 ---
 
 ## Setting up with a new Obsidian vault
 
-1. Create a new vault in Obsidian. An empty vault is fine — the system will build structure as you work.
-
-2. Set `vault_path` in `~/.claude/knowledge.json` to the new vault root.
-
-3. Decide on folder structure. The defaults work well to start:
-   - `AI/Claude-Sessions/` — general session beats
-   - `AI/Claude-Inbox/` — staging area for beats from projects without a config
-
-4. If you plan to use `/kg-file` to manually add notes, skim the **Ontology** section below to understand the entity types and field conventions before you start, so your notes are consistent from the beginning.
-
-5. After a few sessions, run `/kg-claude-md` to generate a `CLAUDE.md`. For a new vault this will be lightweight, but it's a good anchor to grow from.
-
----
-
-## Per-project configuration
-
-To route beats from a specific project into a dedicated vault folder rather than the staging inbox, add a `.claude/knowledge.local.json` file to the project root:
-
-```json
-{
-  "project_name": "my-api",
-  "vault_folder": "Projects/my-api/Claude-Notes"
-}
-```
-
-Copy `knowledge.local.example.json` from this repo as a starting point. The file is gitignored by convention — add `knowledge.local.json` to your project's `.gitignore`.
-
-When the extractor runs, it walks up from the session's working directory looking for this file. If found, project-scoped beats go to `vault_folder`; general beats (decisions, insights not tied to the project) still go to `inbox`.
-
-Without this file, all beats land in `staging_folder` for you to triage manually.
+1. Create a new vault in Obsidian (an empty vault is fine)
+2. Set `vault_path` in `~/.claude/knowledge.json`
+3. The default folder structure works well to start — beats will appear in `AI/Claude-Sessions/` and `AI/Claude-Inbox/`
+4. Run `/kg-setup` after a few sessions to generate a `CLAUDE.md` once there's enough content to analyze
 
 ---
 
 ## Skills
 
-Four slash commands are installed into Claude Code. Invoke them in any Claude Code session.
+Six slash commands are installed into Claude Code. Invoke them in any Claude Code session.
 
-### `/kg-extract [path]`
+### `/kg-extract [path] [--dry-run]`
 
-Extract knowledge beats from a chat session and save them to the vault.
+Extract knowledge beats from a session and save them to the vault.
 
-**Current session** (no arguments):
 ```
-/kg-extract
-```
-
-**Previous session** (path to transcript or exported log):
-```
+/kg-extract                        # current session
+/kg-extract --dry-run              # preview without writing
 /kg-extract ~/.claude/projects/-Users-me-code-myapp/abc123.jsonl
-/kg-extract ~/Downloads/old-session.jsonl --project my-api --cwd ~/code/my-api
-/kg-extract ~/Downloads/chatlog.txt --project personal
+/kg-extract ~/Downloads/export.jsonl --cwd ~/code/my-app
 ```
 
-With no arguments, the skill finds the active session's transcript automatically (most
-recently modified JSONL in the current project's folder) and extracts beats from it.
-This is useful mid-session to capture knowledge without waiting for compaction, or at
-the end of a session before closing.
+With no arguments, the skill finds the active session's transcript automatically (most recently modified JSONL in the current project's folder). With a path, use it to backfill from sessions that predate the automatic hook, or from logs exported from Claude Desktop or other sources.
 
-With a path, use it to backfill the knowledge base from sessions that predate the
-automatic hook, or from chat logs exported from Claude Desktop or other sources.
-
-The skill parses the conversation (Claude Code JSONL or plain text), applies the same
-extraction criteria as the automatic hook, and writes beat files to the vault. Beats are
-routed to the project folder if a per-project config is found for the given `--cwd`,
-otherwise to the general or staging folder.
-
-**Claude Code transcripts** live at `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`.
-When you point the skill at one of these, the working directory and session ID are
-decoded automatically from the path — no flags needed.
+`--dry-run` runs the full extraction pipeline — parses transcript, calls LLM, computes routing — but writes nothing. Shows the complete beat content so you can evaluate quality before committing.
 
 ---
 
@@ -211,70 +172,74 @@ decoded automatically from the path — no flags needed.
 Search the vault and inject relevant context from previous sessions.
 
 ```
-/kg-recall redis cache
-/kg-recall auth token expiry
-/kg-recall api-service decisions
+/kg-recall redis cache expiry
+/kg-recall auth token decisions
 ```
 
-The skill reads `~/.claude/knowledge.json` to find the vault, searches by keywords in titles and summaries (highest signal), then by tags, then in body content. It reads up to 5 matching documents and synthesizes a structured context block — titles, types, dates, key findings, and source paths.
+Searches vault notes by keyword across titles, summaries, tags, and body content. Returns summary cards for all matches, with full body content for the top 1–2 most relevant results. Results are wrapped in a security demarcation block so Claude treats them as reference data, not instructions.
 
-If no results are found, the skill says so clearly and reminds you that content will accumulate after your next compaction.
-
-**When to use it**: At the start of a session when you're returning to a topic or project you've worked on before. Also useful mid-session when you hit a problem and want to know if you've solved something similar before.
+Call this when returning to a topic you've worked on before, or when you hit a problem and want to know if you've solved something similar.
 
 ---
 
-### `/kg-file`
+### `/kg-file [--dry-run] [--type TYPE] [--folder PATH]`
 
-Manually file any piece of information into your vault as a structured Obsidian note.
+Manually file any piece of information into your vault.
 
-Trigger phrases: `"save this"`, `"file this"`, `"add to my notes"`, `"capture this"`, `"log this"`, or any phrasing that implies you want something preserved.
+Trigger phrases: "save this", "file this", "add to my notes", "capture this".
 
-The skill classifies the input into an entity type (see **Ontology** below), extracts structured fields, generates complete YAML frontmatter and a formatted body, suggests a canonical file path, and identifies wikilinks to create as stubs.
+The skill reads your vault's `CLAUDE.md` for type vocabulary and filing conventions, classifies the input, generates YAML frontmatter and a structured body, and writes the note. Use `--dry-run` to preview without writing.
 
-Example uses:
-- Paste a decision you just made and say "file this"
-- Describe a bug you solved and say "save this as a problem-solution"
-- Ask Claude to summarize the current session and file it
+---
 
-The output is the complete note, ready to paste into Obsidian. The suggested file path follows the `type/kebab-case-title.md` convention.
+### `/kg-enrich [--since DATE] [--dry-run]`
+
+Backfill metadata on vault notes that are missing `type`, `summary`, or `tags`.
+
+```
+/kg-enrich
+/kg-enrich --since 2026-01-01
+/kg-enrich --dry-run
+```
+
+Scans notes in the vault and enriches those with incomplete frontmatter so they surface correctly in `/kg-recall` queries. Reads vault `CLAUDE.md` for type vocabulary. `--since` filters by file modification time.
+
+---
+
+### `/kg-setup [--types TYPE1,TYPE2,...] [--dry-run]`
+
+Analyze your vault and generate or update a `CLAUDE.md` at the vault root.
+
+```
+/kg-setup
+/kg-setup --dry-run
+/kg-setup --types decision,insight,problem,reference
+```
+
+Runs `scripts/analyze_vault.py` against the vault, deep-reads a sample of notes, and generates a `CLAUDE.md` that documents your vault's entity types, naming conventions, tag taxonomy, and filing rules. The `CLAUDE.md` is read by the extractor and `/kg-file` before every write, keeping all future notes consistent with your existing structure.
+
+Use `--types` to specify the type vocabulary directly instead of inferring it from existing notes.
 
 ---
 
 ### `/kg-claude-md`
 
-Analyze your Obsidian vault and generate a `CLAUDE.md` at the vault root.
-
-```
-/kg-claude-md
-```
-
-The skill runs `scripts/analyze_vault.py` against your vault, which produces a structural report covering entity type distribution, tag usage, wikilink patterns, naming conventions, and orphan notes. It then deep-reads a sample of notes (scaled to vault size), synthesizes the findings, and generates a `CLAUDE.md` that documents:
-
-- Your vault's actual entity types, required fields, and naming conventions
-- Domain taxonomy and tag namespaces
-- Linking conventions
-- Rules for extending the ontology (adding new types, domains, tags)
-- Known gaps and inconsistencies
-
-The `CLAUDE.md` serves as standing instructions for Claude in any future session — it ensures `/kg-file` produces notes consistent with your existing vault structure rather than inventing new conventions.
-
-Run this again periodically as your vault evolves. If a `CLAUDE.md` already exists, the skill preserves any custom sections you've added.
+Deprecated alias for `/kg-setup`. Will be removed in a future release.
 
 ---
 
-## Automatic extraction — beat types
+## Beat types
 
-When the PreCompact hook fires, it sends the session transcript to Claude (Haiku) and asks it to identify "beats" — moments in the session worth preserving. The extractor looks for these types:
+When the PreCompact hook fires, Claude (Haiku) reads the session transcript and identifies "beats" — moments worth preserving. The default type vocabulary:
 
 | Type | What it captures |
 |---|---|
-| `decision` | An architectural or design choice made with its rationale |
+| `decision` | An architectural or design choice made, with rationale |
 | `insight` | A non-obvious understanding or pattern that emerged |
-| `task` | A completed unit of work and its outcome |
-| `problem-solution` | A problem that was encountered and how it was solved |
-| `error-fix` | A specific bug or error and the fix that resolved it |
+| `problem` | A problem encountered — open or resolved |
 | `reference` | A useful fact, config value, snippet, or command to remember |
+
+If your vault's `CLAUDE.md` defines a different type vocabulary, the extractor uses that instead. This keeps beat types consistent with how you organize the rest of your vault.
 
 Each beat is written as a markdown file with YAML frontmatter:
 
@@ -283,125 +248,45 @@ Each beat is written as a markdown file with YAML frontmatter:
 id: <uuid>
 date: 2026-02-25T13:34:00
 session_id: abc123
-type: error-fix
+type: decision
 scope: project
-title: "Fix auth token expiry race condition"
-project: api-service
-cwd: /Users/dan/code/api-service
-tags: ["auth", "redis", "cache"]
+title: "Use raw_decode() for LLM JSON response parsing"
+project: knowledge-graph
+cwd: /Users/dan/code/knowledge-graph
+tags: ["json", "llm", "parsing", "robustness"]
 related: []
 status: completed
-summary: "Token TTL was in seconds but Redis expected ms; fixed by multiplying × 1000 in cache layer."
+summary: "json.JSONDecoder().raw_decode() tolerates trailing explanation text after the JSON blob."
 ---
 
-## Fix: Auth Token Expiry Race Condition
+## Decision
 
-### Problem
-...
-
-### Solution
-...
-```
-
-The `summary` field is a single information-dense sentence — optimized for both human scanning and future vector embedding (Phase 2).
-
----
-
-## Ontology — labeling content with `/kg-file`
-
-The `/kg-file` skill uses a structured ontology to classify notes. Understanding the entity types helps you get clean, consistent output.
-
-### Entity types
-
-| Type | Use for |
-|---|---|
-| `project` | Active or historical work — something being built, repaired, or learned |
-| `concept` | A principle, technique, method, or body of knowledge |
-| `tool` | A specific piece of hardware, software, library, or service |
-| `decision` | A specific choice made, with its rationale captured |
-| `insight` | A lesson learned, pattern noticed, or realization |
-| `problem` | An open issue, bug, unknown, or challenge |
-| `resource` | A book, article, documentation page, URL, or other reference |
-| `person` | A contact, collaborator, or person worth tracking |
-| `event` | A one-time or recurring happening |
-| `claude-context` | A structured snapshot of Claude's knowledge for a domain |
-| `domain` | A broad area of knowledge or practice |
-| `skill` | A capability you have or are developing |
-| `place` | A physical or logical location |
-
-When in doubt: a realization from working on a project is an `insight`, not a `project`. Between two plausible types, choose the more specific one.
-
-### Key fields
-
-Every note has a small set of fields that appear across all types:
-
-- **`domain`** — the broad topic area, kebab-case (e.g., `amateur-radio`, `ios-dev`, `woodworking`, `personal`). When a note spans domains, use the most specific one and add others as tags.
-- **`status`** — current state; valid values vary by type (e.g., `active`/`complete`/`archived` for projects; `open`/`resolved` for problems; `seedling`/`evergreen` for concepts and insights).
-- **`confidence`** — `high` (from direct experience or verified docs), `medium` (recalled or inferred), `low` (speculative).
-- **`source`** — where the information came from: `personal-experience`, `claude-context`, `documentation`, `book`, `conversation`, `research`.
-
-### Relationships and wikilinks
-
-Notes connect to each other through YAML arrays and inline wikilinks. Use `[[type/note-name]]` syntax throughout — in frontmatter arrays and in the prose of the note body.
-
-Common relationship fields:
-
-| Field | Meaning |
-|---|---|
-| `caused-by` | What prompted this decision or problem |
-| `resolves` | What problem this decision or fix addresses |
-| `applies-to` | What concepts or projects an insight is relevant to |
-| `learned-from` | Where an insight came from (event, project, resource) |
-| `related` | Loose association when no specific relationship fits |
-
-It's fine to wikilink notes that don't exist yet — these become stubs that fill in over time. The link matters even before the target note exists.
-
-### File naming
-
-Notes follow `type/kebab-case-title.md` — for example:
-
-```
-insight/fft-window-size-affects-ctcss-accuracy.md
-decision/use-arduino-fft-over-mt8870.md
-problem/squelch-tail-noise.md
-tool/anytone-at778uv.md
+Use `json.JSONDecoder().raw_decode()` to parse LLM responses...
 ```
 
 ---
 
-## Vault folder structure
+## Autofile
 
-A typical vault with this system active might look like:
+When `"autofile": true` is set in `~/.claude/knowledge.json`, beats are routed into existing vault folders using an LLM filing decision rather than dropped flat into the inbox.
 
-```
-MyVault/
-├── CLAUDE.md                      ← generated by /kg-claude-md
-├── AI/
-│   ├── Claude-Sessions/           ← general beats (auto-extracted)
-│   └── Claude-Inbox/              ← staging beats (no project config)
-├── Projects/
-│   └── my-api/
-│       └── Claude-Notes/          ← project beats (per-project config)
-├── concept/
-├── decision/
-├── insight/
-├── problem/
-├── tool/
-└── ...                            ← your existing vault structure
-```
+The autofile process:
+1. Searches the vault for existing notes that thematically match the beat (by keyword)
+2. Passes the top candidates to the LLM along with the vault's `CLAUDE.md`
+3. The LLM chooses: create a new note, extend an existing one, or use the inbox
+4. On collision (two beats targeting the same file), extends if tag overlap ≥ 2; otherwise creates a more specific title
 
-The `AI/` folders are managed by the extractor. The typed folders (`concept/`, `decision/`, etc.) are where `/kg-file` suggests saving manual notes.
+Autofile adds one LLM call per beat. With the `claude-code` backend, this costs nothing extra beyond the time it takes. With API-based backends, expect roughly 2× the token usage of flat extraction.
 
 ---
 
 ## Capturing Claude.ai and mobile sessions
 
-Claude Code sessions are captured automatically. Sessions from Claude.ai (web or mobile)
-require a periodic export.
+Claude Code sessions are captured automatically. Sessions from Claude.ai (web, iOS, Android) require a periodic export.
 
 **Step 1: Request a data export**
 
-Go to claude.ai → Settings → Privacy → Export Data (or privacy.anthropic.com).
+Go to **claude.ai → Settings → Privacy → Export Data**.
 The export ZIP arrives by email, typically within a few hours.
 
 **Step 2: Run the import script**
@@ -409,105 +294,115 @@ The export ZIP arrives by email, typically within a few hours.
 Extract the ZIP and run:
 
 ```bash
-python3 scripts/import-desktop-export.py ~/Downloads/claude-ai-export/conversations.json
+python3 scripts/import.py --export ~/Downloads/claude-export/ --format claude
 ```
 
-The script tracks which conversations have already been processed. Re-running it on a
-newer export safely skips already-imported conversations.
+The script tracks which conversations have already been processed. Re-running on a newer export safely skips already-imported conversations.
 
-**Recommended cadence:** Once a month, or after any period of heavy Claude.ai use.
+**ChatGPT history:**
 
-**Note:** The Anthropic export covers all interfaces — Claude.ai web, iOS, Android,
-and Claude Desktop. There is no interface-specific filtering needed.
+```bash
+python3 scripts/import.py --export ~/Downloads/chatgpt-export/ --format chatgpt
+```
+
+**Flags:**
+
+| Flag | Description |
+|---|---|
+| `--export PATH` | Path to the export directory or conversations file |
+| `--format claude\|chatgpt` | Source format |
+| `--dry-run` | Preview extractions without writing |
+| `--limit N` | Process at most N conversations |
+| `--since YYYY-MM-DD` | Skip conversations older than this date |
+| `--cwd PATH` | Working directory context for project routing |
 
 ---
 
-## API Authentication
+## Backends
 
-The extractor supports three backends. Select via `"backend"` in `~/.claude/knowledge.json`.
+### `claude-code` (default — no API key required)
 
-### claude-cli *(default — no API key required)*
-
-The default backend shells out to `claude -p`, which uses your active Claude Code session credentials. No additional API key is needed.
+Shells out to `claude -p`, which uses your active Claude Code subscription. No additional API key needed.
 
 ```json
 {
-  "vault_path": "/Users/you/Documents/MyVault",
-  "backend": "claude-cli",
-  "claude_model": "claude-haiku-4-5"
+  "backend": "claude-code",
+  "model": "claude-haiku-4-5",
+  "claude_timeout": 120
 }
 ```
 
-Note: The `CLAUDECODE` environment variable is stripped before calling `claude -p` to avoid nested session errors.
+### `bedrock`
 
-### Direct Anthropic API *(alternative)*
-
-To use the Anthropic SDK directly, set your API key and select the backend:
-
-```bash
-export ANTHROPIC_API_KEY='sk-ant-...'
-```
+Uses the Anthropic SDK with AWS Bedrock. Requires AWS credentials (`~/.aws/credentials`, env vars, or IAM role).
 
 ```json
 {
-  "vault_path": "/Users/you/Documents/MyVault",
-  "backend": "anthropic",
-  "model": "claude-haiku-4-5"
-}
-```
-
-Add the export to `~/.zshrc` or `~/.bashrc` so it's available in shell sessions launched by Claude Code hooks.
-
-### AWS Bedrock *(alternative)*
-
-If you have AWS credentials and access to Anthropic models via Bedrock:
-
-```json
-{
-  "vault_path": "/Users/you/Documents/MyVault",
   "backend": "bedrock",
+  "model": "us.anthropic.claude-haiku-4-5-20251001",
   "bedrock_region": "us-east-1"
 }
 ```
 
-The extractor uses ambient AWS credentials (`~/.aws/credentials`, environment variables, or IAM role). `ANTHROPIC_API_KEY` is not required.
+### `ollama`
+
+Calls a local Ollama instance. No API key or cloud dependency.
+
+```json
+{
+  "backend": "ollama",
+  "model": "llama3.2",
+  "ollama_url": "http://localhost:11434"
+}
+```
+
+Requires Ollama running locally with a model pulled (`ollama pull llama3.2`). Quality of extraction varies by model — models with strong instruction-following and JSON output work best.
+
+---
+
+## MCP server (Claude Desktop)
+
+The installer registers a FastMCP server in Claude Desktop, exposing three tools:
+
+| Tool | Description |
+|---|---|
+| `kg_extract(transcript_path)` | Extract beats from a transcript file |
+| `kg_file(content, instructions?)` | File a piece of text into the vault |
+| `kg_recall(query, max_results?)` | Search the vault |
+
+Restart Claude Desktop after installation for the MCP server to appear.
 
 ---
 
 ## Troubleshooting
 
-**Extraction is silent / no beats appear**
+**No beats appear after /compact**
 
-Check that:
-- `vault_path` in `~/.claude/knowledge.json` points to a real directory
-- The hook is registered: open `~/.claude/settings.json` and confirm a `PreCompact` key exists under `hooks`
-- The hook is executable: `ls -l ~/.claude/hooks/pre-compact-extract.sh`
-- For `claude-cli` backend (default): the `claude` CLI is in your PATH and works outside Claude Code
-- For `anthropic` backend: `ANTHROPIC_API_KEY` is set in your environment (not just in Claude Code's env)
-- For `bedrock` backend: `"backend": "bedrock"` is set in `~/.claude/knowledge.json` and AWS credentials are configured
+- Confirm `vault_path` in `~/.claude/knowledge.json` points to a real directory
+- Confirm the hook is registered: `cat ~/.claude/settings.json | python3 -m json.tool | grep -A5 PreCompact`
+- For `claude-code` backend: confirm `claude` is in PATH: `which claude`
+- For `bedrock`: confirm AWS credentials work: `aws sts get-caller-identity`
+- For `ollama`: confirm Ollama is running: `curl http://localhost:11434/api/tags`
+
+**"Reached max turns" or backend error**
+
+The session transcript may be very long. Add or increase `claude_timeout` in `~/.claude/knowledge.json`:
+
+```json
+{ "claude_timeout": 180 }
+```
+
+**Beats land in inbox instead of project folder**
+
+Confirm `.claude/knowledge.local.json` exists in the project root (or a parent directory up to `~`), and that `project_name` and `vault_folder` are both set.
 
 **"Prompt file not found" error**
 
-The extractor looks for prompt files at `~/.claude/prompts/`. Reinstall to ensure they were copied:
+The extractor looks for prompts at `~/.claude/prompts/`. Reinstall to ensure they were copied: `bash install.sh`
 
-```bash
-bash install.sh
-```
+**Skills not found after install**
 
-**Beats land in the inbox instead of my project folder**
-
-`.claude/knowledge.local.json` was not found. Confirm it exists in the project root (or a parent directory up to `~`), and that `project_name` and `vault_folder` are set.
-
-**`/kg-claude-md` fails to run**
-
-The skill requires Python 3 and the `pyyaml` package. Confirm both are available:
-
-```bash
-python3 --version
-python3 -c "import yaml; print('ok')"
-```
-
-If pyyaml is missing: `pip install pyyaml`
+Skills load at session start. Open a new Claude Code session after running `bash install.sh`.
 
 ---
 
@@ -517,23 +412,25 @@ If pyyaml is missing: `pip install pyyaml`
 |---|---|
 | `install.sh` | Installer |
 | `uninstall.sh` | Uninstaller |
+| `QUICKSTART.md` | Fast-path setup guide |
 | `knowledge.example.json` | Template for `~/.claude/knowledge.json` |
 | `knowledge.local.example.json` | Template for per-project `.claude/knowledge.local.json` |
 | `hooks/pre-compact-extract.sh` | PreCompact hook entry point |
-| `extractors/extract_beats.py` | Transcript parser and beat writer |
+| `hooks/session-end-extract.sh` | SessionEnd hook entry point |
+| `extractors/extract_beats.py` | Transcript parser, LLM caller, and vault writer |
 | `extractors/requirements.txt` | Python dependencies |
 | `prompts/extract-beats-system.md` | System prompt for beat extraction |
 | `prompts/extract-beats-user.md` | User message template for beat extraction |
 | `prompts/autofile-system.md` | System prompt for autofile filing decisions |
-| `prompts/enrich-system.md` | System prompt for `/kg-enrich` note classification |
+| `prompts/enrich-system.md` | System prompt for `/kg-enrich` |
 | `prompts/claude-desktop-project.md` | Recommended Claude Desktop Project system prompt |
+| `mcp/server.py` | FastMCP server for Claude Desktop |
+| `scripts/import.py` | Import Claude or ChatGPT export into the vault |
+| `skills/kg-extract/SKILL.md` | `/kg-extract` skill |
 | `skills/kg-recall/SKILL.md` | `/kg-recall` skill |
 | `skills/kg-file/SKILL.md` | `/kg-file` skill |
-| `skills/kg-file/references/ontology.md` | Full entity type schemas and relationship vocabulary |
-| `skills/kg-claude-md/SKILL.md` | `/kg-claude-md` skill |
-| `skills/kg-claude-md/scripts/analyze_vault.py` | Vault structure analyzer |
-| `skills/kg-claude-md/references/` | Output structure spec and CLAUDE.md template |
-| `skills/kg-extract/SKILL.md` | `/kg-extract` skill |
 | `skills/kg-enrich/SKILL.md` | `/kg-enrich` skill |
-| `scripts/import-desktop-export.py` | Import Claude or ChatGPT export into the vault |
-| `scripts/test-smoke.sh` | Manual smoke test — run after install to verify setup |
+| `skills/kg-setup/SKILL.md` | `/kg-setup` skill |
+| `skills/kg-setup/scripts/analyze_vault.py` | Vault structure analyzer |
+| `skills/kg-setup/references/` | Output structure spec and `CLAUDE.md` template |
+| `skills/kg-claude-md/SKILL.md` | Deprecated redirect to `/kg-setup` |
