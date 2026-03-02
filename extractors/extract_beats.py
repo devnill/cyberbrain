@@ -912,7 +912,7 @@ def main():
     parser.add_argument("--transcript", help="Path to transcript JSONL file")
     parser.add_argument("--beats-json", help="Path to pre-extracted beats JSON (skips transcript parsing and API call)")
     parser.add_argument("--session-id", required=True, help="Session ID")
-    parser.add_argument("--trigger", default="auto", choices=["auto", "manual", "session-end"], help="Compaction trigger type")
+    parser.add_argument("--trigger", default="auto", help="Compaction trigger type (auto, manual, session-end, or any value Claude passes)")
     parser.add_argument("--cwd", required=True, help="Working directory of the Claude Code session")
     parser.add_argument("--dry-run", action="store_true", help="Preview beats without writing to vault or log")
     args = parser.parse_args()

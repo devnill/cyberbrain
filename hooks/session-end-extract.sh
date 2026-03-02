@@ -26,15 +26,13 @@ if [ -z "$TRANSCRIPT_PATH" ] || [ ! -f "$TRANSCRIPT_PATH" ]; then
   exit 0
 fi
 
-# Deduplication check: skip if already captured by PreCompact hook
-SESSIONS_FILE="$HOME/.claude/kg-sessions.json"
-if [ -n "$SESSION_ID" ] && [ -f "$SESSIONS_FILE" ]; then
-  if python3 -c "
-import sys, json
-data = json.load(open('$SESSIONS_FILE'))
-sys.exit(0 if '$SESSION_ID' in data.get('sessions', {}) else 1)
-" 2>/dev/null; then
-    echo "session-end-extract: session $SESSION_ID already captured by PreCompact, skipping" >&2
+# Deduplication check: skip if already captured by PreCompact hook.
+# The extractor logs to ~/.claude/logs/kg-extract.log; check it here as a
+# fast pre-flight so we don't spawn the extractor unnecessarily.
+EXTRACT_LOG="$HOME/.claude/logs/kg-extract.log"
+if [ -n "$SESSION_ID" ] && [ -f "$EXTRACT_LOG" ]; then
+  if grep -qF "	${SESSION_ID}	" "$EXTRACT_LOG" 2>/dev/null; then
+    echo "session-end-extract: session $SESSION_ID already captured, skipping" >&2
     exit 0
   fi
 fi
@@ -58,28 +56,7 @@ python3 "$EXTRACTOR" \
   --cwd "$CWD" \
   2>&1
 
-# Write session registry entry to prevent double-extraction if both hooks fire
-if [ -n "$SESSION_ID" ]; then
-  python3 -c "
-import json, os
-from pathlib import Path
-from datetime import datetime, timezone
-
-registry_path = Path.home() / '.claude' / 'kg-sessions.json'
-try:
-    data = json.loads(registry_path.read_text()) if registry_path.exists() else {'version': 1, 'sessions': {}}
-    data.setdefault('sessions', {})['$SESSION_ID'] = {
-        'extracted_at': datetime.now(timezone.utc).isoformat(),
-        'trigger': 'session-end',
-        'cwd': '$CWD',
-    }
-    tmp = str(registry_path) + '.tmp'
-    with open(tmp, 'w') as f:
-        json.dump(data, f, indent=2)
-    os.replace(tmp, str(registry_path))
-except Exception:
-    pass  # Never fail on registry write
-" 2>/dev/null
-fi
+# The extractor writes its own log entry to ~/.claude/logs/kg-extract.log.
+# No separate registry write needed here.
 
 exit 0

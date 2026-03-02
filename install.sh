@@ -96,6 +96,7 @@ install_skill() {
 install_skill kg-recall
 install_skill kg-file
 install_skill kg-claude-md
+install_skill kg-setup
 install_skill kg-extract
 install_skill kg-enrich
 
@@ -195,7 +196,7 @@ BACKEND=$(python3 -c "
 import json, os
 path = os.path.expanduser('~/.claude/knowledge.json')
 cfg = json.load(open(path)) if os.path.exists(path) else {}
-print(cfg.get('backend', 'claude-cli'))
+print(cfg.get('backend', 'claude-code'))
 " 2>/dev/null || echo "claude-cli")
 
 if [ "$BACKEND" = "anthropic" ] || [ "$BACKEND" = "bedrock" ]; then
@@ -207,7 +208,7 @@ if [ "$BACKEND" = "anthropic" ] || [ "$BACKEND" = "bedrock" ]; then
   fi
 else
   echo "  [skip] anthropic package not needed for backend=$BACKEND"
-  # Still install pyyaml (used by kg-claude-md)
+  # Still install pyyaml (used by kg-setup/kg-claude-md)
   python3 -m pip install pyyaml -q 2>/dev/null || true
 fi
 
@@ -246,12 +247,12 @@ fi
 # 6. Check credentials / CLI
 # ---------------------------------------------------------------------------
 echo ""
-if [ "$BACKEND" = "claude-cli" ]; then
+if [ "$BACKEND" = "claude-code" ]; then
   if command -v claude &>/dev/null; then
-    echo "  [OK] 'claude' CLI found in PATH (claude-cli backend)"
+    echo "  [OK] 'claude' CLI found in PATH (claude-code backend)"
   else
     echo "  *** ACTION REQUIRED ***"
-    echo "  backend is set to 'claude-cli' but 'claude' is not in PATH."
+    echo "  backend is set to 'claude-code' but 'claude' is not in PATH."
     echo "  Install Claude Code: https://claude.ai/download"
   fi
 elif [ "$BACKEND" = "bedrock" ]; then
@@ -262,15 +263,10 @@ elif [ "$BACKEND" = "bedrock" ]; then
     echo "  backend is set to 'bedrock' but AWS credentials are not configured."
     echo "  Set up AWS credentials via 'aws configure' or environment variables."
   fi
-else  # anthropic
-  if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
-    echo "  *** ACTION REQUIRED ***"
-    echo "  ANTHROPIC_API_KEY is not set in your environment."
-    echo "  Add it to your shell profile (~/.zshrc or ~/.bashrc):"
-    echo "    export ANTHROPIC_API_KEY='your-key-here'"
-  else
-    echo "  [OK] ANTHROPIC_API_KEY is set"
-  fi
+elif [ "$BACKEND" = "ollama" ]; then
+  echo "  [OK] ollama backend — no credentials required (local model)"
+else
+  echo "  [warn] Unknown backend '$BACKEND' — verify credentials manually."
 fi
 
 # ---------------------------------------------------------------------------
@@ -327,9 +323,9 @@ echo ""
 echo "Next steps:"
 echo "  1. Edit ~/.claude/knowledge.json — set vault_path to your Obsidian vault"
 echo "  2. Set backend (optional):"
-echo "       - claude-cli (default): uses your Claude subscription — no API key needed"
+echo "       - claude-code (default): uses your Claude subscription — no API key needed"
 echo "       - bedrock: add \"backend\": \"bedrock\" to knowledge.json, configure AWS credentials"
-echo "       - anthropic: add \"backend\": \"anthropic\", set ANTHROPIC_API_KEY in shell"
+echo "       - ollama: add \"backend\": \"ollama\" to knowledge.json (local model, no API key)"
 echo "  3. (Optional) Copy knowledge.local.example.json to .claude/knowledge.local.json"
 echo "     in any project and update project_name and vault_folder"
 echo "  4. Run /compact in a Claude Code session to test the hook"
