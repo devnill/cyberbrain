@@ -223,13 +223,7 @@ the PreCompact hook *would* capture before running `/compact`.
 
 ---
 
-## Step 7 — Write Log Entry (skip in dry-run)
+## Step 7 — Confirm Success (skip in dry-run)
 
-After successful extraction in normal mode:
-
-```bash
-mkdir -p ~/.claude/logs
-echo "$(date -u +%Y-%m-%dT%H:%M:%S)\t$SESSION_ID\t$BEAT_COUNT" >> ~/.claude/logs/kg-extract.log
-```
-
-Where `$BEAT_COUNT` is the number of beats filed (not counting skipped ones).
+After successful extraction in normal mode, confirm the result to the user based on the
+extractor output. The extractor writes its own log entry — no additional log write is needed.

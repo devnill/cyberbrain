@@ -540,6 +540,15 @@ def resolve_output_dir(beat: dict, config: dict) -> Path:
     else:
         folder = config.get("staging_folder", "AI/Claude-Inbox")
     output_dir = vault / folder
+    # Validate resolved path stays within vault
+    if not _is_within_vault(vault, output_dir):
+        print(
+            f"[extract_beats] Path traversal rejected in folder override: {folder!r} → {output_dir}",
+            file=sys.stderr,
+        )
+        # Fall back to inbox
+        inbox = config.get("inbox", "AI/Claude-Sessions")
+        output_dir = vault / inbox
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
 
@@ -968,9 +977,45 @@ def main():
         sys.exit(0)
 
     if args.dry_run:
-        print(f"[extract_beats] [DRY RUN] Would write {len(beats)} beat(s):", file=sys.stderr)
-        for beat in beats:
-            print(f"  - {beat.get('title', '?')} ({beat.get('type', '?')})", file=sys.stderr)
+        total = len(beats)
+        separator = "━" * 52
+        lines_out = []
+        for idx, beat in enumerate(beats, 1):
+            title = beat.get("title", "Untitled")
+            beat_type = beat.get("type", "reference")
+            tags = beat.get("tags", [])
+            summary = beat.get("summary", "")
+            body = beat.get("body", "").strip()
+
+            # Compute would-be destination path (flat, no autofile LLM call in dry-run)
+            try:
+                output_dir = resolve_output_dir(beat, config)
+                filename = make_filename(title)
+                would_be_path = output_dir / filename
+                vault = Path(config["vault_path"])
+                rel_path = os.path.relpath(str(would_be_path), str(vault))
+            except Exception:
+                rel_path = "(could not compute path)"
+
+            autofile_note = " (routing not simulated in dry-run)" if autofile_enabled else ""
+
+            lines_out.append(f"━━━ Beat {idx} of {total} {separator[:max(0, 48 - len(str(idx)) - len(str(total)))]}")
+            lines_out.append(f"Type:    {beat_type}")
+            lines_out.append(f"Title:   {title}")
+            tags_str = ", ".join(str(t) for t in tags) if tags else "(none)"
+            lines_out.append(f"Tags:    {tags_str}")
+            lines_out.append(f"Summary: {summary}")
+            lines_out.append("")
+            for body_line in body.splitlines():
+                lines_out.append(f"> {body_line}")
+            lines_out.append("")
+            lines_out.append(f"Action:  would create → {rel_path}{autofile_note}")
+            lines_out.append(separator)
+            lines_out.append("")
+
+        for line in lines_out:
+            print(line)
+        print(f"{total} beat(s) would be written. Vault not modified.")
         sys.exit(0)
 
     now = datetime.now(timezone.utc)

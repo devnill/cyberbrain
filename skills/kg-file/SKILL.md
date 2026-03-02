@@ -173,7 +173,12 @@ python3 -c "import uuid; print(f'/tmp/kg-file-{uuid.uuid4()}.json')"
 Then invoke the extractor:
 
 ```bash
-python3 ~/.claude/extractors/extract_beats.py \
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/extractors/extract_beats.py" ]; then
+  EXTRACTOR="$CLAUDE_PLUGIN_ROOT/extractors/extract_beats.py"
+else
+  EXTRACTOR="$HOME/.claude/extractors/extract_beats.py"
+fi
+python3 "$EXTRACTOR" \
   --beats-json "$TEMP_FILE" \
   --session-id "manual-$(date +%s)" \
   --trigger manual \

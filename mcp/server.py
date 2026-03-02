@@ -91,7 +91,7 @@ def kg_extract(
 
     from extract_beats import (
         extract_beats as _extract_beats,
-        parse_transcript,
+        parse_jsonl_transcript,
         write_beat, autofile_beat, write_journal_entry,
         BackendError,
     )
@@ -106,7 +106,7 @@ def kg_extract(
     suffix = transcript_file.suffix.lower()
     if suffix == ".jsonl":
         try:
-            transcript_text = parse_transcript(str(transcript_file))
+            transcript_text = parse_jsonl_transcript(str(transcript_file))
         except Exception as e:
             return f"Failed to parse transcript: {e}"
     else:
@@ -298,24 +298,26 @@ def kg_recall(query: str, max_results: int = 5) -> str:
     if not terms:
         return "Query too short — provide at least one word with 3+ characters."
 
-    found: dict[str, float] = {}
+    found: dict[str, tuple[int, float]] = {}
     for term in terms:
         result = subprocess.run(
             ["grep", "-r", "-l", "--include=*.md", "-i", term, vault_path],
             capture_output=True, text=True,
         )
         for path in result.stdout.strip().splitlines():
-            if path and path not in found:
+            if path:
                 try:
-                    found[path] = os.path.getmtime(path)
+                    mtime = found.get(path, (0, os.path.getmtime(path)))[1]
+                    count = found.get(path, (0, mtime))[0] + 1
+                    found[path] = (count, mtime)
                 except OSError:
                     pass
 
     if not found:
         return f"No notes found matching: {query}"
 
-    # Rank by recency; take top max_results candidates
-    ranked = sorted(found, key=found.get, reverse=True)[:max_results]
+    # Rank by match count descending, then mtime descending
+    ranked = sorted(found, key=lambda p: (found[p][0], found[p][1]), reverse=True)[:max_results]
 
     entries = []
     for idx, path in enumerate(ranked, 1):
