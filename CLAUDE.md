@@ -150,6 +150,8 @@ The `claude-code` backend strips all four. Skills running inside an active sessi
 
 **Architectural constraint:** Skills never write vault files directly using Claude's Write tool. All vault writes go through `extract_beats.py` or `import.py`. This ensures path validation, logging, and error fallback are consistently enforced in Python.
 
+**Filename character constraint:** Beat titles (used as vault filenames) must not contain `#`, `[`, `]`, or `^`. These characters are valid on the filesystem but break Obsidian wikilink resolution — Obsidian uses `#` as a heading anchor separator and `^` as a block reference marker inside link syntax. The `make_filename()` function in `extract_beats.py` strips them, and the extraction and autofile prompts instruct the LLM not to generate them. When writing prompts or testing, verify titles avoid these characters (e.g. use "CSharp" not "C#").
+
 ### Skills vs MCP
 
 Skills (`skills/`) are slash commands for Claude Code CLI. The MCP server (`mcp/`) exposes the same capabilities to Claude Desktop. Both are built and distributed separately.

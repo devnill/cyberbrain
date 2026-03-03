@@ -73,6 +73,22 @@ To preview what would be extracted from the current session without writing anyt
 
 ---
 
+## Using with Claude Desktop (optional)
+
+`install.sh` registers the MCP server in Claude Desktop automatically (macOS). Restart Claude Desktop after installation — a hammer icon (🔨) in the chat input confirms the server is connected.
+
+To enable proactive recall and filing in Claude Desktop, create a **Project** and add the system prompt from `prompts/claude-desktop-project.md` to it:
+
+1. Open Claude Desktop → **Projects** → create or open a project
+2. Click **Customize** → **Custom instructions**
+3. Paste the contents of `prompts/claude-desktop-project.md`
+
+This teaches Claude to call `cb_recall` automatically when topics come up and `cb_file` when you ask it to save something.
+
+**If the server isn't connecting:** go to **Settings → Developer → Edit Config** and verify the `cyberbrain` entry is present in `mcpServers`. See the README for the manual config format.
+
+---
+
 ## Import existing history (optional)
 
 ### From Claude.ai / Claude Desktop

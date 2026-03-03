@@ -3,6 +3,10 @@
 # Claude Code SessionEnd hook — extracts knowledge beats when a session ends
 # without having been compacted. Skips sessions already captured by PreCompact.
 # Receives hook context JSON on stdin; invokes the Python extractor.
+#
+# The extractor runs detached (setsid + background) so it survives Claude Code
+# exiting. Output goes to ~/.claude/logs/cb-session-end.log instead of stderr
+# (stderr is discarded once the session closes).
 
 INPUT=$(cat)
 
@@ -30,9 +34,9 @@ fi
 # The extractor logs to ~/.claude/logs/cb-extract.log; check it here as a
 # fast pre-flight so we don't spawn the extractor unnecessarily.
 EXTRACT_LOG="$HOME/.claude/logs/cb-extract.log"
+TAB="$(printf '\t')"
 if [ -n "$SESSION_ID" ] && [ -f "$EXTRACT_LOG" ]; then
-  if grep -qF "	${SESSION_ID}	" "$EXTRACT_LOG" 2>/dev/null; then
-    echo "session-end-extract: session $SESSION_ID already captured, skipping" >&2
+  if grep -qF "${TAB}${SESSION_ID}${TAB}" "$EXTRACT_LOG" 2>/dev/null; then
     exit 0
   fi
 fi
@@ -49,14 +53,18 @@ if [ ! -f "$EXTRACTOR" ]; then
   exit 0
 fi
 
-python3 "$EXTRACTOR" \
+SESSION_END_LOG="$HOME/.claude/logs/cb-session-end.log"
+mkdir -p "$(dirname "$SESSION_END_LOG")"
+
+# Run detached: setsid gives the process its own session/process group so it
+# is immune to SIGINT/SIGHUP when Claude Code exits. The & returns immediately
+# so this hook script exits (telling Claude Code the hook is done), while
+# extraction continues in the background.
+setsid python3 "$EXTRACTOR" \
   --transcript "$TRANSCRIPT_PATH" \
   --session-id "$SESSION_ID" \
   --trigger "session-end" \
   --cwd "$CWD" \
-  2>&1
-
-# The extractor writes its own log entry to ~/.claude/logs/cb-extract.log.
-# No separate registry write needed here.
+  >> "$SESSION_END_LOG" 2>&1 &
 
 exit 0

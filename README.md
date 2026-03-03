@@ -106,6 +106,7 @@ Pass `--yes` to skip the confirmation prompt. The uninstaller removes all instal
 | `journal_name` | `"%Y-%m-%d"` | Journal filename pattern (strftime format) |
 | `bedrock_region` | `"us-east-1"` | AWS region — only used when `backend` is `"bedrock"` |
 | `ollama_url` | `"http://localhost:11434"` | Ollama endpoint — only used when `backend` is `"ollama"` |
+| `claude_path` | `"claude"` | Full path to the `claude` binary — set this when using the MCP server from Claude Desktop, which runs without your shell PATH |
 
 ---
 
@@ -355,11 +356,55 @@ The installer registers a FastMCP server in Claude Desktop, exposing three tools
 
 | Tool | Description |
 |---|---|
-| `kg_extract(transcript_path)` | Extract beats from a transcript file |
-| `kg_file(content, instructions?)` | File a piece of text into the vault |
-| `kg_recall(query, max_results?)` | Search the vault |
+| `cb_extract(transcript_path)` | Extract beats from a transcript file |
+| `cb_file(content, instructions?)` | File a piece of text into the vault |
+| `cb_recall(query, max_results?)` | Search the vault |
 
-Restart Claude Desktop after installation for the MCP server to appear.
+### Automatic setup (macOS)
+
+`install.sh` writes the MCP server entry to Claude Desktop's config automatically:
+
+```
+~/Library/Application Support/Claude/claude_desktop_config.json
+```
+
+Restart Claude Desktop after installation. You'll see a hammer icon (🔨) in the chat input when the MCP server is connected.
+
+### Manual setup
+
+If you need to register the server by hand (or if `install.sh` skipped it because Claude Desktop wasn't running), open Claude Desktop's config file:
+
+```bash
+open ~/Library/Application\ Support/Claude/claude_desktop_config.json
+```
+
+Or navigate there from Claude Desktop: **Settings → Developer → Edit Config**.
+
+Add or merge the `cyberbrain` entry under `mcpServers`:
+
+```json
+{
+  "mcpServers": {
+    "cyberbrain": {
+      "command": "/Users/you/.claude/cyberbrain/venv/bin/python",
+      "args": ["/Users/you/.claude/cyberbrain/mcp/server.py"]
+    }
+  }
+}
+```
+
+Replace `/Users/you` with your actual home directory path. Restart Claude Desktop to apply.
+
+### Setting up a Claude Desktop project
+
+For proactive vault recall and filing within Claude Desktop, create a **Project** and paste the system prompt from `prompts/claude-desktop-project.md` into the project's **Customize** field (Project settings → Customize → Custom instructions).
+
+This instructs Claude to:
+- Call `cb_recall` automatically when you mention a topic it may have notes on
+- Call `cb_file` when you say "save this" or "capture this"
+- Proactively surface past decisions when you return to a topic
+
+The MCP tools are available in any Claude Desktop conversation once connected, but the project system prompt makes the behavior automatic rather than requiring you to ask explicitly.
 
 ---
 
@@ -384,6 +429,18 @@ The session transcript may be very long. Add or increase `claude_timeout` in `~/
 **Beats land in inbox instead of project folder**
 
 Confirm `.claude/cyberbrain.local.json` exists in the project root (or a parent directory up to `~`), and that `project_name` and `vault_folder` are both set.
+
+**MCP tools fail in Claude Desktop: "claude CLI not found"**
+
+Claude Desktop spawns the MCP server without your shell's PATH, so the `claude` binary isn't found even though Claude Code is installed. The extractor tries common Homebrew locations automatically, but if yours differs, set the full path explicitly:
+
+```json
+{ "claude_path": "/opt/homebrew/bin/claude" }
+```
+
+Find your path by running `which claude` in a terminal. Apple Silicon Macs typically use `/opt/homebrew/bin/claude`; Intel Macs typically use `/usr/local/bin/claude`.
+
+---
 
 **"Prompt file not found" error**
 

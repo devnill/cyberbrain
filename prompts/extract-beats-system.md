@@ -78,7 +78,7 @@ Return ONLY a JSON array. No explanation, no markdown fences, just the raw JSON 
 Each beat object must have exactly these fields:
 ```json
 {
-  "title": "Brief, descriptive title (5-10 words)",
+  "title": "Brief, descriptive title (5-10 words). Do not use #, [, ], or ^ — these characters break Obsidian wikilinks when used in filenames. Write 'CSharp' not 'C#', 'Sharp' not '#'.",
   "type": "one of the valid types for this vault (see above)",
   "scope": "project or general",
   "summary": "Single information-dense sentence optimized for search/retrieval",

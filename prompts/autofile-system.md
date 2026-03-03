@@ -20,6 +20,8 @@ Rules:
 - Prefer extending over creating. If an existing note covers the same concept, extend it.
 - New notes must use human-readable filenames: spaces, Title Case, no date prefix.
   Example: "Subprocess Input Delivery.md", NOT "subprocess-input-delivery-2026-02-27.md"
+- Filenames must not contain #, [, ], or ^ — these characters break Obsidian wikilink resolution.
+  Write "CSharp" not "C#", spell out "number" not "#".
 - New note filenames must be concise (3-7 words).
 - Place new notes in the most appropriate existing folder based on the vault structure.
 - For "extend": the insertion should be a clean markdown section (## heading + content).

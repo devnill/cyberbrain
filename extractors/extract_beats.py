@@ -210,13 +210,32 @@ def _call_claude_code(system_prompt: str, user_message: str, config: dict) -> st
     import subprocess
 
     claude_path = config.get("claude_path", "claude")
-    if not shutil.which(claude_path):
+
+    # Resolve the binary. If not found on PATH (common in Claude Desktop's isolated
+    # environment), try well-known install locations before giving up.
+    resolved = shutil.which(claude_path)
+    if not resolved and claude_path == "claude":
+        _FALLBACK_PATHS = [
+            "/opt/homebrew/bin/claude",   # macOS Apple Silicon (Homebrew)
+            "/usr/local/bin/claude",       # macOS Intel / Linux (Homebrew)
+            os.path.expanduser("~/.local/bin/claude"),
+            "/usr/bin/claude",
+        ]
+        for candidate in _FALLBACK_PATHS:
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                resolved = candidate
+                break
+
+    if not resolved:
         raise BackendError(
-            f"'claude' CLI not found at {claude_path!r} (backend=claude-code). "
-            "Ensure Claude Code is installed and 'claude' is in PATH, "
-            "or set claude_path in cyberbrain.json, "
-            "or switch to backend=bedrock or backend=ollama in cyberbrain.json."
+            f"'claude' CLI not found (backend=claude-code). "
+            "Claude Desktop runs MCP servers without your shell PATH. "
+            "Fix: add 'claude_path' to ~/.claude/cyberbrain.json with the full path, e.g.: "
+            '{"claude_path": "/opt/homebrew/bin/claude"}  '
+            "Or find the path with: which claude"
         )
+
+    claude_path = resolved
 
     model = config.get("model", CLI_DEFAULT_MODEL)
     full_prompt = f"{system_prompt}\n\n---\n\n{user_message}"
@@ -491,7 +510,7 @@ def extract_beats(transcript_text: str, config: dict, trigger: str, cwd: str) ->
 VALID_TYPES = {"decision", "insight", "problem", "reference"}
 VALID_SCOPES = {"project", "general"}
 
-_FILENAME_INVALID = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_FILENAME_INVALID = re.compile(r'[<>:"/\\|?*#\[\]^\x00-\x1f]')
 
 
 def make_filename(title: str) -> str:

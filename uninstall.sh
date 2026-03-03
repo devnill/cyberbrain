@@ -6,7 +6,6 @@ set -euo pipefail
 
 CLAUDE_DIR="$HOME/.claude"
 
-# Read backend before we delete cyberbrain.json
 BACKEND=$(python3 -c "
 import json, os
 path = os.path.expanduser('~/.claude/cyberbrain.json')
@@ -38,8 +37,10 @@ if [ "$YES" -eq 0 ]; then
   echo "  $CLAUDE_DIR/prompts/claude-desktop-project.md"
   echo "  $CLAUDE_DIR/skills/cb-*/"
   echo "  $CLAUDE_DIR/cyberbrain/mcp/server.py"
-  echo "  $CLAUDE_DIR/cyberbrain.json"
   echo "  PreCompact and SessionEnd hook entries from $CLAUDE_DIR/settings.json"
+  echo ""
+  echo "Preserving:"
+  echo "  $CLAUDE_DIR/cyberbrain.json (your settings)"
   echo ""
   printf "Continue? [y/N] "
   read -r REPLY
@@ -129,14 +130,8 @@ prune_empty_dir "$CLAUDE_DIR/cyberbrain/mcp"
 prune_empty_dir "$CLAUDE_DIR/cyberbrain"
 
 # ---------------------------------------------------------------------------
-# 6. Global config
-# ---------------------------------------------------------------------------
-echo ""
-echo "Removing global config..."
-remove_file "$CLAUDE_DIR/cyberbrain.json"
-
-# ---------------------------------------------------------------------------
-# 7. settings.json — remove PreCompact and SessionEnd hooks, preserve other settings
+# 6. settings.json — remove PreCompact and SessionEnd hooks, preserve other settings
+# Note: cyberbrain.json (user settings) is intentionally NOT removed.
 # ---------------------------------------------------------------------------
 echo ""
 echo "Updating settings.json..."
