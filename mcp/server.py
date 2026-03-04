@@ -9,7 +9,6 @@ Install: see install.sh — copies this file to ~/.claude/cyberbrain/mcp/server.
 registers it in ~/Library/Application Support/Claude/claude_desktop_config.json.
 """
 
-import json
 import os
 import re
 import subprocess
@@ -17,13 +16,36 @@ import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Annotated
+
+from pydantic import Field
 
 # Reuse extract_beats logic from the installed extractor
 sys.path.insert(0, str(Path.home() / ".claude" / "extractors"))
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.exceptions import ToolError
+from mcp.types import ToolAnnotations
 
 mcp = FastMCP("cyberbrain")
+
+# ---------------------------------------------------------------------------
+# Module-level import of extract_beats — fail fast at startup, not mid-session
+# ---------------------------------------------------------------------------
+
+try:
+    from extract_beats import (
+        extract_beats as _extract_beats,
+        parse_jsonl_transcript,
+        write_beat, autofile_beat, write_journal_entry,
+        BackendError,
+        resolve_config as _resolve_config,
+    )
+except ImportError as e:
+    raise RuntimeError(
+        f"Could not import extract_beats from ~/.claude/extractors/: {e}. "
+        "Run install.sh to ensure the extractor is installed."
+    ) from e
 
 
 # ---------------------------------------------------------------------------
@@ -31,8 +53,7 @@ mcp = FastMCP("cyberbrain")
 # ---------------------------------------------------------------------------
 
 def _load_config(cwd: str = "") -> dict:
-    from extract_beats import resolve_config
-    return resolve_config(cwd or str(Path.home()))
+    return _resolve_config(cwd or str(Path.home()))
 
 
 def _relpath(path: Path, vault_path: str) -> str:
@@ -64,40 +85,43 @@ def _parse_frontmatter(content: str) -> dict:
 # Tools
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(destructiveHint=False))
 def cb_extract(
-    transcript_path: str = None,
+    transcript_path: str,
     session_id: str = None,
+    cwd: Annotated[str | None, Field(
+        description="Absolute path to the project directory. Enables project-scoped routing to the project's dedicated vault folder (requires .claude/cyberbrain.local.json in that directory). Omit to route to the global inbox."
+    )] = None,
 ) -> str:
     """
-    Extract knowledge beats from a conversation transcript and file them to the vault.
+    Extract knowledge beats from a conversation transcript file and file them to the vault.
 
-    Provide transcript_path pointing to a .jsonl or plain text transcript file.
-    In Claude Desktop, you must provide the path explicitly — it is not resolved
-    automatically. Transcript files can be found in ~/.claude/projects/.
+    Use this to process a complete Claude Code session transcript (a .jsonl file from
+    ~/.claude/projects/). For filing a specific piece of information from the current
+    conversation, use cb_file instead. For searching existing vault notes, use cb_recall.
 
-    Returns a summary of beats extracted and filed.
+    transcript_path must point to a file within ~/.claude/projects/.
+
+    Returns a summary listing each beat created (title, type, vault path).
+    Returns "No beats extracted." if the transcript contains nothing worth preserving.
     """
-    if not transcript_path:
-        return (
-            "Please provide the transcript path. In Claude Desktop, the current session "
-            "transcript path is not automatically available. You can find transcript files "
-            "in ~/.claude/projects/"
+    transcript_file = Path(transcript_path).expanduser()
+
+    # Restrict to ~/.claude/projects/ to prevent arbitrary file reads
+    allowed_root = (Path.home() / ".claude" / "projects").resolve()
+    try:
+        transcript_file.resolve().relative_to(allowed_root)
+    except ValueError:
+        raise ToolError(
+            f"transcript_path must be within ~/.claude/projects/. "
+            f"Transcript files are stored there by Claude Code. Got: {transcript_path}"
         )
 
-    transcript_file = Path(transcript_path).expanduser()
     if not transcript_file.exists():
-        return f"Transcript file not found: {transcript_path}"
+        raise ToolError(f"Transcript file not found: {transcript_path}")
 
-    from extract_beats import (
-        extract_beats as _extract_beats,
-        parse_jsonl_transcript,
-        write_beat, autofile_beat, write_journal_entry,
-        BackendError,
-    )
-
-    cwd = str(Path.home())
-    config = _load_config(cwd)
+    effective_cwd = cwd or str(Path.home())
+    config = _load_config(effective_cwd)
 
     effective_session_id = session_id or transcript_file.stem
     now = datetime.now(timezone.utc)
@@ -108,15 +132,15 @@ def cb_extract(
         try:
             transcript_text = parse_jsonl_transcript(str(transcript_file))
         except Exception as e:
-            return f"Failed to parse transcript: {e}"
+            raise ToolError(f"Failed to parse transcript: {e}")
     else:
         try:
             transcript_text = transcript_file.read_text(encoding="utf-8")
         except OSError as e:
-            return f"Failed to read transcript: {e}"
+            raise ToolError(f"Failed to read transcript: {e}")
 
     if not transcript_text.strip():
-        return "Transcript is empty or has no user/assistant turns."
+        raise ToolError("Transcript is empty or has no user/assistant turns.")
 
     # Truncate to stay within model context limits (keep tail — most recent is most valuable)
     MAX_CHARS = 150_000
@@ -124,13 +148,10 @@ def cb_extract(
         transcript_text = "...[earlier content truncated]...\n\n" + transcript_text[-MAX_CHARS:]
 
     try:
-        beats = _extract_beats(transcript_text, config, "manual", cwd)
+        beats = _extract_beats(transcript_text, config, "manual", effective_cwd)
     except BackendError as e:
         backend = config.get("backend", "claude-code")
-        return (
-            f"cb_extract failed — backend error ({backend}):\n\n{e}\n\n"
-            "Check that the claude-code backend is configured correctly in ~/.claude/cyberbrain.json"
-        )
+        raise ToolError(f"Backend error ({backend}): {e}")
 
     if not beats:
         return "No beats extracted."
@@ -155,9 +176,9 @@ def cb_extract(
     for beat in beats:
         try:
             if autofile_enabled:
-                path = autofile_beat(beat, config, effective_session_id, cwd, now, vault_context=vault_context)
+                path = autofile_beat(beat, config, effective_session_id, effective_cwd, now, vault_context=vault_context)
             else:
-                path = write_beat(beat, config, effective_session_id, cwd, now)
+                path = write_beat(beat, config, effective_session_id, effective_cwd, now)
             if path:
                 written.append(path)
                 rel = _relpath(path, config["vault_path"])
@@ -177,57 +198,46 @@ def cb_extract(
 @mcp.tool()
 def cb_file(
     content: str,
-    instructions: str = None,
+    type_override: Annotated[str | None, Field(
+        description="Force a specific note type. Valid values from your vault CLAUDE.md — defaults are: 'decision', 'insight', 'problem', 'reference'. Omit to let the system classify automatically."
+    )] = None,
+    folder: Annotated[str | None, Field(
+        description="Vault-relative folder path to file into, e.g. 'Personal/Recipes' or 'Work/Projects/hermes'. Omit to use the configured inbox folder."
+    )] = None,
+    cwd: Annotated[str | None, Field(
+        description="Absolute path to the project directory. Enables project-scoped routing to the project's dedicated vault folder (requires .claude/cyberbrain.local.json in that directory). Omit to route to the global inbox."
+    )] = None,
 ) -> str:
     """
-    File a piece of information into the user's knowledge vault.
+    File a specific piece of information into the knowledge vault.
 
-    Pass the content to preserve as `content`. Use `instructions` to override type
-    or folder if needed (e.g., 'type: decision, folder: Work/Projects/hermes').
-    The system will classify, title, and route the note automatically based on the
-    vault's CLAUDE.md conventions.
+    Use this when the user says "save this", "file this", "capture this", or confirms
+    filing after it was suggested. Pass the content to preserve — it can be a fact, a
+    decision, a recipe, a configuration snippet, or any text worth remembering. The
+    system classifies, titles, and routes the note automatically using the vault's
+    CLAUDE.md conventions. Do not create markdown files directly — always use this tool.
 
-    Returns confirmation of what was filed.
+    For processing a complete session transcript, use cb_extract instead.
+    For searching existing vault notes, use cb_recall.
+
+    Returns confirmation with the note title, type, tags, and vault path where it was filed.
+    Returns "No content worth filing" if the input contains nothing identifiable as knowledge.
     """
-    from extract_beats import (
-        extract_beats as _extract_beats,
-        write_beat, autofile_beat, write_journal_entry,
-        BackendError,
-    )
-
-    cwd = str(Path.home())
-    config = _load_config(cwd)
+    effective_cwd = cwd or str(Path.home())
+    config = _load_config(effective_cwd)
     now = datetime.now(timezone.utc)
     session_id = str(uuid.uuid4())
 
-    # Parse optional instruction overrides (e.g. "type: decision, folder: Work/Areas/hermes")
-    type_override = None
-    folder_override = None
-    if instructions:
-        # Extract type: <value>
-        type_match = re.search(r'\btype\s*:\s*(\S+)', instructions, re.IGNORECASE)
-        if type_match:
-            type_override = type_match.group(1).rstrip(',').strip()
-        # Extract folder: <value> (may contain slashes and spaces until comma or end)
-        folder_match = re.search(r'\bfolder\s*:\s*([^,]+)', instructions, re.IGNORECASE)
-        if folder_match:
-            folder_override = folder_match.group(1).strip()
-
     # Apply folder override to config so routing uses it
     effective_config = dict(config)
-    if folder_override:
-        effective_config["inbox"] = folder_override
+    if folder:
+        effective_config["inbox"] = folder
 
-    # Build a minimal beat-like structure and run through extraction
-    # Use extract_beats to get proper classification from the LLM
     try:
-        beats = _extract_beats(content, effective_config, "manual", cwd)
+        beats = _extract_beats(content, effective_config, "manual", effective_cwd)
     except BackendError as e:
         backend = config.get("backend", "claude-code")
-        return (
-            f"cb_file failed — backend error ({backend}):\n\n{e}\n\n"
-            "Check that the claude-code backend is configured correctly in ~/.claude/cyberbrain.json"
-        )
+        raise ToolError(f"Backend error ({backend}): {e}")
 
     if not beats:
         return "No content worth filing was identified in the provided text."
@@ -255,10 +265,10 @@ def cb_file(
 
     for beat in beats:
         try:
-            if autofile_enabled and not folder_override:
-                path = autofile_beat(beat, effective_config, session_id, cwd, now, vault_context=vault_context)
+            if autofile_enabled and not folder:
+                path = autofile_beat(beat, effective_config, session_id, effective_cwd, now, vault_context=vault_context)
             else:
-                path = write_beat(beat, effective_config, session_id, cwd, now)
+                path = write_beat(beat, effective_config, session_id, effective_cwd, now)
             if path:
                 written.append(path)
                 rel = _relpath(path, config["vault_path"])
@@ -276,27 +286,41 @@ def cb_file(
         write_journal_entry(written, config, session_id, project, now)
 
     if not written:
-        return "No notes were filed (all beats encountered errors)."
+        raise ToolError(
+            "No notes were filed — all beats encountered write errors. "
+            "Check vault_path in cyberbrain.json."
+        )
 
     return "\n\n".join(lines)
 
 
-@mcp.tool()
-def cb_recall(query: str, max_results: int = 5) -> str:
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
+def cb_recall(
+    query: str,
+    max_results: Annotated[int, Field(
+        ge=1, le=50,
+        description="Maximum number of matching notes to return. Full body content is included for the top 2 results."
+    )] = 5,
+) -> str:
     """
-    Search the user's personal knowledge vault for relevant context from past sessions.
+    Search the knowledge vault for notes from past sessions matching a query.
 
-    Call this proactively when starting work on a project, when a problem might have
-    been encountered before, or when the user asks to be reminded of prior decisions
-    or approaches. Returns summary cards for all matches, with full body content for
-    the 1-2 most relevant results.
+    Call this at the start of a conversation when the user mentions a project, technology,
+    or topic they may have worked on before. Call it mid-session when the conversation
+    shifts to a new topic. Do not ask permission — just call it and integrate results
+    naturally. For filing new information, use cb_file. For processing a transcript, use
+    cb_extract.
+
+    Returns note cards with title, type, tags, summary, and full body for the top 2 results.
+    Returns an explicit "No notes found" message (not an error) when nothing matches — this
+    is expected for new topics.
     """
     config = _load_config()
     vault_path = config["vault_path"]
 
     terms = [w for w in re.split(r"\W+", query) if len(w) >= 3][:8]
     if not terms:
-        return "Query too short — provide at least one word with 3+ characters."
+        raise ToolError("Query too short — provide at least one word with 3+ characters.")
 
     found: dict[str, tuple[int, float]] = {}
     for term in terms:

@@ -36,6 +36,15 @@ Do not ask "Should I check your knowledge vault?" — just check.
 When the user says "save this", "file this", "capture this", "make a note of this",
 "add to my notes", or similar — immediately call `cb_file` with the information.
 
+Also call `cb_file` when you have suggested filing something and the user confirms with
+phrases like "yes", "yes please", "go ahead", "do it", "sure", or any affirmative
+response in context where filing was proposed.
+
+**Never create markdown files directly when the user asks to save or file something.**
+Always use `cb_file` — it handles classification, formatting, routing, and deduplication.
+Writing raw files bypasses the vault's filing conventions and makes notes unsearchable
+via `cb_recall`.
+
 Also proactively suggest filing when:
 - A significant decision is made with rationale
 - A bug is fixed and the root cause is non-obvious

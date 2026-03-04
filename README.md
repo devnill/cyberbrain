@@ -1,6 +1,17 @@
-# Claude Code Knowledge Graph
+# Cyberbrain
 
-A knowledge capture and retrieval system for LLM interactions. It extracts structured knowledge from Claude sessions automatically, stores it as Obsidian-compatible markdown, and makes it retrievable in future sessions via slash commands. While it integrates tightly with Claude Code, the vault is designed to hold knowledge from any source — technical work, research, writing, or any domain where you want to remember what you've learned.
+Claude has memory, but it's bounded. Context windows fill. Sessions end. A static memory document can only hold so much before it becomes noise.
+
+Cyberbrain extends Claude's native capabilities with a persistent, searchable knowledge layer built from your actual sessions:
+
+- **Automatic capture** — hooks into Claude Code's compaction events to extract structured knowledge beats (decisions, insights, problems, references) without any manual effort
+- **Dynamic context injection** — instead of a fixed memory document, you retrieve only what's relevant to the current task and load it on demand, keeping context lean and targeted
+- **Structured search** — vault notes carry typed frontmatter, tags, summaries, and session metadata, enabling search that surfaces the right result rather than just the most recent match
+- **Cross-session accumulation** — import from Claude Desktop and ChatGPT exports so everything you've worked through, across every interface, feeds the same store
+
+The automatic hooks and slash commands are built for Claude Code. The MCP server works with any tool that supports the Model Context Protocol — Cursor, Zed, or anything else in the ecosystem.
+
+The result is an external cognitive extension — a second brain that compounds across every conversation and grows more useful the longer you use it.
 
 → **New here? See [QUICKSTART.md](QUICKSTART.md).**
 

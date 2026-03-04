@@ -56,11 +56,9 @@ fi
 SESSION_END_LOG="$HOME/.claude/logs/cb-session-end.log"
 mkdir -p "$(dirname "$SESSION_END_LOG")"
 
-# Run detached: setsid gives the process its own session/process group so it
-# is immune to SIGINT/SIGHUP when Claude Code exits. The & returns immediately
-# so this hook script exits (telling Claude Code the hook is done), while
-# extraction continues in the background.
-setsid python3 "$EXTRACTOR" \
+# Run detached: nohup + background lets extraction continue after Claude Code
+# exits. setsid is Linux-only and not available on macOS.
+nohup python3 "$EXTRACTOR" \
   --transcript "$TRANSCRIPT_PATH" \
   --session-id "$SESSION_ID" \
   --trigger "session-end" \
