@@ -559,3 +559,304 @@ class TestToolAnnotations:
         tool = self._get_tool("cb_file")
         if tool.annotations:
             assert tool.annotations.readOnlyHint is not True
+
+
+# ===========================================================================
+# _parse_frontmatter
+# ===========================================================================
+
+class TestParseFrontmatter:
+    """_parse_frontmatter() extracts YAML frontmatter fields from note content."""
+
+    def test_parses_standard_frontmatter(self):
+        """Standard YAML frontmatter → dict with expected fields."""
+        content = '---\ntitle: "My Note"\ntype: decision\n---\n\nBody.'
+        fm = _server._parse_frontmatter(content)
+        assert fm["title"] == "My Note"
+        assert fm["type"] == "decision"
+
+    def test_parses_yaml_list_for_tags(self):
+        """A tags list in frontmatter is parsed as a Python list."""
+        content = '---\ntitle: "Note"\ntags: ["jwt", "auth"]\n---\n\nBody.'
+        fm = _server._parse_frontmatter(content)
+        assert fm["tags"] == ["jwt", "auth"]
+
+    def test_parses_yaml_block_list_for_related(self):
+        """A multi-line related: list is parsed correctly."""
+        content = '---\ntitle: "Note"\nrelated:\n  - "[[Note A]]"\n  - "[[Note B]]"\n---\n\nBody.'
+        fm = _server._parse_frontmatter(content)
+        assert "[[Note A]]" in fm["related"]
+
+    def test_returns_empty_dict_when_no_frontmatter(self):
+        """Content with no --- delimiter returns empty dict."""
+        content = "Just a body with no frontmatter."
+        assert _server._parse_frontmatter(content) == {}
+
+    def test_returns_empty_dict_on_parse_error(self):
+        """Malformed YAML in frontmatter returns empty dict."""
+        content = "---\n: invalid: yaml: {\n---\n\nBody."
+        result = _server._parse_frontmatter(content)
+        # Should return {} not raise
+        assert isinstance(result, dict)
+
+
+# ===========================================================================
+# cb_recall — search backend path
+# ===========================================================================
+
+class TestCbRecallSearchBackend:
+    """cb_recall uses the pluggable search backend when available."""
+
+    def _make_vault(self, tmp_path):
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        (vault / "AI" / "Claude-Sessions").mkdir(parents=True)
+        return vault
+
+    def _make_note(self, vault, filename, content):
+        note = vault / "AI" / "Claude-Sessions" / filename
+        note.write_text(content, encoding="utf-8")
+        return note
+
+    def test_uses_backend_search_when_backend_available(self, tmp_path):
+        """When _get_search_backend returns a backend, backend.search() is called."""
+        vault = self._make_vault(tmp_path)
+        note = self._make_note(
+            vault, "JWT Auth.md",
+            '---\ntitle: "JWT Auth"\ntype: decision\ntags: []\nrelated: []\nsummary: "JWT auth summary"\ndate: 2026-01-01\n---\n\n## Body\n\nContent.',
+        )
+
+        from search_backends import SearchResult
+        mock_result = SearchResult(
+            path=str(note),
+            title="JWT Auth",
+            summary="JWT auth summary",
+            score=1.5,
+            backend="fts5",
+            note_type="decision",
+        )
+
+        mock_backend = MagicMock()
+        mock_backend.search.return_value = [mock_result]
+        mock_backend.backend_name.return_value = "fts5"
+
+        config = {**BASE_CONFIG, "vault_path": str(vault)}
+        with patch.object(_server, "_resolve_config", return_value=config):
+            with patch.object(_server, "_get_search_backend", return_value=mock_backend):
+                result = cb_recall(query="jwt authentication")
+
+        mock_backend.search.assert_called_once()
+        assert isinstance(result, str)
+
+    def test_falls_back_to_grep_when_backend_returns_empty(self, tmp_path):
+        """When backend returns empty results, grep subprocess is tried."""
+        vault = self._make_vault(tmp_path)
+        config = {**BASE_CONFIG, "vault_path": str(vault)}
+
+        mock_backend = MagicMock()
+        mock_backend.search.return_value = []
+        mock_backend.backend_name.return_value = "fts5"
+
+        with patch.object(_server, "_resolve_config", return_value=config):
+            with patch.object(_server, "_get_search_backend", return_value=mock_backend):
+                with patch("subprocess.run", return_value=MagicMock(stdout="", returncode=0)):
+                    result = cb_recall(query="jwt authentication")
+
+        # Should return a "no notes found" string (grep also found nothing)
+        assert "No notes found" in result
+
+    def test_falls_back_to_grep_when_backend_raises(self, tmp_path):
+        """When backend.search() raises, grep fallback is used without propagating the error."""
+        vault = self._make_vault(tmp_path)
+        config = {**BASE_CONFIG, "vault_path": str(vault)}
+
+        mock_backend = MagicMock()
+        mock_backend.search.side_effect = RuntimeError("index corrupted")
+        mock_backend.backend_name.return_value = "fts5"
+
+        with patch.object(_server, "_resolve_config", return_value=config):
+            with patch.object(_server, "_get_search_backend", return_value=mock_backend):
+                with patch("subprocess.run", return_value=MagicMock(stdout="", returncode=0)):
+                    result = cb_recall(query="jwt authentication")
+
+        assert isinstance(result, str)
+
+    def test_result_card_includes_related_field(self, tmp_path):
+        """When a result has related wikilinks, 'Related:' appears in the output."""
+        vault = self._make_vault(tmp_path)
+        note = self._make_note(
+            vault, "JWT Auth.md",
+            '---\ntitle: "JWT Auth"\ntype: decision\ntags: []\nrelated: ["[[Note A]]"]\nsummary: "Summary"\ndate: 2026-01-01\n---\n\n## Body\n\nContent.',
+        )
+
+        from search_backends import SearchResult
+        mock_result = SearchResult(
+            path=str(note),
+            title="JWT Auth",
+            summary="Summary",
+            score=1.5,
+            backend="fts5",
+            note_type="decision",
+            related=["[[Note A]]"],
+        )
+
+        mock_backend = MagicMock()
+        mock_backend.search.return_value = [mock_result]
+        mock_backend.backend_name.return_value = "fts5"
+
+        config = {**BASE_CONFIG, "vault_path": str(vault)}
+        with patch.object(_server, "_resolve_config", return_value=config):
+            with patch.object(_server, "_get_search_backend", return_value=mock_backend):
+                result = cb_recall(query="jwt")
+
+        assert "Related:" in result or "[[Note A]]" in result
+
+    def test_result_card_includes_backend_name_in_header(self, tmp_path):
+        """The result header includes the backend name."""
+        vault = self._make_vault(tmp_path)
+        note = self._make_note(
+            vault, "JWT Auth.md",
+            '---\ntitle: "JWT Auth"\ntype: decision\ntags: []\nrelated: []\nsummary: "Summary"\ndate: 2026-01-01\n---\n\n## Body\n\nContent.',
+        )
+
+        from search_backends import SearchResult
+        mock_result = SearchResult(
+            path=str(note),
+            title="JWT Auth",
+            summary="Summary",
+            score=1.5,
+            backend="fts5",
+            note_type="decision",
+        )
+
+        mock_backend = MagicMock()
+        mock_backend.search.return_value = [mock_result]
+        mock_backend.backend_name.return_value = "fts5"
+
+        config = {**BASE_CONFIG, "vault_path": str(vault)}
+        with patch.object(_server, "_resolve_config", return_value=config):
+            with patch.object(_server, "_get_search_backend", return_value=mock_backend):
+                result = cb_recall(query="jwt")
+
+        assert "fts5" in result
+
+    def test_result_card_omits_related_when_empty(self, tmp_path):
+        """When related list is empty, 'Related:' does not appear in the output."""
+        vault = self._make_vault(tmp_path)
+        note = self._make_note(
+            vault, "JWT Auth.md",
+            '---\ntitle: "JWT Auth"\ntype: decision\ntags: []\nrelated: []\nsummary: "Summary"\ndate: 2026-01-01\n---\n\n## Body\n\nContent.',
+        )
+
+        from search_backends import SearchResult
+        mock_result = SearchResult(
+            path=str(note),
+            title="JWT Auth",
+            summary="Summary",
+            score=1.5,
+            backend="fts5",
+            note_type="decision",
+            related=[],
+        )
+
+        mock_backend = MagicMock()
+        mock_backend.search.return_value = [mock_result]
+        mock_backend.backend_name.return_value = "fts5"
+
+        config = {**BASE_CONFIG, "vault_path": str(vault)}
+        with patch.object(_server, "_resolve_config", return_value=config):
+            with patch.object(_server, "_get_search_backend", return_value=mock_backend):
+                result = cb_recall(query="jwt")
+
+        assert "Related:" not in result
+
+
+# ===========================================================================
+# cb_recall — synthesize
+# ===========================================================================
+
+class TestCbRecallSynthesize:
+    """cb_recall with synthesize=True calls _synthesize_recall."""
+
+    def _make_vault(self, tmp_path):
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        (vault / "AI" / "Claude-Sessions").mkdir(parents=True)
+        return vault
+
+    def _make_note(self, vault, filename, content):
+        note = vault / "AI" / "Claude-Sessions" / filename
+        note.write_text(content, encoding="utf-8")
+        return note
+
+    def _mock_backend_with_result(self, vault, note):
+        from search_backends import SearchResult
+        mock_result = SearchResult(
+            path=str(note),
+            title="JWT Auth",
+            summary="Summary",
+            score=1.5,
+            backend="fts5",
+            note_type="decision",
+        )
+        mock_backend = MagicMock()
+        mock_backend.search.return_value = [mock_result]
+        mock_backend.backend_name.return_value = "fts5"
+        return mock_backend
+
+    def test_synthesize_true_calls_synthesize_recall(self, tmp_path):
+        """synthesize=True causes _synthesize_recall to be called."""
+        vault = self._make_vault(tmp_path)
+        note = self._make_note(
+            vault, "JWT Auth.md",
+            '---\ntitle: "JWT Auth"\ntype: decision\ntags: []\nrelated: []\nsummary: "Summary"\ndate: 2026-01-01\n---\n\n## Body\n\nContent.',
+        )
+        mock_backend = self._mock_backend_with_result(vault, note)
+
+        config = {**BASE_CONFIG, "vault_path": str(vault)}
+        with patch.object(_server, "_resolve_config", return_value=config):
+            with patch.object(_server, "_get_search_backend", return_value=mock_backend):
+                with patch.object(_server, "_synthesize_recall", return_value="synthesis result") as mock_synth:
+                    cb_recall(query="jwt authentication", synthesize=True)
+
+        mock_synth.assert_called_once()
+
+    def test_synthesize_false_does_not_call_synthesize_recall(self, tmp_path):
+        """synthesize=False means _synthesize_recall is never called."""
+        vault = self._make_vault(tmp_path)
+        note = self._make_note(
+            vault, "JWT Auth.md",
+            '---\ntitle: "JWT Auth"\ntype: decision\ntags: []\nrelated: []\nsummary: "Summary"\ndate: 2026-01-01\n---\n\n## Body\n\nContent.',
+        )
+        mock_backend = self._mock_backend_with_result(vault, note)
+
+        config = {**BASE_CONFIG, "vault_path": str(vault)}
+        with patch.object(_server, "_resolve_config", return_value=config):
+            with patch.object(_server, "_get_search_backend", return_value=mock_backend):
+                with patch.object(_server, "_synthesize_recall") as mock_synth:
+                    cb_recall(query="jwt authentication", synthesize=False)
+
+        mock_synth.assert_not_called()
+
+    def test_synthesize_recall_prepends_synthesis_to_retrieved_content(self, tmp_path):
+        """_synthesize_recall returns synthesis output before the vault content."""
+        config = {**BASE_CONFIG, "vault_path": str(tmp_path)}
+        retrieved = "## Retrieved from knowledge vault\n\nsome vault content\n## End of retrieved content"
+
+        with patch.object(_server, "_call_claude_code_backend", return_value="Here is the synthesis."):
+            result = _server._synthesize_recall("test query", retrieved, config)
+
+        assert result.index("synthesis") < result.index("Retrieved from knowledge vault")
+
+    def test_synthesize_recall_falls_back_gracefully_on_error(self, tmp_path):
+        """If _call_claude_code_backend raises, the original retrieved content is returned with a note."""
+        config = {**BASE_CONFIG, "vault_path": str(tmp_path)}
+        retrieved = "## Retrieved from knowledge vault\n\nsome content\n## End of retrieved content"
+
+        with patch.object(_server, "_call_claude_code_backend", side_effect=RuntimeError("backend error")):
+            result = _server._synthesize_recall("test query", retrieved, config)
+
+        # Should contain the original retrieved content
+        assert "some content" in result
+        # Should contain a note about the failure
+        assert "Synthesis failed" in result or "synthesis failed" in result.lower()

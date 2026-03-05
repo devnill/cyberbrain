@@ -643,3 +643,503 @@ class TestReadVaultClaudeMd:
         """Returns None when no CLAUDE.md exists in the vault."""
         result = eb.read_vault_claude_md(str(temp_vault))
         assert result is None
+
+
+# ===========================================================================
+# make_filename
+# ===========================================================================
+
+class TestMakeFilename:
+    """make_filename() converts titles to clean human-readable filenames."""
+
+    def test_strips_hash_bracket_caret_chars(self):
+        """Characters # [ ] ^ are stripped from filenames."""
+        assert "C" in eb.make_filename("C#")
+        assert "#" not in eb.make_filename("C#")
+        assert "foo" in eb.make_filename("[foo]")
+        assert "[" not in eb.make_filename("[foo]")
+        assert "]" not in eb.make_filename("[foo]")
+        assert "blockref" in eb.make_filename("block^ref")
+        assert "^" not in eb.make_filename("block^ref")
+
+    def test_collapses_whitespace(self):
+        """Multiple consecutive spaces are collapsed to a single space."""
+        result = eb.make_filename("Multiple   Spaces   Here")
+        assert "  " not in result
+        assert "Multiple Spaces Here" in result
+
+    def test_truncates_at_80_chars_on_word_boundary(self):
+        """Titles longer than 80 chars are truncated at the last word boundary ≤80."""
+        long_title = "A " * 45  # 90 chars
+        result = eb.make_filename(long_title.strip())
+        stem = result[:-3]  # strip .md
+        assert len(stem) <= 80
+
+    def test_appends_md_extension(self):
+        """Result always ends in .md"""
+        assert eb.make_filename("Some Note").endswith(".md")
+
+    def test_clean_title_unchanged(self):
+        """A title with no special characters passes through unchanged (plus .md)."""
+        assert eb.make_filename("Clean Title") == "Clean Title.md"
+
+
+# ===========================================================================
+# parse_valid_types_from_claude_md
+# ===========================================================================
+
+class TestParseValidTypesFromClaudeMd:
+    """parse_valid_types_from_claude_md() extracts type vocabulary from vault CLAUDE.md."""
+
+    def test_extracts_types_from_entity_types_h2_section(self):
+        """## Entity Types section with ### decision extracts 'decision'."""
+        md = "## Entity Types\n\n### decision\n\nA choice made between alternatives.\n"
+        result = eb.parse_valid_types_from_claude_md(md)
+        assert "decision" in result
+
+    def test_extracts_backtick_types_from_list_items(self):
+        """List items with backtick-quoted types are extracted."""
+        md = "## Types\n\n- `insight` — a non-obvious understanding\n"
+        result = eb.parse_valid_types_from_claude_md(md)
+        assert "insight" in result
+
+    def test_returns_defaults_when_no_types_section_found(self):
+        """Arbitrary markdown without a types section → _DEFAULT_VALID_TYPES."""
+        result = eb.parse_valid_types_from_claude_md("# Just a header\n\nSome content.\n")
+        assert result == eb._DEFAULT_VALID_TYPES
+
+    def test_returns_defaults_on_empty_string(self):
+        """Empty string → _DEFAULT_VALID_TYPES."""
+        result = eb.parse_valid_types_from_claude_md("")
+        assert result == eb._DEFAULT_VALID_TYPES
+
+    def test_multiple_types_all_extracted(self):
+        """A section with multiple types extracts all of them."""
+        md = "## Types\n\n- `decision` — choice\n- `insight` — understanding\n- `problem` — blocker\n"
+        result = eb.parse_valid_types_from_claude_md(md)
+        assert "decision" in result
+        assert "insight" in result
+        assert "problem" in result
+
+    def test_exits_types_section_at_next_h2(self):
+        """A second ## heading stops collection of types."""
+        md = (
+            "## Types\n\n"
+            "- `decision` — choice\n\n"
+            "## Other Section\n\n"
+            "- `not_a_type` — not in types\n"
+        )
+        result = eb.parse_valid_types_from_claude_md(md)
+        assert "decision" in result
+        assert "not_a_type" not in result
+
+
+# ===========================================================================
+# get_valid_types
+# ===========================================================================
+
+class TestGetValidTypes:
+    """get_valid_types() reads type vocabulary from vault CLAUDE.md."""
+
+    def test_reads_from_vault_claude_md_when_present(self, temp_vault):
+        """When vault has CLAUDE.md with custom types, those types are returned."""
+        claude_md = temp_vault / "CLAUDE.md"
+        claude_md.write_text(
+            "## Types\n\n- `decision` — choice\n- `recipe` — cooking instructions\n",
+            encoding="utf-8",
+        )
+        config = {"vault_path": str(temp_vault)}
+        result = eb.get_valid_types(config)
+        assert "recipe" in result
+
+    def test_falls_back_to_defaults_when_no_claude_md(self, temp_vault):
+        """No CLAUDE.md → _DEFAULT_VALID_TYPES."""
+        config = {"vault_path": str(temp_vault)}
+        result = eb.get_valid_types(config)
+        assert result == eb._DEFAULT_VALID_TYPES
+
+    def test_falls_back_to_defaults_when_claude_md_has_no_types_section(self, temp_vault):
+        """CLAUDE.md exists but has no types section → defaults."""
+        (temp_vault / "CLAUDE.md").write_text(
+            "# Vault Instructions\n\nFile notes here.\n", encoding="utf-8"
+        )
+        config = {"vault_path": str(temp_vault)}
+        result = eb.get_valid_types(config)
+        assert result == eb._DEFAULT_VALID_TYPES
+
+
+# ===========================================================================
+# build_vault_titles_set
+# ===========================================================================
+
+class TestBuildVaultTitlesSet:
+    """build_vault_titles_set() returns the set of note stems in the vault."""
+
+    def test_returns_stems_of_all_md_files(self, vault_with_notes):
+        """Vault with 3 .md files → set of 3 stems."""
+        result = eb.build_vault_titles_set(str(vault_with_notes))
+        assert len(result) == 3
+
+    def test_excludes_extension(self, vault_with_notes):
+        """Stems don't include the .md extension."""
+        result = eb.build_vault_titles_set(str(vault_with_notes))
+        assert "JWT Authentication" in result
+        assert "JWT Authentication.md" not in result
+
+    def test_returns_empty_set_on_oserror(self):
+        """Nonexistent path → empty set."""
+        result = eb.build_vault_titles_set("/nonexistent/path/that/does/not/exist")
+        assert result == set()
+
+    def test_nested_subdirectory_notes_included(self, temp_vault):
+        """Notes in subfolders are included."""
+        subdir = temp_vault / "Deep" / "Nested"
+        subdir.mkdir(parents=True)
+        (subdir / "Nested Note.md").write_text("content")
+        result = eb.build_vault_titles_set(str(temp_vault))
+        assert "Nested Note" in result
+
+
+# ===========================================================================
+# resolve_relations
+# ===========================================================================
+
+class TestResolveRelations:
+    """resolve_relations() validates and normalises beat relation lists."""
+
+    def test_valid_predicate_and_existing_target_passes(self):
+        """A relation with valid predicate and known target is returned unchanged."""
+        vault_titles = {"JWT Authentication"}
+        relations = [{"type": "references", "target": "JWT Authentication"}]
+        result = eb.resolve_relations(relations, vault_titles)
+        assert len(result) == 1
+        assert result[0]["type"] == "references"
+        assert result[0]["target"] == "JWT Authentication"
+
+    def test_unknown_predicate_normalized_to_related(self):
+        """An unknown predicate is normalised to 'related'."""
+        vault_titles = {"JWT Authentication"}
+        relations = [{"type": "causes", "target": "JWT Authentication"}]
+        result = eb.resolve_relations(relations, vault_titles)
+        assert result[0]["type"] == "related"
+
+    def test_unresolved_target_dropped(self):
+        """A target not in vault_titles is dropped."""
+        vault_titles = {"JWT Authentication"}
+        relations = [{"type": "related", "target": "Nonexistent Note"}]
+        result = eb.resolve_relations(relations, vault_titles)
+        assert result == []
+
+    def test_case_insensitive_target_matching(self):
+        """Lowercase target matches vault title regardless of casing."""
+        vault_titles = {"JWT Authentication"}
+        relations = [{"type": "related", "target": "jwt authentication"}]
+        result = eb.resolve_relations(relations, vault_titles)
+        assert len(result) == 1
+        assert result[0]["target"] == "JWT Authentication"
+
+    def test_empty_input_returns_empty_list(self):
+        """Empty list → empty list."""
+        assert eb.resolve_relations([], {"JWT Authentication"}) == []
+
+    def test_none_input_returns_empty_list(self):
+        """None → empty list."""
+        assert eb.resolve_relations(None, {"JWT Authentication"}) == []
+
+    def test_non_dict_items_skipped(self):
+        """Non-dict items in the list are skipped."""
+        result = eb.resolve_relations(["not a dict"], {"JWT Authentication"})
+        assert result == []
+
+    def test_empty_target_string_skipped(self):
+        """A relation with an empty target string is skipped."""
+        vault_titles = {"JWT Authentication"}
+        relations = [{"type": "related", "target": ""}]
+        result = eb.resolve_relations(relations, vault_titles)
+        assert result == []
+
+    def test_all_lowercase_valid_predicates_accepted(self):
+        """All lowercase valid predicates pass through without normalisation."""
+        vault_titles = {"Target Note"}
+        for predicate in ("related", "references", "broader", "narrower", "supersedes"):
+            relations = [{"type": predicate, "target": "Target Note"}]
+            result = eb.resolve_relations(relations, vault_titles)
+            assert result[0]["type"] == predicate
+
+
+# ===========================================================================
+# write_beat with relations
+# ===========================================================================
+
+class TestWriteBeatRelations:
+    """write_beat() correctly handles relations in frontmatter and body."""
+
+    def test_writes_related_wikilinks_to_frontmatter(self, global_config, temp_vault, fixed_now, vault_with_notes):
+        """A beat with a resolved relation writes a [[wikilink]] to related: frontmatter."""
+        beat = make_beat(title="My Beat")
+        beat["relations"] = [{"type": "references", "target": "JWT Authentication"}]
+        vault_titles = eb.build_vault_titles_set(str(temp_vault))
+        path = eb.write_beat(beat, global_config, "sess001", "/cwd", fixed_now, vault_titles=vault_titles)
+        content = path.read_text(encoding="utf-8")
+        assert "[[JWT Authentication]]" in content
+
+    def test_writes_relations_section_to_body(self, global_config, temp_vault, fixed_now, vault_with_notes):
+        """A beat with a relation gets a ## Relations section in the body."""
+        beat = make_beat(title="My Beat With Relations")
+        beat["relations"] = [{"type": "references", "target": "JWT Authentication"}]
+        vault_titles = eb.build_vault_titles_set(str(temp_vault))
+        path = eb.write_beat(beat, global_config, "sess001", "/cwd", fixed_now, vault_titles=vault_titles)
+        content = path.read_text(encoding="utf-8")
+        assert "## Relations" in content
+
+    def test_empty_relations_writes_empty_related_list(self, global_config, temp_vault, fixed_now):
+        """No relations → related: [] in frontmatter."""
+        beat = make_beat()
+        beat["relations"] = []
+        path = eb.write_beat(beat, global_config, "sess001", "/cwd", fixed_now)
+        content = path.read_text(encoding="utf-8")
+        assert "related: []" in content
+
+    def test_unresolved_relation_target_not_written(self, global_config, temp_vault, fixed_now):
+        """A phantom relation target is dropped and not written to the file."""
+        beat = make_beat(title="Phantom Relations Beat")
+        beat["relations"] = [{"type": "related", "target": "Phantom Note Does Not Exist"}]
+        path = eb.write_beat(beat, global_config, "sess001", "/cwd", fixed_now)
+        content = path.read_text(encoding="utf-8")
+        assert "Phantom Note Does Not Exist" not in content
+
+    def test_vault_titles_set_passed_avoids_redundant_glob(self, global_config, temp_vault, fixed_now):
+        """Passing vault_titles explicitly means build_vault_titles_set is not called again."""
+        vault_titles = {"Some Note"}
+        beat = make_beat()
+        beat["relations"] = []
+        with patch.object(eb, "build_vault_titles_set") as mock_build:
+            eb.write_beat(beat, global_config, "sess001", "/cwd", fixed_now, vault_titles=vault_titles)
+        mock_build.assert_not_called()
+
+
+# ===========================================================================
+# _merge_relations_into_note
+# ===========================================================================
+
+class TestMergeRelationsIntoNote:
+    """_merge_relations_into_note() merges relations into existing vault notes."""
+
+    def _write_note(self, path, related=None):
+        """Write a simple note with frontmatter."""
+        related_str = json.dumps(related or [])
+        path.write_text(
+            f"---\nid: test-id\ntype: insight\ntitle: \"Test Note\"\ntags: []\nrelated: {related_str}\nsummary: \"Test\"\n---\n\n## Body\n",
+            encoding="utf-8",
+        )
+
+    def test_adds_new_wikilink_to_existing_related_list(self, tmp_path):
+        """A new relation is added to an existing related: [] list."""
+        pytest.importorskip("ruamel.yaml")
+        note = tmp_path / "Test Note.md"
+        self._write_note(note)
+        eb._merge_relations_into_note(note, [{"type": "related", "target": "New Target"}])
+        content = note.read_text(encoding="utf-8")
+        assert "[[New Target]]" in content
+
+    def test_preserves_other_frontmatter_fields_unchanged(self, tmp_path):
+        """Other frontmatter fields are preserved after merge."""
+        pytest.importorskip("ruamel.yaml")
+        note = tmp_path / "Test Note.md"
+        self._write_note(note)
+        eb._merge_relations_into_note(note, [{"type": "related", "target": "Some Target"}])
+        content = note.read_text(encoding="utf-8")
+        assert "type: insight" in content
+        assert "Test Note" in content
+
+    def test_deduplicates_existing_wikilinks(self, tmp_path):
+        """If the wikilink already exists in related, it is not added again."""
+        pytest.importorskip("ruamel.yaml")
+        note = tmp_path / "Test Note.md"
+        self._write_note(note, related=["[[Target]]"])
+        original_content = note.read_text(encoding="utf-8")
+        eb._merge_relations_into_note(note, [{"type": "related", "target": "Target"}])
+        new_content = note.read_text(encoding="utf-8")
+        # File should not change (no new relation to add)
+        assert new_content.count("[[Target]]") == original_content.count("[[Target]]")
+
+    def test_graceful_fallback_when_ruamel_yaml_not_installed(self, tmp_path, monkeypatch):
+        """ImportError from ruamel → no exception raised, no write attempted."""
+        import builtins
+        real_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == "ruamel.yaml" or name == "ruamel":
+                raise ImportError("ruamel.yaml not installed")
+            return real_import(name, *args, **kwargs)
+
+        note = tmp_path / "Test Note.md"
+        self._write_note(note)
+        original = note.read_text(encoding="utf-8")
+        monkeypatch.setattr(builtins, "__import__", mock_import)
+        # Should not raise
+        eb._merge_relations_into_note(note, [{"type": "related", "target": "Some Target"}])
+        # File should be unchanged
+        assert note.read_text(encoding="utf-8") == original
+
+    def test_returns_without_writing_when_no_new_relations(self, tmp_path):
+        """If all relations are already present, the file is not modified."""
+        pytest.importorskip("ruamel.yaml")
+        note = tmp_path / "Test Note.md"
+        self._write_note(note, related=["[[Target]]"])
+        import os
+        mtime_before = os.path.getmtime(note)
+        import time
+        time.sleep(0.01)
+        eb._merge_relations_into_note(note, [{"type": "related", "target": "Target"}])
+        mtime_after = os.path.getmtime(note)
+        assert mtime_before == mtime_after
+
+    def test_handles_oserror_on_read(self, tmp_path):
+        """If the file is deleted before merge, no exception is raised."""
+        pytest.importorskip("ruamel.yaml")
+        note = tmp_path / "Deleted Note.md"
+        # Note does not exist — should not raise
+        eb._merge_relations_into_note(note, [{"type": "related", "target": "Some Target"}])
+
+
+# ===========================================================================
+# _read_frontmatter_as_dict
+# ===========================================================================
+
+class TestReadFrontmatterAsDict:
+    """_read_frontmatter_as_dict() reads YAML frontmatter from a markdown file."""
+
+    def test_parses_yaml_frontmatter(self, tmp_path):
+        """Standard frontmatter → dict with all fields."""
+        note = tmp_path / "Note.md"
+        note.write_text("---\ntype: decision\ntitle: \"My Note\"\ntags: []\n---\n\nBody.\n")
+        result = eb._read_frontmatter_as_dict(note)
+        assert result["type"] == "decision"
+        assert result["title"] == "My Note"
+
+    def test_returns_empty_dict_when_no_frontmatter_marker(self, tmp_path):
+        """File with no --- → empty dict."""
+        note = tmp_path / "Note.md"
+        note.write_text("Just a body, no frontmatter.\n")
+        result = eb._read_frontmatter_as_dict(note)
+        assert result == {}
+
+    def test_returns_empty_dict_when_no_closing_marker(self, tmp_path):
+        """--- without a closing --- → empty dict."""
+        note = tmp_path / "Note.md"
+        note.write_text("---\nkey: val\n")
+        result = eb._read_frontmatter_as_dict(note)
+        assert result == {}
+
+    def test_returns_empty_dict_on_oserror(self, tmp_path):
+        """Nonexistent path → empty dict."""
+        missing = tmp_path / "does_not_exist.md"
+        result = eb._read_frontmatter_as_dict(missing)
+        assert result == {}
+
+
+# ===========================================================================
+# extract_beats (pipeline function)
+# ===========================================================================
+
+class TestExtractBeats:
+    """extract_beats() runs the full extraction pipeline (LLM mocked)."""
+
+    _SAMPLE_BEATS = [
+        {
+            "title": "Test Beat",
+            "type": "insight",
+            "scope": "general",
+            "summary": "A test insight.",
+            "tags": ["test"],
+            "body": "## Test Beat\n\nBody content.",
+        }
+    ]
+
+    def test_parses_json_array_from_model_response(self, global_config, temp_vault):
+        """A valid JSON array from call_model is parsed into a list of dicts."""
+        with patch("extractors.extract_beats.call_model", return_value=json.dumps(self._SAMPLE_BEATS)):
+            with patch("extractors.extract_beats.load_prompt", return_value="prompt"):
+                result = eb.extract_beats("transcript text", global_config, "manual", "/cwd")
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]["title"] == "Test Beat"
+
+    def test_strips_markdown_code_fences(self, global_config, temp_vault):
+        """call_model returning JSON wrapped in code fences is parsed correctly."""
+        fenced = f"```json\n{json.dumps(self._SAMPLE_BEATS)}\n```"
+        with patch("extractors.extract_beats.call_model", return_value=fenced):
+            with patch("extractors.extract_beats.load_prompt", return_value="prompt"):
+                result = eb.extract_beats("transcript text", global_config, "manual", "/cwd")
+        assert len(result) == 1
+
+    def test_handles_trailing_text_after_json(self, global_config, temp_vault):
+        """Trailing non-JSON text after the array is ignored via raw_decode."""
+        trailing = json.dumps(self._SAMPLE_BEATS) + "\n\nHere are the beats I found."
+        with patch("extractors.extract_beats.call_model", return_value=trailing):
+            with patch("extractors.extract_beats.load_prompt", return_value="prompt"):
+                result = eb.extract_beats("transcript text", global_config, "manual", "/cwd")
+        assert len(result) == 1
+
+    def test_returns_empty_list_on_invalid_json(self, global_config, temp_vault):
+        """Non-JSON response → empty list."""
+        with patch("extractors.extract_beats.call_model", return_value="not json at all"):
+            with patch("extractors.extract_beats.load_prompt", return_value="prompt"):
+                result = eb.extract_beats("transcript text", global_config, "manual", "/cwd")
+        assert result == []
+
+    def test_returns_empty_list_on_non_list_json(self, global_config, temp_vault):
+        """JSON object (not array) → empty list."""
+        with patch("extractors.extract_beats.call_model", return_value='{"key": "value"}'):
+            with patch("extractors.extract_beats.load_prompt", return_value="prompt"):
+                result = eb.extract_beats("transcript text", global_config, "manual", "/cwd")
+        assert result == []
+
+    def test_includes_vault_claude_md_in_user_message(self, global_config, temp_vault):
+        """When vault has CLAUDE.md, its content appears in the user message sent to LLM."""
+        (temp_vault / "CLAUDE.md").write_text("## Types\n\n- `decision`\n", encoding="utf-8")
+        captured_messages = []
+
+        def fake_call_model(system, user, config):
+            captured_messages.append(user)
+            return json.dumps(self._SAMPLE_BEATS)
+
+        with patch("extractors.extract_beats.call_model", side_effect=fake_call_model):
+            with patch("extractors.extract_beats.load_prompt", return_value="{vault_claude_md_section}{transcript}{project_name}{cwd}{trigger}"):
+                eb.extract_beats("some transcript", global_config, "manual", "/cwd")
+
+        assert len(captured_messages) == 1
+        assert "vault_claude_md" in captured_messages[0] or "CLAUDE.md" in captured_messages[0] or "decision" in captured_messages[0]
+
+    def test_falls_back_to_default_vocab_when_no_claude_md(self, global_config, temp_vault):
+        """No CLAUDE.md → default type notice appears in user message."""
+        captured_messages = []
+
+        def fake_call_model(system, user, config):
+            captured_messages.append(user)
+            return json.dumps(self._SAMPLE_BEATS)
+
+        with patch("extractors.extract_beats.call_model", side_effect=fake_call_model):
+            with patch("extractors.extract_beats.load_prompt", return_value="{vault_claude_md_section}{transcript}{project_name}{cwd}{trigger}"):
+                eb.extract_beats("some transcript", global_config, "manual", "/cwd")
+
+        assert len(captured_messages) == 1
+        assert "default" in captured_messages[0].lower() or "decision" in captured_messages[0]
+
+    def test_truncates_long_transcript(self, global_config, temp_vault):
+        """A transcript over MAX_TRANSCRIPT_CHARS is truncated, keeping the tail."""
+        long_transcript = "x" * (eb.MAX_TRANSCRIPT_CHARS + 10_000)
+        captured_messages = []
+
+        def fake_call_model(system, user, config):
+            captured_messages.append(user)
+            return json.dumps([])
+
+        with patch("extractors.extract_beats.call_model", side_effect=fake_call_model):
+            with patch("extractors.extract_beats.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+                eb.extract_beats(long_transcript, global_config, "manual", "/cwd")
+
+        assert len(captured_messages) == 1
+        # The transcript in the user message should be truncated
+        assert "truncated" in captured_messages[0] or len(captured_messages[0]) < len(long_transcript)

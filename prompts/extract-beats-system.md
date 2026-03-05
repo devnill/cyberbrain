@@ -73,6 +73,31 @@ Examples:
 }
 ```
 
+## Relations
+
+For each beat, you may optionally emit a `relations` array linking it to other notes that
+likely exist in the vault. Relations are used to build a knowledge graph in Obsidian.
+
+**Predicate vocabulary** — use only these values for `type`:
+
+| Predicate | When to use |
+|---|---|
+| `related` | General associative link; non-committal. Use as default when unsure. |
+| `references` | This beat explicitly cites or depends on another note. |
+| `broader` | The linked note is a more general concept that this beat is a specific instance of. |
+| `narrower` | The linked note is more specific than this beat. |
+| `supersedes` | This beat replaces or updates the linked note (newer decision, corrected config). |
+| `wasDerivedFrom` | This beat extends or was built on the linked note. |
+
+**Rules:**
+- Only name notes that very likely already exist in the vault — use titles you saw referenced
+  in the transcript, or that match the topic of this session's project context.
+- Do not invent plausible-sounding titles. If you are not confident a note exists, omit the relation.
+- Target titles must not contain `#`, `[`, `]`, or `^`.
+- The `relations` field is optional. Omit it or use `[]` if no confident relations exist.
+
+---
+
 Return ONLY a JSON array. No explanation, no markdown fences, just the raw JSON array.
 
 Each beat object must have exactly these fields:
@@ -83,8 +108,11 @@ Each beat object must have exactly these fields:
   "scope": "project or general",
   "summary": "Single information-dense sentence optimized for search/retrieval",
   "tags": ["array", "of", "2-6", "lowercase", "keywords"],
-  "body": "Full markdown content. Self-contained — a future reader needs no other context. Use ## headers, bullet points as appropriate. Include the problem, solution, and key details."
+  "body": "Full markdown content. Self-contained — a future reader needs no other context. Use ## headers, bullet points as appropriate. Include the problem, solution, and key details.",
+  "relations": [{"type": "predicate", "target": "Exact Note Title"}]
 }
 ```
+
+The `relations` field is optional — omit it or use `[]` when no confident relations exist.
 
 If there are no beats worth extracting (e.g. the conversation was trivial or entirely conversational), return an empty array: []

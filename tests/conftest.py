@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import tempfile
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -15,6 +16,11 @@ import pytest
 REPO_ROOT = Path(__file__).parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+# Ensure the extractors/ directory is on sys.path so `import search_backends` works
+EXTRACTORS_DIR = REPO_ROOT / "extractors"
+if str(EXTRACTORS_DIR) not in sys.path:
+    sys.path.insert(0, str(EXTRACTORS_DIR))
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -112,3 +118,55 @@ def make_beat(
         "tags": tags or ["test", "fixture"],
         "body": body,
     }
+
+
+# ---------------------------------------------------------------------------
+# New shared fixtures for search and KGE tests
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def vault_with_notes(temp_vault):
+    """Creates temp_vault with 3 pre-written .md notes for relation/search tests."""
+    notes = [
+        ("JWT Authentication.md", "decision", ["jwt", "auth"]),
+        ("Postgres Connection Pool.md", "problem", ["postgres", "database"]),
+        ("Python Subprocess Encoding.md", "problem", ["python", "subprocess"]),
+    ]
+    inbox = temp_vault / "AI" / "Claude-Sessions"
+    inbox.mkdir(parents=True, exist_ok=True)
+    for filename, note_type, tags in notes:
+        path = inbox / filename
+        path.write_text(
+            f"""---
+id: {uuid.uuid4()}
+type: {note_type}
+title: "{filename[:-3]}"
+tags: {json.dumps(tags)}
+related: []
+summary: "Summary of {filename[:-3]}"
+---
+
+## {filename[:-3]}
+
+Body content for {filename[:-3]}.
+""",
+            encoding="utf-8",
+        )
+    return temp_vault
+
+
+@pytest.fixture
+def fts5_db_path(tmp_path):
+    """Returns a path for a temporary FTS5 SQLite database."""
+    return str(tmp_path / "test-search.db")
+
+
+@pytest.fixture
+def mock_search_result():
+    """Returns a factory for SearchResult objects."""
+    from search_backends import SearchResult
+
+    def _make(path="/vault/Note.md", title="Test Note", score=1.0, **kwargs):
+        return SearchResult(path=path, title=title, score=score, **kwargs)
+
+    return _make

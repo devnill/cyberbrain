@@ -17,6 +17,7 @@ import json
 import os
 import re
 import sys
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -507,8 +508,57 @@ def extract_beats(transcript_text: str, config: dict, trigger: str, cwd: str) ->
 # Beat writing
 # ---------------------------------------------------------------------------
 
-VALID_TYPES = {"decision", "insight", "problem", "reference"}
+_DEFAULT_VALID_TYPES = {"decision", "insight", "problem", "reference"}
 VALID_SCOPES = {"project", "general"}
+
+
+def parse_valid_types_from_claude_md(vault_claude_md_text: str) -> set[str]:
+    """
+    Extract the type vocabulary from a vault CLAUDE.md.
+    Looks for a ## Entity Types or ## Types section and reads subsection headings.
+    Falls back to _DEFAULT_VALID_TYPES if nothing parseable is found.
+    """
+    if not vault_claude_md_text:
+        return _DEFAULT_VALID_TYPES
+
+    types: set[str] = set()
+
+    # Look for a types section (common heading patterns)
+    in_types_section = False
+    for line in vault_claude_md_text.splitlines():
+        stripped = line.strip()
+        # Detect entry into a types section
+        if re.match(r'^#{1,3}\s+(entity\s+types?|beat\s+types?|note\s+types?|types?)\s*$', stripped, re.IGNORECASE):
+            in_types_section = True
+            continue
+        # Exit on any other section at the same or higher heading level
+        if in_types_section and re.match(r'^#{1,3}\s+\w', stripped):
+            in_types_section = False
+        # Inside the types section, subsection headings (### type-name or #### type-name)
+        # and backtick-quoted type names in list items are both valid signals
+        if in_types_section:
+            m = re.match(r'^#{2,4}\s+`?(\w[\w-]*)`?', stripped)
+            if m:
+                types.add(m.group(1).lower())
+                continue
+            # Also pick up backtick type names like: - `decision` — ...
+            for match in re.finditer(r'`(\w[\w-]+)`', stripped):
+                candidate = match.group(1).lower()
+                # Heuristic: short word that looks like a type, not a code snippet
+                if 3 <= len(candidate) <= 20 and not candidate[0].isdigit():
+                    types.add(candidate)
+
+    if types:
+        return types
+    return _DEFAULT_VALID_TYPES
+
+
+def get_valid_types(config: dict) -> set[str]:
+    """Return the valid beat types for this vault, read from vault CLAUDE.md if available."""
+    vault_claude_md = read_vault_claude_md(config["vault_path"])
+    if vault_claude_md:
+        return parse_valid_types_from_claude_md(vault_claude_md)
+    return _DEFAULT_VALID_TYPES
 
 _FILENAME_INVALID = re.compile(r'[<>:"/\\|?*#\[\]^\x00-\x1f]')
 
@@ -553,10 +603,12 @@ def resolve_output_dir(beat: dict, config: dict) -> Path | None:
     return output_dir
 
 
-def write_beat(beat: dict, config: dict, session_id: str, cwd: str, now: datetime) -> Path:
+def write_beat(beat: dict, config: dict, session_id: str, cwd: str, now: datetime,
+               vault_titles: set[str] | None = None) -> Path:
     """Write a single beat to a markdown file. Returns the file path."""
+    valid_types = get_valid_types(config)
     beat_type = beat.get("type", "reference")
-    if beat_type not in VALID_TYPES:
+    if beat_type not in valid_types:
         beat_type = "reference"
 
     scope = beat.get("scope", "general")
@@ -571,6 +623,15 @@ def write_beat(beat: dict, config: dict, session_id: str, cwd: str, now: datetim
     if not isinstance(tags, list):
         tags = []
     tags = [str(t).lower() for t in tags if t]
+
+    # Resolve relations: validate targets against vault, normalise predicates
+    if vault_titles is None:
+        vault_titles = build_vault_titles_set(config["vault_path"])
+    raw_relations = beat.get("relations", [])
+    resolved_relations = resolve_relations(raw_relations, vault_titles)
+
+    # Build YAML-safe wikilink list for frontmatter
+    related_wikilinks = [f"[[{r['target']}]]" for r in resolved_relations]
 
     project_name = config.get("project_name", Path(cwd).name)
     date_str = now.strftime("%Y-%m-%dT%H:%M:%S")
@@ -600,17 +661,107 @@ title: {json.dumps(title)}
 project: {project_name}
 cwd: {cwd}
 tags: {json.dumps(tags)}
-related: []
+related: {json.dumps(related_wikilinks)}
 status: completed
 summary: {json.dumps(summary)}
 ---"""
 
-    content = f"{front_matter}\n\n## {title}\n\n{body}\n"
+    # Build optional Relations section in body
+    relations_section = ""
+    if resolved_relations:
+        rel_lines = []
+        for r in resolved_relations:
+            rel_lines.append(f"- {r['type']}: [[{r['target']}]]")
+        relations_section = "\n\n## Relations\n\n" + "\n".join(rel_lines)
+
+    content = f"{front_matter}\n\n## {title}\n\n{body}{relations_section}\n"
 
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(content)
 
+    # Update search index (FTS5/hybrid) post-write; non-fatal on failure
+    try:
+        from search_index import update_search_index
+        update_search_index(str(output_path), {
+            "id": beat_id,
+            "title": title,
+            "summary": summary,
+            "tags": tags,
+            "related": related_wikilinks,
+            "type": beat_type,
+            "scope": scope,
+            "project": project_name,
+            "date": date_str,
+        }, config)
+    except ImportError:
+        pass  # search_index.py not yet installed; silent skip
+
     return output_path
+
+
+# ---------------------------------------------------------------------------
+# Relation resolution
+# ---------------------------------------------------------------------------
+
+# Controlled predicate vocabulary grounded in SKOS / Dublin Core / PROV-O.
+# Any LLM-emitted predicate not in this set is normalised to "related".
+VALID_PREDICATES = {"related", "references", "broader", "narrower", "supersedes", "wasDerivedFrom"}
+
+
+def build_vault_titles_set(vault_path: str) -> set[str]:
+    """
+    Return a set of note stems (filenames without .md extension) from the vault.
+    Used for relation target validation. Built once per extraction run (~1ms).
+    """
+    vault = Path(vault_path)
+    try:
+        return {p.stem for p in vault.rglob("*.md")}
+    except OSError:
+        return set()
+
+
+def resolve_relations(
+    raw_relations: list,
+    vault_titles: set[str],
+) -> list[dict]:
+    """
+    Validate and normalise a beat's raw relation list.
+
+    For each relation:
+    - Normalise the predicate to VALID_PREDICATES; fall back to "related" if unknown.
+    - Check the target title against vault_titles (case-insensitive).
+    - Drop the relation if the target does not exist in the vault (no phantom nodes).
+
+    Returns a list of dicts: [{type, target}, ...] with only validated targets.
+    """
+    if not raw_relations or not isinstance(raw_relations, list):
+        return []
+
+    # Build a lower-cased lookup for case-insensitive matching
+    lower_to_actual: dict[str, str] = {t.lower(): t for t in vault_titles}
+
+    resolved = []
+    for rel in raw_relations:
+        if not isinstance(rel, dict):
+            continue
+        predicate = str(rel.get("type", "related")).strip().lower()
+        if predicate not in VALID_PREDICATES:
+            predicate = "related"
+        target = str(rel.get("target", "")).strip()
+        if not target:
+            continue
+        # Case-insensitive vault lookup
+        if target.lower() not in lower_to_actual:
+            # Target doesn't exist in vault — drop to avoid phantom nodes
+            print(
+                f"[extract_beats] Dropping unresolved relation target: '{target}'",
+                file=sys.stderr,
+            )
+            continue
+        actual_title = lower_to_actual[target.lower()]
+        resolved.append({"type": predicate, "target": actual_title})
+
+    return resolved
 
 
 # ---------------------------------------------------------------------------
@@ -659,6 +810,86 @@ def search_vault(beat: dict, vault_path: str, max_results: int = 5) -> list[str]
 # ---------------------------------------------------------------------------
 # Autofile
 # ---------------------------------------------------------------------------
+
+def _merge_relations_into_note(note_path: Path, new_relations: list[dict]) -> None:
+    """
+    Merge new resolved relations into a note's related: frontmatter field
+    using ruamel.yaml for round-trip rewriting (preserves all other formatting).
+
+    Falls back to a no-op with a warning if ruamel.yaml is not installed.
+    Only adds wikilinks not already present — deduplicates by target title.
+    """
+    try:
+        from ruamel.yaml import YAML
+    except ImportError:
+        print(
+            "[extract_beats] ruamel.yaml not installed — skipping relation merge. "
+            "Run: pip install ruamel.yaml  (or install via cyberbrain venv)",
+            file=sys.stderr,
+        )
+        return
+
+    try:
+        text = note_path.read_text(encoding="utf-8")
+    except OSError as e:
+        print(f"[extract_beats] Could not read note for relation merge: {e}", file=sys.stderr)
+        return
+
+    if not text.startswith("---"):
+        return
+    end = text.find("\n---", 3)
+    if end == -1:
+        return
+
+    fm_text = text[3:end]
+    body_text = text[end + 4:]
+
+    yaml = YAML()
+    yaml.preserve_quotes = True
+    try:
+        import io
+        fm = yaml.load(fm_text)
+    except Exception as e:
+        print(f"[extract_beats] ruamel.yaml parse error: {e}", file=sys.stderr)
+        return
+
+    if not isinstance(fm, dict):
+        return
+
+    existing_related = fm.get("related", [])
+    if not isinstance(existing_related, list):
+        existing_related = []
+
+    # Deduplicate by target title (strip [[ ]] for comparison)
+    existing_targets = {
+        str(link).strip("[]").lower()
+        for link in existing_related
+    }
+
+    added = False
+    for rel in new_relations:
+        wikilink = f"[[{rel['target']}]]"
+        if rel["target"].lower() not in existing_targets:
+            existing_related.append(wikilink)
+            existing_targets.add(rel["target"].lower())
+            added = True
+
+    if not added:
+        return
+
+    fm["related"] = existing_related
+
+    out = io.StringIO()
+    yaml.dump(fm, out)
+    new_fm = out.getvalue().rstrip("\n")
+
+    new_text = f"---\n{new_fm}\n---{body_text}"
+    try:
+        note_path.write_text(new_text, encoding="utf-8")
+        print(f"[extract_beats] Merged {len([r for r in new_relations])} relation(s) into {note_path.name}", file=sys.stderr)
+    except OSError as e:
+        print(f"[extract_beats] Could not write relation merge: {e}", file=sys.stderr)
+
 
 def _is_within_vault(vault: Path, target: Path) -> bool:
     """Return True if target resolves to a path within vault."""
@@ -743,6 +974,14 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now: date
         insertion = decision.get("insertion", "")
         if not target.exists() or not insertion:
             return write_beat(beat, config, session_id, cwd, now)
+
+        # Merge new beat's resolved relations into existing note's related: frontmatter
+        vault_titles = build_vault_titles_set(vault_path)
+        raw_relations = beat.get("relations", [])
+        new_relations = resolve_relations(raw_relations, vault_titles)
+        if new_relations:
+            _merge_relations_into_note(target, new_relations)
+
         with open(target, "a", encoding="utf-8") as f:
             f.write(f"\n\n{insertion.strip()}\n")
         print(f"[extract_beats] autofile: extended {target}", file=sys.stderr)
@@ -791,11 +1030,36 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now: date
 
         output_path.write_text(content, encoding="utf-8")
         print(f"[extract_beats] autofile: created {output_path}", file=sys.stderr)
+
+        # Update search index post-create
+        try:
+            from search_index import update_search_index
+            fm = _read_frontmatter_as_dict(output_path)
+            update_search_index(str(output_path), fm, config)
+        except (ImportError, Exception):
+            pass
+
         return output_path
 
     else:
         print(f"[extract_beats] autofile: unknown action '{action}', falling back", file=sys.stderr)
         return write_beat(beat, config, session_id, cwd, now)
+
+
+def _read_frontmatter_as_dict(path: Path) -> dict:
+    """Read full YAML frontmatter from a markdown file. Returns empty dict on any error."""
+    try:
+        import yaml
+        text = path.read_text(encoding="utf-8")
+        if not text.startswith("---"):
+            return {}
+        end = text.find("\n---", 3)
+        if end == -1:
+            return {}
+        fm = yaml.safe_load(text[3:end])
+        return fm if isinstance(fm, dict) else {}
+    except Exception:
+        return {}
 
 
 def _read_frontmatter_tags(path: Path) -> set:
@@ -843,6 +1107,7 @@ def _read_frontmatter_tags(path: Path) -> set:
 # ---------------------------------------------------------------------------
 
 EXTRACT_LOG_PATH = Path.home() / ".claude" / "logs" / "cb-extract.log"
+RUNS_LOG_PATH = Path.home() / ".claude" / "logs" / "cb-runs.jsonl"
 
 
 def is_session_already_extracted(session_id: str) -> bool:
@@ -871,6 +1136,16 @@ def write_extract_log_entry(session_id: str, beat_count: int) -> None:
             f.write(entry)
     except OSError as e:
         print(f"[extract_beats] Warning: could not write deduplication log: {e}", file=sys.stderr)
+
+
+def write_runs_log_entry(entry: dict) -> None:
+    """Append a JSON object to the runs log (one entry per extraction run)."""
+    try:
+        RUNS_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(RUNS_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+    except OSError as e:
+        print(f"[extract_beats] Warning: could not write runs log: {e}", file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------
@@ -948,6 +1223,9 @@ def main():
         print(f"[extract_beats] Session '{session_id}' already extracted. Skipping.", file=sys.stderr)
         sys.exit(0)
 
+    start = time.monotonic()
+    llm_duration = 0.0
+
     if args.beats_json:
         print(f"[extract_beats] Loading pre-extracted beats from: {args.beats_json}", file=sys.stderr)
         try:
@@ -969,7 +1247,9 @@ def main():
 
         print("[extract_beats] Calling LLM to extract beats...", file=sys.stderr)
         try:
+            llm_start = time.monotonic()
             beats = extract_beats(transcript_text, config, args.trigger, args.cwd)
+            llm_duration = time.monotonic() - llm_start
         except BackendError as e:
             print(f"[extract_beats] Backend error: {e}", file=sys.stderr)
             sys.exit(0)
@@ -1022,6 +1302,8 @@ def main():
 
     now = datetime.now(timezone.utc)
     written = []
+    run_errors = []
+    beat_records = []
 
     # Cache vault CLAUDE.md once for the whole autofile run (avoids N disk reads for N beats)
     vault_context = None
@@ -1038,16 +1320,42 @@ def main():
                 path = write_beat(beat, config, session_id, args.cwd, now)
             if path:
                 written.append(path)
+                beat_records.append({
+                    "title": beat.get("title", ""),
+                    "type": beat.get("type", ""),
+                    "scope": beat.get("scope", ""),
+                    "path": os.path.relpath(str(path), config["vault_path"]),
+                })
                 print(f"[extract_beats] Wrote: {path}", file=sys.stderr)
         except Exception as e:
+            err_msg = f"write error on '{beat.get('title', '?')}': {e}"
+            run_errors.append(err_msg)
             print(f"[extract_beats] Failed on '{beat.get('title', '?')}': {e}", file=sys.stderr)
 
+    project_name = config.get("project_name", Path(args.cwd).name)
+
     if journal_enabled and written:
-        project_name = config.get("project_name", Path(args.cwd).name)
         write_journal_entry(written, config, session_id, project_name, now)
 
     # Write deduplication log entry
     write_extract_log_entry(session_id, len(written))
+
+    # Write structured runs log entry
+    duration = time.monotonic() - start
+    write_runs_log_entry({
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "session_id": session_id,
+        "trigger": args.trigger,
+        "project": project_name,
+        "backend": config.get("backend", DEFAULT_BACKEND),
+        "model": config.get("model", CLI_DEFAULT_MODEL),
+        "duration_seconds": round(duration, 1),
+        "llm_duration_seconds": round(llm_duration, 1),
+        "beats_extracted": len(beats),
+        "beats_written": len(written),
+        "beats": beat_records,
+        "errors": run_errors,
+    })
 
     print(f"[extract_beats] Done. {len(written)} beat(s) written.", file=sys.stderr)
 

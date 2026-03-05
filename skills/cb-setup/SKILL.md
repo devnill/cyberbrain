@@ -237,8 +237,46 @@ mood throughout: "Use X", "Always include Y", "Do not Z."
 
 1. **Vault Overview** — 2–4 sentences orienting Claude to the vault's scope and intent
 
-2. **Knowledge Graph Principles** — MANDATORY; always present; adapted to this vault's
-   archetype and vocabulary. See the required content below.
+2. **Knowledge Graph** — MANDATORY; always present. Two subsections:
+
+   **2a. Principles** — adapted canonical text (see below, ~300–400 words).
+
+   **2b. Relation Vocabulary** — the controlled predicate set for this vault's knowledge
+   graph. Start with the universal base set, then add 2–4 domain-specific predicates
+   tailored to the vault's archetype. Format as a markdown table. Example output:
+
+   ```markdown
+   ## Knowledge Graph
+
+   ### Principles
+   [adapted principles text]
+
+   ### Relation Vocabulary
+
+   Use only these predicates in the `related:` frontmatter field and `## Relations`
+   body sections. Any unrecognised predicate is normalised to `related` at write time.
+
+   | Predicate | When to use |
+   |---|---|
+   | `related` | General associative link. Universal fallback. |
+   | `references` | This note explicitly cites another. |
+   | `broader` | The linked note is a more general concept this note is a specific instance of. |
+   | `narrower` | The linked note is more specific than this one. |
+   | `supersedes` | This note replaces or updates the linked note. |
+   | `wasDerivedFrom` | This note extends or was derived from the linked note. |
+   | `solves` | [domain-specific — e.g. for developer vaults] This note resolves the linked problem. |
+   | `usedIn` | [domain-specific] This reference or pattern is applied in the linked project note. |
+   ```
+
+   Tailor domain-specific predicates to the archetype:
+   - Developer/Technical: `solves`, `usedIn`, `replacedBy`, `testedBy`
+   - Research/Learning: `supports`, `contradicts`, `exemplifies`, `cites`
+   - Whole-life PKM: `relatedProject`, `inspiredBy`, `followedBy`
+   - Project-specific: predicates tuned to the project's domain (e.g., `blocks`, `implements`)
+
+   Do not add more than 4 domain-specific predicates. The universal set covers most needs.
+   Every predicate added compounds the classification burden — prefer narrow and clear over
+   comprehensive.
 
 3. **Folder Structure** — filing rules using structural patterns, not enumerated
    specific folders. Use placeholders: `Work/Projects/<project-name>/`

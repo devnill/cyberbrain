@@ -58,9 +58,13 @@ chmod +x "$CLAUDE_DIR/hooks/session-end-extract.sh"
 echo "  [OK] hooks/session-end-extract.sh"
 
 # Extractor
-cp "$REPO_DIR/extractors/extract_beats.py" "$CLAUDE_DIR/extractors/extract_beats.py"
-cp "$REPO_DIR/extractors/requirements.txt" "$CLAUDE_DIR/extractors/requirements.txt"
+cp "$REPO_DIR/extractors/extract_beats.py"   "$CLAUDE_DIR/extractors/extract_beats.py"
+cp "$REPO_DIR/extractors/search_backends.py" "$CLAUDE_DIR/extractors/search_backends.py"
+cp "$REPO_DIR/extractors/search_index.py"    "$CLAUDE_DIR/extractors/search_index.py"
+cp "$REPO_DIR/extractors/requirements.txt"   "$CLAUDE_DIR/extractors/requirements.txt"
 echo "  [OK] extractors/extract_beats.py"
+echo "  [OK] extractors/search_backends.py"
+echo "  [OK] extractors/search_index.py"
 echo "  [OK] extractors/requirements.txt"
 
 # Prompts
@@ -98,6 +102,7 @@ install_skill cb-file
 install_skill cb-setup
 install_skill cb-extract
 install_skill cb-enrich
+install_skill cb-status
 
 # MCP server
 cp "$REPO_DIR/mcp/server.py" "$CLAUDE_DIR/cyberbrain/mcp/server.py"
@@ -207,8 +212,14 @@ if [ "$BACKEND" = "bedrock" ]; then
   fi
 else
   echo "  [skip] anthropic package not needed for backend=$BACKEND"
-  # Still install pyyaml (used by cb-setup)
-  python3 -m pip install pyyaml -q 2>/dev/null || true
+fi
+
+# Always install pyyaml (cb-setup vault analyzer) and ruamel.yaml (KGE relation merge)
+echo "  Installing base Python dependencies (pyyaml, ruamel.yaml)..."
+if python3 -m pip install pyyaml "ruamel.yaml" -q 2>/dev/null; then
+  echo "  [OK] pyyaml + ruamel.yaml"
+else
+  echo "  [WARN] pip install failed. Run: pip install pyyaml ruamel.yaml"
 fi
 
 # Install MCP package into a dedicated venv (avoids system/conda Python conflicts)
@@ -226,8 +237,8 @@ if [ -n "$MCP_PYTHON" ]; then
   if [ ! -d "$MCP_VENV" ]; then
     "$MCP_PYTHON" -m venv "$MCP_VENV"
   fi
-  echo "  Installing mcp into venv ($MCP_PYTHON)..."
-  if "$MCP_VENV/bin/pip" install mcp -q; then
+  echo "  Installing mcp + ruamel.yaml into venv ($MCP_PYTHON)..."
+  if "$MCP_VENV/bin/pip" install mcp pyyaml "ruamel.yaml" -q; then
     if "$MCP_VENV/bin/python3" -c "from mcp.server.fastmcp import FastMCP" 2>/dev/null; then
       echo "  [OK] mcp venv ready at $MCP_VENV"
     else
@@ -237,6 +248,17 @@ if [ -n "$MCP_PYTHON" ]; then
   else
     echo "  [ERROR] pip install mcp failed — see output above."
     echo "          Try: $MCP_PYTHON -m venv $MCP_VENV && $MCP_VENV/bin/pip install mcp"
+  fi
+
+  # Optional: semantic search layer (fastembed + usearch)
+  echo ""
+  echo "  Optional semantic search dependencies (fastembed + usearch):"
+  if "$MCP_VENV/bin/pip" install "fastembed>=0.3" "usearch==2.23.0" -q 2>/dev/null; then
+    echo "  [OK] fastembed + usearch installed — hybrid semantic search enabled"
+  else
+    echo "  [skip] fastembed/usearch not installed — BM25 keyword search will be used."
+    echo "         To enable semantic search later:"
+    echo "           $MCP_VENV/bin/pip install fastembed usearch==2.23.0"
   fi
 else
   echo "  [WARN] Could not find a suitable Python for the MCP venv. Install python3 via Homebrew."
@@ -311,6 +333,42 @@ print('  Restart Claude Desktop for the change to take effect.')
 else
   echo "  [skip] Claude Desktop not found (macOS only)"
 fi
+
+# ---------------------------------------------------------------------------
+# 8. Prune stale index entries
+# ---------------------------------------------------------------------------
+echo ""
+echo "Pruning stale search index entries..."
+python3 -c "
+import sys, json
+from pathlib import Path
+
+config_path = Path.home() / '.claude' / 'cyberbrain.json'
+if not config_path.exists():
+    print('  [skip] No config found — skipping prune.')
+    sys.exit(0)
+
+config = json.loads(config_path.read_text())
+vault_path = config.get('vault_path', '')
+db_path = config.get('search_db_path', str(Path.home() / '.claude' / 'cyberbrain' / 'search-index.db'))
+
+if not vault_path or not Path(vault_path).exists():
+    print('  [skip] vault_path not configured or does not exist — skipping prune.')
+    sys.exit(0)
+
+if not Path(db_path).exists():
+    print('  [skip] No search index found — skipping prune.')
+    sys.exit(0)
+
+sys.path.insert(0, str(Path.home() / '.claude' / 'extractors'))
+from search_backends import FTS5Backend
+b = FTS5Backend(vault_path, db_path)
+pruned = b.prune_stale_notes()
+if pruned:
+    print(f'  [OK] Pruned {pruned} stale note(s) from search index')
+else:
+    print('  [OK] Search index: no stale notes found')
+"
 
 # ---------------------------------------------------------------------------
 # Done
