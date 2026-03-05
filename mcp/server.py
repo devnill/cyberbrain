@@ -318,11 +318,13 @@ def cb_recall(
     """
     Search the knowledge vault for notes from past sessions matching a query.
 
-    Call this at the start of a conversation when the user mentions a project, technology,
-    or topic they may have worked on before. Call it mid-session when the conversation
-    shifts to a new topic. Do not ask permission — just call it and integrate results
-    naturally. For filing new information, use cb_file. For processing a transcript, use
-    cb_extract.
+    Call this proactively when the user mentions a project, technology, or topic they may
+    have worked on before. Do not ask permission — just call it and integrate results
+    naturally into the conversation. Call it again mid-session when the topic shifts.
+    For filing new information, use cb_file. For reading a specific note by name, use
+    cb_read. For processing a transcript, use cb_extract.
+
+    The `orient` prompt configures proactive recall behavior per your cyberbrain.json.
 
     Returns note cards with title, type, tags, related links, and summary. Full body is
     included for the top 2 results. Set synthesize=True to get a concise LLM-generated
@@ -441,8 +443,97 @@ def cb_recall(
     return result_text
 
 
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
+def cb_read(
+    identifier: Annotated[str, Field(
+        description="A vault-relative path (e.g. 'Projects/myproject/JWT Auth Flow.md') or a note title (e.g. 'JWT Auth Flow'). Resolution tries exact path, path + .md, then FTS5 title match."
+    )],
+) -> str:
+    """
+    Read a specific vault note by path or title.
+
+    Use this after cb_recall surfaces a note you want to read in full, or when the user
+    names a specific note they want to retrieve. For searching, use cb_recall.
+
+    Resolution order:
+    1. Exact vault-relative path (with or without .md extension)
+    2. FTS5 index title exact match (case-insensitive)
+    3. FTS5 index title prefix/fuzzy match
+
+    Returns the full note content including frontmatter, followed by the vault-relative path.
+    """
+    config = _load_config()
+    vault_path = Path(config["vault_path"]).resolve()
+
+    def _resolve_path(candidate: Path) -> Path | None:
+        """Return resolved path if it's within the vault, else None."""
+        try:
+            resolved = candidate.resolve()
+            resolved.relative_to(vault_path)  # raises ValueError if outside
+            return resolved
+        except (ValueError, OSError):
+            return None
+
+    # 1. Exact vault-relative path
+    candidate = vault_path / identifier
+    resolved = _resolve_path(candidate)
+    if resolved and resolved.exists():
+        note_path = resolved
+    else:
+        # 2. Exact path + .md extension
+        candidate_md = vault_path / (identifier if identifier.endswith(".md") else identifier + ".md")
+        resolved_md = _resolve_path(candidate_md)
+        if resolved_md and resolved_md.exists():
+            note_path = resolved_md
+        else:
+            # 3 & 4. FTS5 title lookup (exact then fuzzy)
+            note_path = _find_note_by_title(identifier, config)
+
+    if note_path is None:
+        raise ToolError(f"Note not found: {identifier}. Try cb_recall to search.")
+
+    try:
+        content = note_path.read_text(encoding="utf-8")
+    except OSError as e:
+        raise ToolError(f"Could not read note: {e}")
+
+    # Extract title from frontmatter or filename
+    fm = _parse_frontmatter(content)
+    title = fm.get("title") or note_path.stem
+    rel = os.path.relpath(str(note_path), str(vault_path))
+
+    return f"# {title}\n\n{content}\n\n---\nSource: {rel}"
+
+
 _DEFAULT_DB_PATH = str(Path.home() / ".claude" / "cyberbrain" / "search-index.db")
 _DEFAULT_MANIFEST_PATH = str(Path.home() / ".claude" / "cyberbrain" / "search-index-manifest.json")
+
+
+def _find_note_by_title(title: str, config: dict) -> "Path | None":
+    """Look up a note by title in the FTS5 index. Returns resolved Path or None."""
+    import sqlite3
+    db_path = config.get("search_db_path", _DEFAULT_DB_PATH)
+    if not Path(db_path).exists():
+        return None
+    try:
+        conn = sqlite3.connect(db_path)
+        # Exact match (case-insensitive)
+        row = conn.execute(
+            "SELECT path FROM notes WHERE title = ? COLLATE NOCASE LIMIT 1", (title,)
+        ).fetchone()
+        if row:
+            conn.close()
+            return Path(row[0])
+        # Prefix/fuzzy match
+        row = conn.execute(
+            "SELECT path FROM notes WHERE title LIKE ? LIMIT 1", (f"%{title}%",)
+        ).fetchone()
+        conn.close()
+        if row:
+            return Path(row[0])
+    except Exception:
+        pass
+    return None
 
 
 def _read_index_stats(config: dict) -> dict:
@@ -596,6 +687,105 @@ def cb_status(
     lines.append(f"- Backend: {backend} ({model})")
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Resource: behavioral guide
+# ---------------------------------------------------------------------------
+
+def _build_guide(recall_instruction: str) -> str:
+    return f"""\
+# Cyberbrain — AI Usage Guide
+
+## What cyberbrain is
+A personal knowledge vault — notes extracted from past Claude sessions, filed automatically.
+
+## When to call cb_recall
+{recall_instruction}
+- When the user mentions a project, technology, or topic they have worked on before
+- Mid-session when the conversation shifts to a new domain
+- When the user asks "what do I know about X?" or "have I done this before?"
+
+## When to call cb_file
+- When something durable is learned or decided during the session
+- When the user says "save this", "remember this", "file this"
+
+## When to call cb_read
+- When cb_recall surfaces a note you want to read in full
+- When the user names a specific note they want to retrieve
+
+## When to call cb_extract
+- Only when the user explicitly asks to process a transcript file
+
+## When to call cb_status
+- When the user asks about system health, index stats, or recent extraction runs
+
+## Tool selection
+| User intent | Tool |
+|---|---|
+| "Search my notes for X" | cb_recall |
+| "Read the note about Y" | cb_read |
+| "Save this" / "File this" | cb_file |
+| "Process this transcript" | cb_extract |
+| "Is everything healthy?" | cb_status |
+"""
+
+
+@mcp.resource("cyberbrain://guide")
+def cyberbrain_guide() -> str:
+    """Behavioral guide describing when and how to use each cyberbrain tool."""
+    config = _load_config()
+    proactive = config.get("proactive_recall", True)
+    if proactive:
+        recall_instruction = (
+            "Call `cb_recall` proactively when the user mentions a known domain. "
+            "Do not ask permission — just call it and integrate results naturally."
+        )
+    else:
+        recall_instruction = (
+            "When the user mentions a known domain, suggest calling `cb_recall` "
+            "and confirm with the user before proceeding."
+        )
+    return _build_guide(recall_instruction)
+
+
+# ---------------------------------------------------------------------------
+# Prompts
+# ---------------------------------------------------------------------------
+
+@mcp.prompt()
+def orient() -> list[dict]:
+    """
+    Load the cyberbrain usage guide at session start.
+    Select this at the beginning of a new conversation to establish vault behavior.
+    """
+    guide = cyberbrain_guide()
+    return [{
+        "role": "user",
+        "content": (
+            "I'm starting a new session. Here is my cyberbrain usage guide — "
+            "use this to govern how you interact with my knowledge vault throughout "
+            "this conversation.\n\n" + guide
+        ),
+    }]
+
+
+@mcp.prompt()
+def recall() -> list[dict]:
+    """
+    Scan the current conversation for unfamiliar topics and query the vault for each.
+    Select this mid-session when context has been lost or you want the model to catch up.
+    """
+    return [{
+        "role": "user",
+        "content": (
+            "Scan our current conversation for topics you are uncertain about or that "
+            "I may have prior context on in my knowledge vault. For each unfamiliar "
+            "topic, call cb_recall to check what I know. If uncertain whether something "
+            "is in the vault, check it — don't skip it. Summarize what you find and "
+            "integrate it into our conversation naturally."
+        ),
+    }]
 
 
 # ---------------------------------------------------------------------------

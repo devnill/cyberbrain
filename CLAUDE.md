@@ -115,7 +115,8 @@ Global config at `~/.claude/cyberbrain.json`:
   "autofile": false,
   "daily_journal": false,
   "journal_folder": "AI/Journal",
-  "journal_name": "%Y-%m-%d"
+  "journal_name": "%Y-%m-%d",
+  "proactive_recall": true
 }
 ```
 
