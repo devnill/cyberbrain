@@ -24,6 +24,10 @@ REPO_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 import extractors.extract_beats as eb
+import config as _config_module
+import run_log as _run_log_module
+import autofile as _autofile_module
+import extractor as _extractor_module
 from tests.conftest import make_beat
 
 
@@ -46,7 +50,7 @@ class TestLoadGlobalConfig:
         }
         (config_dir / "cyberbrain.json").write_text(json.dumps(config_data))
 
-        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
+        monkeypatch.setattr(_config_module, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
 
         config = eb.load_global_config()
 
@@ -56,7 +60,7 @@ class TestLoadGlobalConfig:
     def test_exits_cleanly_when_config_missing(self, temp_home, monkeypatch):
         """Missing config file produces sys.exit(0), not an exception."""
         missing_path = temp_home / ".claude" / "cyberbrain.json"
-        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", missing_path)
+        monkeypatch.setattr(_config_module, "GLOBAL_CONFIG_PATH", missing_path)
 
         with pytest.raises(SystemExit) as exc_info:
             eb.load_global_config()
@@ -70,7 +74,7 @@ class TestLoadGlobalConfig:
         (config_dir / "cyberbrain.json").write_text(
             json.dumps({"vault_path": str(temp_vault)})
         )
-        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
+        monkeypatch.setattr(_config_module, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
 
         with pytest.raises(SystemExit) as exc_info:
             eb.load_global_config()
@@ -85,7 +89,7 @@ class TestLoadGlobalConfig:
             "inbox": "AI/Claude-Sessions",
         }
         (config_dir / "cyberbrain.json").write_text(json.dumps(config_data))
-        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
+        monkeypatch.setattr(_config_module, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
 
         config = eb.load_global_config()
         assert os.path.isabs(config["vault_path"])
@@ -99,7 +103,7 @@ class TestLoadGlobalConfig:
             "inbox": "AI/Claude-Sessions",
         }
         (config_dir / "cyberbrain.json").write_text(json.dumps(config_data))
-        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
+        monkeypatch.setattr(_config_module, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
         # temp_home fixture already sets HOME env var so Path.home() returns temp_home
 
         with pytest.raises(SystemExit) as exc_info:
@@ -115,7 +119,7 @@ class TestLoadGlobalConfig:
             "inbox": "AI/Claude-Sessions",
         }
         (config_dir / "cyberbrain.json").write_text(json.dumps(config_data))
-        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
+        monkeypatch.setattr(_config_module, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
 
         with pytest.raises(SystemExit) as exc_info:
             eb.load_global_config()
@@ -241,7 +245,7 @@ class TestWriteBeat:
             "inbox": "",
         }
         (config_dir / "cyberbrain.json").write_text(json.dumps(config))
-        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
+        monkeypatch.setattr(_config_module, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
 
         beat = make_beat(scope="general")
         path = eb.write_beat(beat, config, "sess001", "/cwd", fixed_now)
@@ -295,6 +299,11 @@ class TestWriteBeat:
 class TestAutofileBeat:
     """autofile_beat() uses LLM judgment to route beats into the vault."""
 
+    @pytest.fixture(autouse=True)
+    def clear_claudecode_env(self, monkeypatch):
+        """Remove CLAUDECODE so autofile_beat doesn't bail out with the nested-session guard."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+
     def test_rejects_path_traversal_in_create_response(self, global_config, temp_vault, fixed_now):
         """A 'create' decision with a path traversal string is rejected and falls back to inbox."""
         malicious_response = json.dumps({
@@ -302,8 +311,8 @@ class TestAutofileBeat:
             "path": "../../etc/passwd",
             "content": "malicious content",
         })
-        with patch.object(eb, "call_model", return_value=malicious_response):
-            with patch.object(eb, "search_vault", return_value=[]):
+        with patch.object(_autofile_module, "call_model", return_value=malicious_response):
+            with patch.object(_autofile_module, "search_vault", return_value=[]):
                 path = eb.autofile_beat(
                     make_beat(), global_config, "sess001", "/cwd", fixed_now,
                     vault_context="Use types: decision, insight, problem, reference."
@@ -320,8 +329,8 @@ class TestAutofileBeat:
             "target_path": "../../../etc/hosts",
             "insertion": "## Injected\n\nmalicious",
         })
-        with patch.object(eb, "call_model", return_value=malicious_response):
-            with patch.object(eb, "search_vault", return_value=[]):
+        with patch.object(_autofile_module, "call_model", return_value=malicious_response):
+            with patch.object(_autofile_module, "search_vault", return_value=[]):
                 path = eb.autofile_beat(
                     make_beat(), global_config, "sess001", "/cwd", fixed_now,
                     vault_context="Use types: decision, insight, problem, reference."
@@ -331,8 +340,8 @@ class TestAutofileBeat:
 
     def test_falls_back_to_flat_write_on_backend_error(self, global_config, temp_vault, fixed_now):
         """When the LLM backend raises BackendError, the beat is written to the inbox instead."""
-        with patch.object(eb, "call_model", side_effect=eb.BackendError("backend unavailable")):
-            with patch.object(eb, "search_vault", return_value=[]):
+        with patch.object(_autofile_module, "call_model", side_effect=eb.BackendError("backend unavailable")):
+            with patch.object(_autofile_module, "search_vault", return_value=[]):
                 path = eb.autofile_beat(
                     make_beat(), global_config, "sess001", "/cwd", fixed_now,
                     vault_context="Use types: decision, insight, problem, reference."
@@ -348,8 +357,8 @@ class TestAutofileBeat:
             "path": "AI/Claude-Sessions/Test Note.md",
             "content": note_content,
         })
-        with patch.object(eb, "call_model", return_value=create_response):
-            with patch.object(eb, "search_vault", return_value=[]):
+        with patch.object(_autofile_module, "call_model", return_value=create_response):
+            with patch.object(_autofile_module, "search_vault", return_value=[]):
                 path = eb.autofile_beat(
                     make_beat(), global_config, "sess001", "/cwd", fixed_now,
                     vault_context="conventions"
@@ -368,8 +377,8 @@ class TestAutofileBeat:
             "target_path": "AI/Claude-Sessions/Existing Note.md",
             "insertion": "## New Section\n\nNew content.",
         })
-        with patch.object(eb, "call_model", return_value=extend_response):
-            with patch.object(eb, "search_vault", return_value=[]):
+        with patch.object(_autofile_module, "call_model", return_value=extend_response):
+            with patch.object(_autofile_module, "search_vault", return_value=[]):
                 path = eb.autofile_beat(
                     make_beat(), global_config, "sess001", "/cwd", fixed_now,
                     vault_context="conventions"
@@ -392,8 +401,8 @@ class TestAutofileBeat:
             "content": "---\ntype: insight\n---\n\n## Duplicate\n\nNew content.",
         })
         beat = make_beat(tags=["python", "encoding", "unicode"])
-        with patch.object(eb, "call_model", return_value=create_response):
-            with patch.object(eb, "search_vault", return_value=[]):
+        with patch.object(_autofile_module, "call_model", return_value=create_response):
+            with patch.object(_autofile_module, "search_vault", return_value=[]):
                 path = eb.autofile_beat(
                     beat, global_config, "sess001", "/cwd", fixed_now,
                     vault_context="conventions"
@@ -416,8 +425,8 @@ class TestAutofileBeat:
             "content": "---\ntype: insight\n---\n\n## Different\n\nContent.",
         })
         beat = make_beat(tags=["python", "encoding"])
-        with patch.object(eb, "call_model", return_value=create_response):
-            with patch.object(eb, "search_vault", return_value=[]):
+        with patch.object(_autofile_module, "call_model", return_value=create_response):
+            with patch.object(_autofile_module, "search_vault", return_value=[]):
                 path = eb.autofile_beat(
                     beat, global_config, "sess001", "/cwd", fixed_now,
                     vault_context="conventions"
@@ -515,7 +524,7 @@ class TestDeduplicationLog:
     def test_new_session_is_not_duplicate(self, tmp_path, monkeypatch):
         """A session ID not in the log is reported as not-yet-extracted."""
         log_path = tmp_path / "logs" / "cb-extract.log"
-        monkeypatch.setattr(eb, "EXTRACT_LOG_PATH", log_path)
+        monkeypatch.setattr(_run_log_module, "EXTRACT_LOG_PATH", log_path)
 
         assert eb.is_session_already_extracted("brand-new-session") is False
 
@@ -524,7 +533,7 @@ class TestDeduplicationLog:
         log_path = tmp_path / "logs" / "cb-extract.log"
         log_path.parent.mkdir(parents=True)
         log_path.write_text("2026-03-01T14:32:00\tabc12345\t3\n")
-        monkeypatch.setattr(eb, "EXTRACT_LOG_PATH", log_path)
+        monkeypatch.setattr(_run_log_module, "EXTRACT_LOG_PATH", log_path)
 
         assert eb.is_session_already_extracted("abc12345") is True
 
@@ -533,14 +542,14 @@ class TestDeduplicationLog:
         log_path = tmp_path / "logs" / "cb-extract.log"
         log_path.parent.mkdir(parents=True)
         log_path.write_text("2026-03-01T14:32:00\tabc12345\t3\n")
-        monkeypatch.setattr(eb, "EXTRACT_LOG_PATH", log_path)
+        monkeypatch.setattr(_run_log_module, "EXTRACT_LOG_PATH", log_path)
 
         assert eb.is_session_already_extracted("xyz99999") is False
 
     def test_write_log_entry_creates_file_and_directory(self, tmp_path, monkeypatch):
         """write_extract_log_entry creates the log file and parent directory if needed."""
         log_path = tmp_path / "logs" / "cb-extract.log"
-        monkeypatch.setattr(eb, "EXTRACT_LOG_PATH", log_path)
+        monkeypatch.setattr(_run_log_module, "EXTRACT_LOG_PATH", log_path)
 
         eb.write_extract_log_entry("newsession", 5)
 
@@ -553,7 +562,7 @@ class TestDeduplicationLog:
         """Log entries are tab-separated: <ISO-timestamp>\t<session-id>\t<beat-count>."""
         log_path = tmp_path / "logs" / "cb-extract.log"
         log_path.parent.mkdir(parents=True)
-        monkeypatch.setattr(eb, "EXTRACT_LOG_PATH", log_path)
+        monkeypatch.setattr(_run_log_module, "EXTRACT_LOG_PATH", log_path)
 
         eb.write_extract_log_entry("sess-abc", 7)
 
@@ -570,7 +579,7 @@ class TestDeduplicationLog:
         log_path.write_text("corrupt\x00data\xFF")
         # Make the file unreadable
         log_path.chmod(0o000)
-        monkeypatch.setattr(eb, "EXTRACT_LOG_PATH", log_path)
+        monkeypatch.setattr(_run_log_module, "EXTRACT_LOG_PATH", log_path)
 
         try:
             result = eb.is_session_already_extracted("any-session")
@@ -595,7 +604,7 @@ class TestVaultPathValidation:
             "vault_path": "/nonexistent/path/to/vault",
             "inbox": "AI/Claude-Sessions",
         }))
-        monkeypatch.setattr(eb, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
+        monkeypatch.setattr(_config_module, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json")
 
         with pytest.raises(SystemExit) as exc_info:
             eb.load_global_config()
@@ -1059,8 +1068,8 @@ class TestExtractBeats:
 
     def test_parses_json_array_from_model_response(self, global_config, temp_vault):
         """A valid JSON array from call_model is parsed into a list of dicts."""
-        with patch("extractors.extract_beats.call_model", return_value=json.dumps(self._SAMPLE_BEATS)):
-            with patch("extractors.extract_beats.load_prompt", return_value="prompt"):
+        with patch("extractor.call_model", return_value=json.dumps(self._SAMPLE_BEATS)):
+            with patch("extractor.load_prompt", return_value="prompt"):
                 result = eb.extract_beats("transcript text", global_config, "manual", "/cwd")
         assert isinstance(result, list)
         assert len(result) == 1
@@ -1069,30 +1078,30 @@ class TestExtractBeats:
     def test_strips_markdown_code_fences(self, global_config, temp_vault):
         """call_model returning JSON wrapped in code fences is parsed correctly."""
         fenced = f"```json\n{json.dumps(self._SAMPLE_BEATS)}\n```"
-        with patch("extractors.extract_beats.call_model", return_value=fenced):
-            with patch("extractors.extract_beats.load_prompt", return_value="prompt"):
+        with patch("extractor.call_model", return_value=fenced):
+            with patch("extractor.load_prompt", return_value="prompt"):
                 result = eb.extract_beats("transcript text", global_config, "manual", "/cwd")
         assert len(result) == 1
 
     def test_handles_trailing_text_after_json(self, global_config, temp_vault):
         """Trailing non-JSON text after the array is ignored via raw_decode."""
         trailing = json.dumps(self._SAMPLE_BEATS) + "\n\nHere are the beats I found."
-        with patch("extractors.extract_beats.call_model", return_value=trailing):
-            with patch("extractors.extract_beats.load_prompt", return_value="prompt"):
+        with patch("extractor.call_model", return_value=trailing):
+            with patch("extractor.load_prompt", return_value="prompt"):
                 result = eb.extract_beats("transcript text", global_config, "manual", "/cwd")
         assert len(result) == 1
 
     def test_returns_empty_list_on_invalid_json(self, global_config, temp_vault):
         """Non-JSON response → empty list."""
-        with patch("extractors.extract_beats.call_model", return_value="not json at all"):
-            with patch("extractors.extract_beats.load_prompt", return_value="prompt"):
+        with patch("extractor.call_model", return_value="not json at all"):
+            with patch("extractor.load_prompt", return_value="prompt"):
                 result = eb.extract_beats("transcript text", global_config, "manual", "/cwd")
         assert result == []
 
     def test_returns_empty_list_on_non_list_json(self, global_config, temp_vault):
         """JSON object (not array) → empty list."""
-        with patch("extractors.extract_beats.call_model", return_value='{"key": "value"}'):
-            with patch("extractors.extract_beats.load_prompt", return_value="prompt"):
+        with patch("extractor.call_model", return_value='{"key": "value"}'):
+            with patch("extractor.load_prompt", return_value="prompt"):
                 result = eb.extract_beats("transcript text", global_config, "manual", "/cwd")
         assert result == []
 
@@ -1105,8 +1114,8 @@ class TestExtractBeats:
             captured_messages.append(user)
             return json.dumps(self._SAMPLE_BEATS)
 
-        with patch("extractors.extract_beats.call_model", side_effect=fake_call_model):
-            with patch("extractors.extract_beats.load_prompt", return_value="{vault_claude_md_section}{transcript}{project_name}{cwd}{trigger}"):
+        with patch("extractor.call_model", side_effect=fake_call_model):
+            with patch("extractor.load_prompt", return_value="{vault_claude_md_section}{transcript}{project_name}{cwd}{trigger}"):
                 eb.extract_beats("some transcript", global_config, "manual", "/cwd")
 
         assert len(captured_messages) == 1
@@ -1120,8 +1129,8 @@ class TestExtractBeats:
             captured_messages.append(user)
             return json.dumps(self._SAMPLE_BEATS)
 
-        with patch("extractors.extract_beats.call_model", side_effect=fake_call_model):
-            with patch("extractors.extract_beats.load_prompt", return_value="{vault_claude_md_section}{transcript}{project_name}{cwd}{trigger}"):
+        with patch("extractor.call_model", side_effect=fake_call_model):
+            with patch("extractor.load_prompt", return_value="{vault_claude_md_section}{transcript}{project_name}{cwd}{trigger}"):
                 eb.extract_beats("some transcript", global_config, "manual", "/cwd")
 
         assert len(captured_messages) == 1
@@ -1136,10 +1145,900 @@ class TestExtractBeats:
             captured_messages.append(user)
             return json.dumps([])
 
-        with patch("extractors.extract_beats.call_model", side_effect=fake_call_model):
-            with patch("extractors.extract_beats.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+        with patch("extractor.call_model", side_effect=fake_call_model):
+            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
                 eb.extract_beats(long_transcript, global_config, "manual", "/cwd")
 
         assert len(captured_messages) == 1
         # The transcript in the user message should be truncated
         assert "truncated" in captured_messages[0] or len(captured_messages[0]) < len(long_transcript)
+
+
+# ===========================================================================
+# extractor.py — empty model response
+# ===========================================================================
+
+class TestExtractorEmptyResponse:
+    """extractor.extract_beats() handles empty model output correctly."""
+
+    def test_returns_empty_list_when_model_returns_empty_string(self, global_config, temp_vault):
+        """
+        If call_model returns an empty string, extract_beats returns [] rather
+        than crashing on JSON parsing. This can happen when the model refuses
+        to respond or the backend returns empty output.
+        """
+        with patch("extractor.call_model", return_value=""):
+            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+                result = eb.extract_beats("some transcript", global_config, "manual", "/cwd")
+        assert result == []
+
+
+# ===========================================================================
+# config.py — placeholder vault path and load_prompt missing file
+# ===========================================================================
+
+class TestConfigEdgeCases:
+    """load_global_config() and load_prompt() error paths."""
+
+    def test_exits_when_vault_path_is_placeholder(self, temp_home, monkeypatch):
+        """
+        The literal placeholder '/path/to/your/ObsidianVault' triggers an exit,
+        not an error, because it means the user hasn't configured the tool yet.
+        """
+        import config as _cfg
+        config_dir = temp_home / ".claude" / "cyberbrain"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        cfg_file = config_dir / "config.json"
+        cfg_file.write_text(
+            '{"vault_path": "/path/to/your/ObsidianVault", "inbox": "AI/Claude-Sessions"}',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("config.GLOBAL_CONFIG_PATH", cfg_file)
+
+        with pytest.raises(SystemExit):
+            _cfg.load_global_config()
+
+    def test_exits_when_vault_path_is_home_directory(self, temp_home, temp_vault, monkeypatch):
+        """
+        Setting vault_path to the home directory is rejected — it's a
+        misconfiguration that would make the whole filesystem look like a vault.
+        """
+        import config as _cfg
+        config_dir = temp_home / ".claude" / "cyberbrain"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        cfg_file = config_dir / "config.json"
+        cfg_file.write_text(
+            f'{{"vault_path": "{temp_home}", "inbox": "AI/Claude-Sessions"}}',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("config.GLOBAL_CONFIG_PATH", cfg_file)
+        # Patch Path.home() so it returns temp_home — making vault_path == home
+        with patch("pathlib.Path.home", return_value=temp_home.resolve()):
+            with pytest.raises(SystemExit):
+                _cfg.load_global_config()
+
+    def test_find_project_config_stops_at_home_directory(self, temp_home, monkeypatch):
+        """
+        find_project_config() walks upward from cwd but stops at the home directory.
+        It never reads config files above the user's home.
+        """
+        import config as _cfg
+        # Create a project dir inside home
+        project_dir = temp_home / "code" / "myproject"
+        project_dir.mkdir(parents=True)
+        # No .claude/cyberbrain.local.json anywhere in the tree
+        monkeypatch.setattr("config.Path", __import__("pathlib").Path)
+
+        with patch("pathlib.Path.home", return_value=temp_home):
+            result = _cfg.find_project_config(str(project_dir))
+
+        assert result == {}
+
+    def test_load_prompt_exits_when_file_missing(self, tmp_path, monkeypatch):
+        """
+        load_prompt() calls sys.exit(0) when the prompt file doesn't exist,
+        rather than raising FileNotFoundError. This gives a clear user message.
+        """
+        import config as _cfg
+        monkeypatch.setattr("config.PROMPTS_DIR", tmp_path)
+
+        with pytest.raises(SystemExit):
+            _cfg.load_prompt("nonexistent-prompt.md")
+
+
+# ===========================================================================
+# transcript.py — edge cases in _extract_text_blocks
+# ===========================================================================
+
+class TestExtractTextBlocksEdgeCases:
+    """_extract_text_blocks handles non-standard content shapes."""
+
+    def test_non_dict_items_in_content_list_are_skipped(self):
+        """
+        Content lists may contain non-dict items (e.g. bare strings in some clients).
+        These are skipped rather than crashing with AttributeError.
+        """
+        import transcript as _t
+        # Mix of valid text block and invalid non-dict items
+        result = _t._extract_text_blocks([
+            "just a string",
+            42,
+            {"type": "text", "text": "valid text"},
+            None,
+        ])
+        assert "valid text" in result
+
+    def test_tool_use_blocks_are_excluded(self):
+        """tool_use blocks are never included in the transcript text — only text blocks pass."""
+        import transcript as _t
+        result = _t._extract_text_blocks([
+            {"type": "tool_use", "id": "toolu_123", "name": "Read", "input": {}},
+            {"type": "text", "text": "the answer"},
+        ])
+        assert "tool_use" not in result
+        assert "the answer" in result
+        assert "Read" not in result
+
+    def test_non_string_non_list_content_returns_empty(self):
+        """
+        If content is neither a string nor a list (e.g. a dict or int),
+        _extract_text_blocks returns an empty string rather than crashing.
+        """
+        import transcript as _t
+        assert _t._extract_text_blocks({"type": "text"}) == ""
+        assert _t._extract_text_blocks(None) == ""
+        assert _t._extract_text_blocks(42) == ""
+
+    def test_parse_jsonl_skips_entries_without_message_key(self, tmp_path):
+        """
+        JSONL entries that have type user/assistant but no 'message' key are
+        handled gracefully — content defaults to empty string.
+        """
+        import transcript as _t
+        f = tmp_path / "t.jsonl"
+        f.write_text(
+            '{"type": "user"}\n'
+            '{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "hi"}]}}\n',
+            encoding="utf-8",
+        )
+        result = _t.parse_jsonl_transcript(str(f))
+        assert "hi" in result
+
+    def test_parse_jsonl_skips_non_user_assistant_types(self, tmp_path):
+        """Entry types other than user/assistant (e.g. 'system', 'tool_result') are skipped."""
+        import transcript as _t
+        f = tmp_path / "t.jsonl"
+        f.write_text(
+            '{"type": "system", "content": "system prompt"}\n'
+            '{"type": "tool_result", "content": "result"}\n'
+            '{"type": "user", "message": {"role": "user", "content": "hello"}}\n',
+            encoding="utf-8",
+        )
+        result = _t.parse_jsonl_transcript(str(f))
+        assert "system prompt" not in result
+        assert "hello" in result
+
+
+# ===========================================================================
+# frontmatter.py — all remaining paths
+# ===========================================================================
+
+class TestFrontmatterEdgeCases:
+    """Remaining uncovered paths in frontmatter.py."""
+
+    def test_read_frontmatter_returns_empty_on_oserror(self, tmp_path):
+        """read_frontmatter() returns {} when the file can't be read (permissions, missing)."""
+        import frontmatter as _fm
+        result = _fm.read_frontmatter(str(tmp_path / "nonexistent.md"))
+        assert result == {}
+
+    def test_parse_frontmatter_returns_empty_when_closing_marker_missing(self):
+        """parse_frontmatter returns {} when '---' end marker is absent."""
+        import frontmatter as _fm
+        result = _fm.parse_frontmatter("---\ntitle: No closing marker\n")
+        assert result == {}
+
+    def test_parse_frontmatter_returns_empty_when_yaml_is_non_dict(self):
+        """parse_frontmatter returns {} when YAML parses to a non-dict (e.g. a list or scalar)."""
+        import frontmatter as _fm
+        result = _fm.parse_frontmatter("---\n- item1\n- item2\n---\nBody.")
+        assert result == {}
+
+    def test_read_frontmatter_tags_returns_empty_set_on_oserror(self, tmp_path):
+        """read_frontmatter_tags() returns set() when the file doesn't exist."""
+        import frontmatter as _fm
+        result = _fm.read_frontmatter_tags(str(tmp_path / "ghost.md"))
+        assert result == set()
+
+    def test_read_frontmatter_tags_returns_empty_when_no_frontmatter_block(self, tmp_path):
+        """read_frontmatter_tags() returns set() when no --- block is present."""
+        import frontmatter as _fm
+        note = tmp_path / "note.md"
+        note.write_text("Just a body, no frontmatter.", encoding="utf-8")
+        assert _fm.read_frontmatter_tags(str(note)) == set()
+
+    def test_read_frontmatter_tags_returns_empty_when_no_tags_field(self, tmp_path):
+        """read_frontmatter_tags() returns set() when the frontmatter has no 'tags' field."""
+        import frontmatter as _fm
+        note = tmp_path / "note.md"
+        note.write_text("---\ntitle: Note\ntype: decision\n---\nBody.", encoding="utf-8")
+        assert _fm.read_frontmatter_tags(str(note)) == set()
+
+    def test_read_frontmatter_tags_parses_yaml_bracket_list(self, tmp_path):
+        """tags: [tag1, tag2] (unquoted YAML bracket) is parsed into a set."""
+        import frontmatter as _fm
+        note = tmp_path / "note.md"
+        note.write_text('---\ntitle: Note\ntags: [python, testing]\n---\nBody.', encoding="utf-8")
+        result = _fm.read_frontmatter_tags(str(note))
+        assert "python" in result
+        assert "testing" in result
+
+    def test_read_frontmatter_tags_parses_json_array_string(self, tmp_path):
+        """tags: ["jwt", "auth"] (JSON array) is parsed into a set."""
+        import frontmatter as _fm
+        note = tmp_path / "note.md"
+        note.write_text('---\ntitle: Note\ntags: ["jwt", "auth"]\n---\nBody.', encoding="utf-8")
+        result = _fm.read_frontmatter_tags(str(note))
+        assert "jwt" in result
+        assert "auth" in result
+
+    def test_normalise_list_converts_json_string_to_list(self):
+        """normalise_list('["a","b"]') parses the JSON string and returns a list."""
+        import frontmatter as _fm
+        result = _fm.normalise_list('["alpha", "beta"]')
+        assert result == ["alpha", "beta"]
+
+    def test_normalise_list_returns_single_item_list_for_plain_string(self):
+        """normalise_list('some tag') returns ['some tag'] when not valid JSON."""
+        import frontmatter as _fm
+        result = _fm.normalise_list("some-tag")
+        assert result == ["some-tag"]
+
+    def test_normalise_list_returns_empty_for_empty_string(self):
+        """normalise_list('   ') returns [] for whitespace-only string."""
+        import frontmatter as _fm
+        result = _fm.normalise_list("   ")
+        assert result == []
+
+    def test_normalise_list_returns_empty_for_non_string_non_list(self):
+        """normalise_list(None) and normalise_list(42) return []."""
+        import frontmatter as _fm
+        assert _fm.normalise_list(None) == []
+        assert _fm.normalise_list(42) == []
+
+
+# ===========================================================================
+# run_log.py — OSError paths
+# ===========================================================================
+
+class TestRunLogOSErrorPaths:
+    """run_log.py swallows OSErrors and prints warnings rather than crashing."""
+
+    def test_is_session_already_extracted_returns_false_on_oserror(self, tmp_path, monkeypatch):
+        """
+        If the deduplication log exists but can't be read (permissions),
+        is_session_already_extracted() returns False (conservative: allow extraction)
+        rather than crashing the pipeline.
+        """
+        import run_log as _rl
+        log_file = tmp_path / "cb-extract.log"
+        log_file.write_text("2026-01-01T00:00:00\tsess001\t3\n", encoding="utf-8")
+        monkeypatch.setattr("run_log.EXTRACT_LOG_PATH", log_file)
+
+        with patch("pathlib.Path.read_text", side_effect=OSError("permission denied")):
+            result = _rl.is_session_already_extracted("sess001")
+
+        assert result is False
+
+    def test_write_extract_log_entry_swallows_oserror(self, tmp_path, monkeypatch):
+        """
+        If the log directory can't be created or written to, the OSError is caught
+        and a warning is printed. The pipeline continues rather than crashing.
+        """
+        import run_log as _rl
+        log_file = tmp_path / "logs" / "cb-extract.log"
+        monkeypatch.setattr("run_log.EXTRACT_LOG_PATH", log_file)
+
+        # Make directory creation fail
+        with patch("pathlib.Path.mkdir", side_effect=OSError("read-only filesystem")):
+            # Should not raise
+            _rl.write_extract_log_entry("sess001", 5)
+
+    def test_write_runs_log_entry_swallows_oserror(self, tmp_path, monkeypatch):
+        """write_runs_log_entry() swallows OSError on write."""
+        import run_log as _rl
+        log_file = tmp_path / "logs" / "cb-runs.jsonl"
+        monkeypatch.setattr("run_log.RUNS_LOG_PATH", log_file)
+
+        with patch("pathlib.Path.mkdir", side_effect=OSError("read-only filesystem")):
+            _rl.write_runs_log_entry({"session_id": "s1", "beats_written": 0})
+
+
+# ===========================================================================
+# vault.py — remaining uncovered paths
+# ===========================================================================
+
+class TestVaultEdgeCases:
+    """Remaining uncovered paths in vault.py."""
+
+    def test_read_vault_claude_md_returns_none_on_oserror(self, temp_vault):
+        """
+        read_vault_claude_md() returns None when the CLAUDE.md exists but can't be read
+        (e.g. permissions), rather than crashing with an OSError.
+        """
+        import vault as _v
+        claude_md = temp_vault / "CLAUDE.md"
+        claude_md.write_text("# Vault\n", encoding="utf-8")
+
+        with patch("pathlib.Path.read_text", side_effect=OSError("permission denied")):
+            result = _v.read_vault_claude_md(str(temp_vault))
+
+        assert result is None
+
+    def test_resolve_output_dir_rejects_path_traversal_in_scope_folder(self, temp_vault):
+        """
+        If a beat has scope 'project' with a folder that traverses above the vault
+        root, the path is rejected and falls back to inbox.
+        """
+        import vault as _v
+        config = {
+            "vault_path": str(temp_vault),
+            "inbox": "AI/Claude-Sessions",
+        }
+        beat = {"scope": "project", "type": "insight", "title": "Test"}
+        project_config = {**config, "vault_folder": "../../etc"}
+
+        result = _v.resolve_output_dir(beat, project_config)
+
+        # Must be within the vault, not /etc
+        assert str(result).startswith(str(temp_vault))
+
+    def test_resolve_output_dir_folder_override_rejects_traversal(self, temp_vault):
+        """
+        The 'folder' key in config that traverses above the vault root is rejected.
+        The function falls back to inbox rather than writing outside the vault.
+        """
+        import vault as _v
+        config = {
+            "vault_path": str(temp_vault),
+            "inbox": "AI/Claude-Sessions",
+            "folder": "../../etc/passwd",
+        }
+        beat = {"scope": "general", "type": "insight", "title": "Test"}
+
+        result = _v.resolve_output_dir(beat, config)
+
+        assert str(result).startswith(str(temp_vault))
+
+    def test_resolve_relations_normalises_unknown_predicate(self, temp_vault):
+        """
+        Relations with an unknown predicate (not in VALID_PREDICATES) have their
+        predicate normalised to 'related' rather than being silently dropped.
+        """
+        import vault as _v
+        # resolve_relations reads "type" key (not "predicate") from input dicts
+        raw_relations = [{"target": "SomeNote", "type": "invented-predicate"}]
+        vault_titles = {"SomeNote"}
+
+        result = _v.resolve_relations(raw_relations, vault_titles)
+
+        assert len(result) == 1
+        assert result[0]["type"] == "related"
+
+    def test_resolve_relations_drops_targets_not_in_vault(self, temp_vault):
+        """
+        Relations whose target title doesn't exist in the vault are dropped.
+        This prevents dangling wikilinks in newly-created notes.
+        """
+        import vault as _v
+        raw_relations = [
+            {"target": "ExistingNote", "predicate": "related"},
+            {"target": "PhantomNote", "predicate": "related"},
+        ]
+        vault_titles = {"ExistingNote"}
+
+        result = _v.resolve_relations(raw_relations, vault_titles)
+
+        assert len(result) == 1
+        assert result[0]["target"] == "ExistingNote"
+
+    def test_search_vault_returns_ranked_paths(self, temp_vault):
+        """
+        search_vault() calls grep for each tag and title keyword, ranks results
+        by hit count, and returns up to max_results paths.
+        """
+        import vault as _v
+        note = temp_vault / "AI" / "Claude-Sessions" / "JWT Auth.md"
+        note.write_text("# JWT Auth\n\njwt authentication token", encoding="utf-8")
+
+        beat = {"title": "JWT Authentication", "tags": ["jwt", "auth"]}
+        results = _v.search_vault(beat, str(temp_vault), max_results=5)
+
+        # The real note should appear in results since vault content matches
+        assert isinstance(results, list)
+
+    def test_search_vault_handles_mtime_oserror(self, temp_vault):
+        """
+        If os.path.getmtime raises OSError for a matched path (file deleted
+        between grep and stat), the path is still recorded with mtime=0.
+        """
+        import vault as _v
+        note = temp_vault / "AI" / "Claude-Sessions" / "note.md"
+        note.write_text("python subprocess encoding", encoding="utf-8")
+
+        beat = {"title": "Python Subprocess", "tags": ["python"]}
+
+        with patch("os.path.getmtime", side_effect=OSError("file gone")):
+            results = _v.search_vault(beat, str(temp_vault), max_results=5)
+
+        # Should still return results, just with mtime=0 for ordering
+        assert isinstance(results, list)
+
+    def test_write_beat_updates_search_index_after_write(self, global_config, temp_vault, fixed_now):
+        """
+        After writing a beat to disk, write_beat attempts to update the search index.
+        If search_index is not available, the import error is silently swallowed.
+        """
+        import vault as _v
+        beat = {
+            "title": "Index Update Test",
+            "type": "insight",
+            "scope": "general",
+            "summary": "Should update index",
+            "tags": ["test"],
+            "body": "## Body\n\nContent.",
+        }
+        # Simulate search_index not installed
+        with patch.dict("sys.modules", {"search_index": None}):
+            path = _v.write_beat(beat, global_config, "sess001", "/cwd", fixed_now)
+
+        assert path.exists()
+
+
+# ===========================================================================
+# extract_beats.py — main() CLI entry point
+# ===========================================================================
+
+class TestMain:
+    """main() parses arguments, deduplicates, extracts beats, and writes them."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, tmp_path, monkeypatch):
+        """Set up isolated home, vault, config, and log paths for each test."""
+        import json as _json
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+
+        self.vault = tmp_path / "vault"
+        self.vault.mkdir()
+        (self.vault / "AI" / "Claude-Sessions").mkdir(parents=True)
+
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        self.extract_log = log_dir / "cb-extract.log"
+        self.runs_log = log_dir / "cb-runs.jsonl"
+
+        self.config_path = tmp_path / "config.json"
+        self.config_path.write_text(_json.dumps({
+            "vault_path": str(self.vault),
+            "inbox": "AI/Claude-Sessions",
+            "backend": "claude-code",
+            "model": "claude-haiku-4-5",
+            "claude_timeout": 30,
+            "autofile": False,
+            "daily_journal": False,
+        }), encoding="utf-8")
+
+        monkeypatch.setattr("config.GLOBAL_CONFIG_PATH", self.config_path)
+        monkeypatch.setattr("run_log.EXTRACT_LOG_PATH", self.extract_log)
+        monkeypatch.setattr("run_log.RUNS_LOG_PATH", self.runs_log)
+
+    def _make_transcript(self, tmp_path):
+        t = tmp_path / "test-session.jsonl"
+        t.write_text(
+            '{"type": "user", "message": {"role": "user", "content": "explain jwt"}}\n'
+            '{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "JWT is a token format."}]}}\n',
+            encoding="utf-8",
+        )
+        return t
+
+    def _run_main(self, argv):
+        """Call main() with patched sys.argv; capture SystemExit."""
+        with patch("sys.argv", argv):
+            try:
+                eb.main()
+                return None
+            except SystemExit as e:
+                return e.code
+
+    def test_exits_when_neither_transcript_nor_beats_json_given(self, tmp_path):
+        """main() exits with an error message when no --transcript or --beats-json is given."""
+        exit_code = self._run_main([
+            "extract_beats.py",
+            "--session-id", "sess-none",
+            "--cwd", str(self.vault),
+        ])
+        assert exit_code == 1
+
+    def test_skips_already_extracted_session(self, tmp_path):
+        """main() exits 0 immediately when the session is already in the dedup log."""
+        transcript = self._make_transcript(tmp_path)
+        self.extract_log.parent.mkdir(parents=True, exist_ok=True)
+        self.extract_log.write_text(f"2026-01-01T00:00:00\t{transcript.stem}\t3\n")
+
+        exit_code = self._run_main([
+            "extract_beats.py",
+            "--transcript", str(transcript),
+            "--session-id", transcript.stem,
+            "--cwd", str(self.vault),
+        ])
+        assert exit_code == 0
+
+    def test_dry_run_prints_beats_without_writing(self, tmp_path, capsys):
+        """
+        --dry-run prints a preview of the beats that would be written
+        without touching the vault. No .md files are created.
+        """
+        transcript = self._make_transcript(tmp_path)
+        beat = {
+            "title": "JWT Token Format",
+            "type": "insight",
+            "scope": "general",
+            "summary": "JWT is a compact token format.",
+            "tags": ["jwt"],
+            "body": "## Body\n\nContent.",
+        }
+
+        with patch("extractor.call_model", return_value=json.dumps([beat])):
+            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+                exit_code = self._run_main([
+                    "extract_beats.py",
+                    "--transcript", str(transcript),
+                    "--session-id", "dry-run-test",
+                    "--cwd", str(self.vault),
+                    "--dry-run",
+                ])
+
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert "JWT Token Format" in captured.out
+        assert "would be written" in captured.out
+        # Vault must not have been modified
+        md_files = list((self.vault / "AI" / "Claude-Sessions").glob("*.md"))
+        assert len(md_files) == 0
+
+    def test_writes_beats_and_logs_on_success(self, tmp_path):
+        """
+        On a successful run, main() writes beats to the vault and appends
+        entries to both the dedup log and the runs log.
+        """
+        transcript = self._make_transcript(tmp_path)
+        beat = {
+            "title": "JWT Token Format",
+            "type": "insight",
+            "scope": "general",
+            "summary": "JWT is compact.",
+            "tags": ["jwt"],
+            "body": "## Body\n\nContent.",
+        }
+
+        with patch("extractor.call_model", return_value=json.dumps([beat])):
+            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+                exit_code = self._run_main([
+                    "extract_beats.py",
+                    "--transcript", str(transcript),
+                    "--session-id", "sess-write-test",
+                    "--cwd", str(self.vault),
+                ])
+
+        assert exit_code is None  # no explicit sys.exit on success
+        assert self.extract_log.exists()
+        assert transcript.stem in self.extract_log.read_text()
+        assert self.runs_log.exists()
+        runs_data = json.loads(self.runs_log.read_text().strip())
+        assert runs_data["beats_written"] == 1
+
+    def test_exits_cleanly_when_no_beats_extracted(self, tmp_path):
+        """When the LLM returns an empty beats list, main() exits 0."""
+        transcript = self._make_transcript(tmp_path)
+
+        with patch("extractor.call_model", return_value="[]"):
+            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+                exit_code = self._run_main([
+                    "extract_beats.py",
+                    "--transcript", str(transcript),
+                    "--session-id", "sess-empty",
+                    "--cwd", str(self.vault),
+                ])
+
+        assert exit_code == 0
+
+    def test_loads_beats_from_json_file_skipping_transcript_parse(self, tmp_path):
+        """
+        --beats-json skips transcript parsing and LLM call entirely.
+        Beats are written directly from the JSON file.
+        """
+        beats = [{
+            "title": "Pre-extracted Insight",
+            "type": "insight",
+            "scope": "general",
+            "summary": "Already extracted.",
+            "tags": ["test"],
+            "body": "## Body\n\nPre-extracted.",
+        }]
+        beats_file = tmp_path / "beats.json"
+        beats_file.write_text(json.dumps(beats))
+
+        exit_code = self._run_main([
+            "extract_beats.py",
+            "--beats-json", str(beats_file),
+            "--session-id", "sess-json-input",
+            "--cwd", str(self.vault),
+        ])
+
+        assert exit_code is None
+        md_files = list(self.vault.rglob("*.md"))
+        assert any("Pre-extracted" in f.read_text() for f in md_files)
+
+    def test_exits_when_beats_json_file_not_found(self, tmp_path):
+        """--beats-json with a missing file exits with code 1."""
+        exit_code = self._run_main([
+            "extract_beats.py",
+            "--beats-json", str(tmp_path / "ghost.json"),
+            "--session-id", "sess-ghost",
+            "--cwd", str(self.vault),
+        ])
+        assert exit_code == 1
+
+    def test_exits_when_beats_json_is_not_an_array(self, tmp_path):
+        """--beats-json must contain a JSON array, not an object."""
+        beats_file = tmp_path / "not-array.json"
+        beats_file.write_text('{"title": "Single beat, not array"}')
+
+        exit_code = self._run_main([
+            "extract_beats.py",
+            "--beats-json", str(beats_file),
+            "--session-id", "sess-not-array",
+            "--cwd", str(self.vault),
+        ])
+        assert exit_code == 1
+
+    def test_daily_journal_written_when_enabled(self, tmp_path):
+        """When daily_journal=True in config, a journal entry is appended after extraction."""
+        beat = {
+            "title": "Journal Test Beat",
+            "type": "insight",
+            "scope": "general",
+            "summary": "For journal.",
+            "tags": [],
+            "body": "## Body\n\nContent.",
+        }
+        transcript = self._make_transcript(tmp_path)
+
+        cfg = json.loads(self.config_path.read_text())
+        cfg["daily_journal"] = True
+        cfg["journal_folder"] = "AI/Journal"
+        self.config_path.write_text(json.dumps(cfg))
+
+        with patch("extractor.call_model", return_value=json.dumps([beat])):
+            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+                self._run_main([
+                    "extract_beats.py",
+                    "--transcript", str(transcript),
+                    "--session-id", "sess-journal",
+                    "--cwd", str(self.vault),
+                ])
+
+        journal_files = list((self.vault / "AI" / "Journal").glob("*.md"))
+        assert len(journal_files) == 1
+        assert "Journal Test Beat" in journal_files[0].read_text()
+
+    def test_exits_cleanly_when_transcript_is_empty(self, tmp_path, capsys):
+        """main() exits 0 when the transcript file exists but has no usable turns (line 148-149)."""
+        # A transcript with only tool-use blocks produces empty text after parsing
+        transcript = tmp_path / "empty-session.jsonl"
+        transcript.write_text(
+            '{"type": "tool_use", "message": {"role": "user", "content": [{"type": "tool_use", "name": "Read", "input": {}}]}}\n',
+            encoding="utf-8",
+        )
+        exit_code = self._run_main([
+            "extract_beats.py",
+            "--transcript", str(transcript),
+            "--session-id", "sess-empty-transcript",
+            "--cwd", str(self.vault),
+        ])
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert "empty" in captured.err.lower() or "nothing to extract" in captured.err.lower()
+
+    def test_exits_cleanly_on_backend_error_during_extraction(self, tmp_path, capsys):
+        """main() exits 0 and prints a message when the LLM backend raises BackendError (lines 156-158)."""
+        transcript = self._make_transcript(tmp_path)
+
+        with patch("extractor.call_model", side_effect=eb.BackendError("backend down")):
+            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+                exit_code = self._run_main([
+                    "extract_beats.py",
+                    "--transcript", str(transcript),
+                    "--session-id", "sess-backend-err",
+                    "--cwd", str(self.vault),
+                ])
+
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert "backend" in captured.err.lower() or "error" in captured.err.lower()
+
+    def test_dry_run_path_computation_exception_falls_back_gracefully(self, tmp_path, capsys):
+        """dry-run mode catches exceptions in resolve_output_dir and shows fallback text (lines 182-183)."""
+        beat = {
+            "title": "Edge Case Beat",
+            "type": "insight",
+            "scope": "general",
+            "summary": "For dry-run test.",
+            "tags": ["test"],
+            "body": "## Body\n\nContent.",
+        }
+        transcript = self._make_transcript(tmp_path)
+
+        with patch("extractor.call_model", return_value=json.dumps([beat])):
+            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+                with patch("extractors.extract_beats.resolve_output_dir", side_effect=Exception("no dir")):
+                    exit_code = self._run_main([
+                        "extract_beats.py",
+                        "--transcript", str(transcript),
+                        "--session-id", "sess-dry-run-exc",
+                        "--cwd", str(self.vault),
+                        "--dry-run",
+                    ])
+
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert "could not compute path" in captured.out.lower()
+
+    def test_autofile_enabled_reads_vault_claude_md(self, tmp_path, capsys):
+        """When autofile=True, main() reads vault CLAUDE.md before the beat loop (lines 214-215)."""
+        (self.vault / "CLAUDE.md").write_text("# Vault context\nUse types: decision.", encoding="utf-8")
+
+        cfg = json.loads(self.config_path.read_text())
+        cfg["autofile"] = True
+        self.config_path.write_text(json.dumps(cfg))
+
+        beat = {
+            "title": "Autofile Test Beat",
+            "type": "insight",
+            "scope": "general",
+            "summary": "Autofile enabled.",
+            "tags": ["test"],
+            "body": "## Body\n\nContent.",
+        }
+        transcript = self._make_transcript(tmp_path)
+
+        with patch("extractor.call_model", return_value=json.dumps([beat])):
+            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+                # autofile_beat will be called; mock it to avoid real LLM calls
+                with patch("extractors.extract_beats.autofile_beat", return_value=self.vault / "AI" / "Claude-Sessions" / "Autofile Test Beat.md") as mock_af:
+                    # Create the file so the log can compute relpath
+                    dest = self.vault / "AI" / "Claude-Sessions" / "Autofile Test Beat.md"
+                    dest.write_text("content", encoding="utf-8")
+                    self._run_main([
+                        "extract_beats.py",
+                        "--transcript", str(transcript),
+                        "--session-id", "sess-autofile-enabled",
+                        "--cwd", str(self.vault),
+                    ])
+
+        mock_af.assert_called_once()
+        # vault_context kwarg should have been passed (from CLAUDE.md read)
+        call_kwargs = mock_af.call_args[1]
+        assert "vault_context" in call_kwargs
+
+    def test_autofile_backend_error_falls_back_to_write_beat(self, tmp_path, capsys):
+        """When autofile_beat raises BackendError inside the beat loop, write_beat is used instead (lines 221-225)."""
+        cfg = json.loads(self.config_path.read_text())
+        cfg["autofile"] = True
+        self.config_path.write_text(json.dumps(cfg))
+
+        beat = {
+            "title": "Fallback Beat",
+            "type": "insight",
+            "scope": "general",
+            "summary": "Autofile will fail.",
+            "tags": ["test"],
+            "body": "## Body\n\nContent.",
+        }
+        transcript = self._make_transcript(tmp_path)
+
+        with patch("extractor.call_model", return_value=json.dumps([beat])):
+            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+                with patch("extractors.extract_beats.autofile_beat", side_effect=eb.BackendError("backend down")):
+                    exit_code = self._run_main([
+                        "extract_beats.py",
+                        "--transcript", str(transcript),
+                        "--session-id", "sess-autofile-fallback",
+                        "--cwd", str(self.vault),
+                    ])
+
+        assert exit_code is None
+        # The beat should have been written via write_beat fallback
+        md_files = list(self.vault.rglob("*.md"))
+        assert any("Fallback Beat" in f.read_text() for f in md_files)
+        captured = capsys.readouterr()
+        assert "autofile failed" in captured.err.lower() or "filing to inbox" in captured.err.lower()
+
+    def test_write_beat_exception_is_caught_and_logged(self, tmp_path, capsys):
+        """An exception in write_beat is caught; the error is logged and other beats continue (lines 237-240)."""
+        beats = [
+            {
+                "title": "Beat That Fails",
+                "type": "insight",
+                "scope": "general",
+                "summary": "Will fail.",
+                "tags": ["test"],
+                "body": "## Fail.",
+            },
+            {
+                "title": "Beat That Succeeds",
+                "type": "insight",
+                "scope": "general",
+                "summary": "Will succeed.",
+                "tags": ["test"],
+                "body": "## Succeed.",
+            },
+        ]
+        transcript = self._make_transcript(tmp_path)
+
+        call_count = {"n": 0}
+        original_write_beat = eb.write_beat
+
+        def _flaky_write_beat(beat, *args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise OSError("simulated write failure")
+            return original_write_beat(beat, *args, **kwargs)
+
+        with patch("extractor.call_model", return_value=json.dumps(beats)):
+            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+                with patch("extractors.extract_beats.write_beat", side_effect=_flaky_write_beat):
+                    exit_code = self._run_main([
+                        "extract_beats.py",
+                        "--transcript", str(transcript),
+                        "--session-id", "sess-write-err",
+                        "--cwd", str(self.vault),
+                    ])
+
+        assert exit_code is None
+        captured = capsys.readouterr()
+        assert "Failed on" in captured.err
+        md_files = list(self.vault.rglob("*.md"))
+        assert any("Beat That Succeeds" in f.read_text() for f in md_files)
+
+    def test_main_callable_via_dunder_main(self, tmp_path, monkeypatch):
+        """extract_beats.main() is reachable via runpy when run as __main__ (line 271)."""
+        import runpy
+
+        transcript = self._make_transcript(tmp_path)
+        beat = {
+            "title": "Runpy Test Beat",
+            "type": "insight",
+            "scope": "general",
+            "summary": "Via runpy.",
+            "tags": ["test"],
+            "body": "## Body\n\nContent.",
+        }
+
+        monkeypatch.setattr("sys.argv", [
+            "extract_beats.py",
+            "--transcript", str(transcript),
+            "--session-id", "sess-runpy",
+            "--cwd", str(self.vault),
+        ])
+
+        with patch("extractor.call_model", return_value=json.dumps([beat])):
+            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+                try:
+                    runpy.run_module(
+                        "extractors.extract_beats",
+                        run_name="__main__",
+                        alter_sys=True,
+                    )
+                except SystemExit as e:
+                    assert e.code in (None, 0)

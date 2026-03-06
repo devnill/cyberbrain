@@ -14,28 +14,28 @@ set -euo pipefail
 
 PASS=0
 FAIL=0
-EXTRACTOR="${HOME}/.claude/extractors/extract_beats.py"
+EXTRACTOR="${HOME}/.claude/cyberbrain/extractors/extract_beats.py"
 HOOK="${HOME}/.claude/hooks/pre-compact-extract.sh"
 MCP_VENV="${HOME}/.claude/cyberbrain/venv"
 
 # Resolve vault_path and inbox from config
 VAULT_PATH=$(python3 -c "
 import json, os
-path = os.path.expanduser('~/.claude/cyberbrain.json')
+path = os.path.expanduser('~/.claude/cyberbrain/config.json')
 cfg = json.load(open(path)) if os.path.exists(path) else {}
 print(cfg.get('vault_path', ''))
 " 2>/dev/null || echo "")
 
 INBOX=$(python3 -c "
 import json, os
-path = os.path.expanduser('~/.claude/cyberbrain.json')
+path = os.path.expanduser('~/.claude/cyberbrain/config.json')
 cfg = json.load(open(path)) if os.path.exists(path) else {}
 print(cfg.get('inbox', 'AI/Claude-Sessions'))
 " 2>/dev/null || echo "AI/Claude-Sessions")
 
 AUTOFILE=$(python3 -c "
 import json, os
-path = os.path.expanduser('~/.claude/cyberbrain.json')
+path = os.path.expanduser('~/.claude/cyberbrain/config.json')
 cfg = json.load(open(path)) if os.path.exists(path) else {}
 print('true' if cfg.get('autofile', False) else 'false')
 " 2>/dev/null || echo "false")

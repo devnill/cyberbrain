@@ -1,7 +1,5 @@
-Note content:
+Notes to classify ({count} notes):
 
-<note>
-{note_content}
-</note>
+{notes_block}
 
-Classify this note. Return the JSON object only.
+Return a JSON array with exactly {count} classification objects, one per note in order.

@@ -6,9 +6,12 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="$HOME/.claude"
+CB_DIR="$CLAUDE_DIR/cyberbrain"
 
 NEW_VERSION="$(cat "$REPO_DIR/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "unknown")"
-INSTALLED_VERSION="$(cat "$CLAUDE_DIR/extractors/.cb-version" 2>/dev/null | tr -d '[:space:]' || echo "")"
+INSTALLED_VERSION="$(cat "$CB_DIR/extractors/.cb-version" 2>/dev/null | tr -d '[:space:]' \
+  || cat "$CLAUDE_DIR/extractors/.cb-version" 2>/dev/null | tr -d '[:space:]' \
+  || echo "")"
 
 echo "Claude Code Cyberbrain Memory System — Installer (v${NEW_VERSION})"
 echo "======================================================"
@@ -22,26 +25,37 @@ fi
 echo ""
 
 # ---------------------------------------------------------------------------
-# 0. Build .skill packages
+# M. Migration — move old scattered layout into cyberbrain/ subtree
 # ---------------------------------------------------------------------------
-echo "Building skill packages..."
-bash "$REPO_DIR/build.sh" --skills-only
-echo ""
+migrate_dir()  {
+  local src="$1" dst="$2"
+  [ -d "$src" ] && [ ! -d "$dst" ] && mv "$src" "$dst" && echo "  Migrated $src → $dst"
+  return 0
+}
+migrate_file() {
+  local src="$1" dst="$2"
+  [ -f "$src" ] && [ ! -f "$dst" ] && mv "$src" "$dst" && echo "  Migrated $src → $dst"
+  return 0
+}
+
+migrate_file "$CLAUDE_DIR/cyberbrain.json"   "$CB_DIR/config.json"
+migrate_dir  "$CLAUDE_DIR/extractors"        "$CB_DIR/extractors"
+migrate_dir  "$CLAUDE_DIR/prompts"           "$CB_DIR/prompts"
+migrate_dir  "$CLAUDE_DIR/logs"              "$CB_DIR/logs"
+migrate_file "$CLAUDE_DIR/import-state.json" "$CB_DIR/import-state.json"
 
 # ---------------------------------------------------------------------------
 # 1. Create target directories
 # ---------------------------------------------------------------------------
 echo "Creating directories..."
 mkdir -p "$CLAUDE_DIR/hooks"
-mkdir -p "$CLAUDE_DIR/extractors"
-mkdir -p "$CLAUDE_DIR/prompts"
-mkdir -p "$CLAUDE_DIR/skills"
-mkdir -p "$CLAUDE_DIR/cyberbrain/mcp"
+mkdir -p "$CB_DIR/extractors"
+mkdir -p "$CB_DIR/prompts"
+mkdir -p "$CB_DIR/mcp"
 echo "  $CLAUDE_DIR/hooks/"
-echo "  $CLAUDE_DIR/extractors/"
-echo "  $CLAUDE_DIR/prompts/"
-echo "  $CLAUDE_DIR/skills/"
-echo "  $CLAUDE_DIR/cyberbrain/mcp/"
+echo "  $CB_DIR/extractors/"
+echo "  $CB_DIR/prompts/"
+echo "  $CB_DIR/mcp/"
 
 # ---------------------------------------------------------------------------
 # 2. Install files
@@ -57,76 +71,96 @@ cp "$REPO_DIR/hooks/session-end-extract.sh" "$CLAUDE_DIR/hooks/session-end-extra
 chmod +x "$CLAUDE_DIR/hooks/session-end-extract.sh"
 echo "  [OK] hooks/session-end-extract.sh"
 
-# Extractor
-cp "$REPO_DIR/extractors/extract_beats.py"   "$CLAUDE_DIR/extractors/extract_beats.py"
-cp "$REPO_DIR/extractors/search_backends.py" "$CLAUDE_DIR/extractors/search_backends.py"
-cp "$REPO_DIR/extractors/search_index.py"    "$CLAUDE_DIR/extractors/search_index.py"
-cp "$REPO_DIR/extractors/requirements.txt"   "$CLAUDE_DIR/extractors/requirements.txt"
-echo "  [OK] extractors/extract_beats.py"
-echo "  [OK] extractors/search_backends.py"
-echo "  [OK] extractors/search_index.py"
-echo "  [OK] extractors/requirements.txt"
+# Extractor → cyberbrain/extractors/
+cp "$REPO_DIR/extractors/extract_beats.py"   "$CB_DIR/extractors/extract_beats.py"
+cp "$REPO_DIR/extractors/config.py"          "$CB_DIR/extractors/config.py"
+cp "$REPO_DIR/extractors/backends.py"        "$CB_DIR/extractors/backends.py"
+cp "$REPO_DIR/extractors/transcript.py"      "$CB_DIR/extractors/transcript.py"
+cp "$REPO_DIR/extractors/frontmatter.py"     "$CB_DIR/extractors/frontmatter.py"
+cp "$REPO_DIR/extractors/vault.py"           "$CB_DIR/extractors/vault.py"
+cp "$REPO_DIR/extractors/extractor.py"       "$CB_DIR/extractors/extractor.py"
+cp "$REPO_DIR/extractors/autofile.py"        "$CB_DIR/extractors/autofile.py"
+cp "$REPO_DIR/extractors/run_log.py"         "$CB_DIR/extractors/run_log.py"
+cp "$REPO_DIR/extractors/search_backends.py" "$CB_DIR/extractors/search_backends.py"
+cp "$REPO_DIR/extractors/search_index.py"    "$CB_DIR/extractors/search_index.py"
+cp "$REPO_DIR/extractors/analyze_vault.py"   "$CB_DIR/extractors/analyze_vault.py"
+cp "$REPO_DIR/extractors/requirements.txt"   "$CB_DIR/extractors/requirements.txt"
+echo "  [OK] cyberbrain/extractors/extract_beats.py"
+echo "  [OK] cyberbrain/extractors/config.py"
+echo "  [OK] cyberbrain/extractors/backends.py"
+echo "  [OK] cyberbrain/extractors/transcript.py"
+echo "  [OK] cyberbrain/extractors/frontmatter.py"
+echo "  [OK] cyberbrain/extractors/vault.py"
+echo "  [OK] cyberbrain/extractors/extractor.py"
+echo "  [OK] cyberbrain/extractors/autofile.py"
+echo "  [OK] cyberbrain/extractors/run_log.py"
+echo "  [OK] cyberbrain/extractors/search_backends.py"
+echo "  [OK] cyberbrain/extractors/search_index.py"
+echo "  [OK] cyberbrain/extractors/analyze_vault.py"
+echo "  [OK] cyberbrain/extractors/requirements.txt"
 
-# Prompts
-cp "$REPO_DIR/prompts/extract-beats-system.md" "$CLAUDE_DIR/prompts/extract-beats-system.md"
-cp "$REPO_DIR/prompts/extract-beats-user.md"   "$CLAUDE_DIR/prompts/extract-beats-user.md"
-echo "  [OK] prompts/extract-beats-system.md"
-echo "  [OK] prompts/extract-beats-user.md"
-cp "$REPO_DIR/prompts/autofile-system.md" "$CLAUDE_DIR/prompts/autofile-system.md"
-cp "$REPO_DIR/prompts/autofile-user.md"   "$CLAUDE_DIR/prompts/autofile-user.md"
-echo "  [OK] prompts/autofile-system.md"
-echo "  [OK] prompts/autofile-user.md"
-cp "$REPO_DIR/prompts/enrich-system.md" "$CLAUDE_DIR/prompts/enrich-system.md"
-cp "$REPO_DIR/prompts/enrich-user.md"   "$CLAUDE_DIR/prompts/enrich-user.md"
-echo "  [OK] prompts/enrich-system.md"
-echo "  [OK] prompts/enrich-user.md"
-cp "$REPO_DIR/prompts/claude-desktop-project.md" "$CLAUDE_DIR/prompts/claude-desktop-project.md"
-echo "  [OK] prompts/claude-desktop-project.md"
+# Prompts → cyberbrain/prompts/
+cp "$REPO_DIR/prompts/extract-beats-system.md" "$CB_DIR/prompts/extract-beats-system.md"
+cp "$REPO_DIR/prompts/extract-beats-user.md"   "$CB_DIR/prompts/extract-beats-user.md"
+echo "  [OK] cyberbrain/prompts/extract-beats-system.md"
+echo "  [OK] cyberbrain/prompts/extract-beats-user.md"
+cp "$REPO_DIR/prompts/autofile-system.md" "$CB_DIR/prompts/autofile-system.md"
+cp "$REPO_DIR/prompts/autofile-user.md"   "$CB_DIR/prompts/autofile-user.md"
+echo "  [OK] cyberbrain/prompts/autofile-system.md"
+echo "  [OK] cyberbrain/prompts/autofile-user.md"
+cp "$REPO_DIR/prompts/enrich-system.md" "$CB_DIR/prompts/enrich-system.md"
+cp "$REPO_DIR/prompts/enrich-user.md"   "$CB_DIR/prompts/enrich-user.md"
+echo "  [OK] cyberbrain/prompts/enrich-system.md"
+echo "  [OK] cyberbrain/prompts/enrich-user.md"
+cp "$REPO_DIR/prompts/claude-desktop-project.md" "$CB_DIR/prompts/claude-desktop-project.md"
+echo "  [OK] cyberbrain/prompts/claude-desktop-project.md"
 
-# Skills — prefer pre-built .skill packages from dist/ if available;
-# fall back to copying source directories (useful during local development).
-install_skill() {
-  local name="$1"
-  local pkg="$REPO_DIR/dist/$name.skill"
-  if [ -f "$pkg" ]; then
-    unzip -o -q "$pkg" -d "$CLAUDE_DIR/skills/"
-    echo "  [OK] skills/$name/ (from $name.skill)"
-  else
-    cp -r "$REPO_DIR/skills/$name" "$CLAUDE_DIR/skills/$name"
-    echo "  [OK] skills/$name/ (from source)"
-  fi
-}
+# MCP server package (recursive copy, excluding __pycache__)
+cp -r "$REPO_DIR/mcp/." "$CB_DIR/mcp/"
+find "$CB_DIR/mcp" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+echo "  [OK] cyberbrain/mcp/ (package)"
 
-install_skill cb-recall
-install_skill cb-file
-install_skill cb-setup
-install_skill cb-extract
-install_skill cb-enrich
-install_skill cb-status
-
-# MCP server
-cp "$REPO_DIR/mcp/server.py" "$CLAUDE_DIR/cyberbrain/mcp/server.py"
-echo "  [OK] cyberbrain/mcp/server.py"
-
-# Write version stamp so future installs can detect upgrades
-echo "$NEW_VERSION" > "$CLAUDE_DIR/extractors/.cb-version"
-echo "  [OK] extractors/.cb-version (v${NEW_VERSION})"
+# Write version stamp
+echo "$NEW_VERSION" > "$CB_DIR/extractors/.cb-version"
+echo "  [OK] cyberbrain/extractors/.cb-version (v${NEW_VERSION})"
 
 # ---------------------------------------------------------------------------
-# 3. Global config
+# 3. Global config + vault path
 # ---------------------------------------------------------------------------
 echo ""
-GLOBAL_CONFIG="$CLAUDE_DIR/cyberbrain.json"
-if [ -f "$GLOBAL_CONFIG" ]; then
-  echo "Global config already exists at $GLOBAL_CONFIG — skipping."
-  echo "  Edit it manually if you need to update your vault path."
+
+# Determine vault path: skip prompt on upgrade (existing config preserved)
+EXISTING_VAULT=""
+if [ -f "$CB_DIR/config.json" ]; then
+  EXISTING_VAULT=$(python3 -c \
+    "import json; c=json.load(open('$CB_DIR/config.json')); print(c.get('vault_path',''))" \
+    2>/dev/null || true)
+fi
+
+DEFAULT_VAULT="$CB_DIR/vault"
+
+if [ -z "$EXISTING_VAULT" ]; then
+  echo "Where should cyberbrain store your notes?"
+  echo "  Press Enter for the default: $DEFAULT_VAULT"
+  echo "  Or enter the path to an existing Obsidian vault."
+  read -r -p "Vault path: " VAULT_INPUT
+  VAULT_PATH="${VAULT_INPUT:-$DEFAULT_VAULT}"
+  mkdir -p "$VAULT_PATH"
+
+  python3 -c "
+import json
+with open('$REPO_DIR/cyberbrain.example.json') as f:
+    c = json.load(f)
+c['vault_path'] = '$VAULT_PATH'
+with open('$CB_DIR/config.json', 'w') as f:
+    json.dump(c, f, indent=2)
+    f.write('\n')
+"
+  echo "Created $CB_DIR/config.json"
+  echo "  Vault: $VAULT_PATH"
 else
-  cp "$REPO_DIR/cyberbrain.example.json" "$GLOBAL_CONFIG"
-  echo "Created $GLOBAL_CONFIG"
-  echo ""
-  echo "  *** ACTION REQUIRED ***"
-  echo "  Edit $GLOBAL_CONFIG and set your Obsidian vault path:"
-  echo "    \"vault_path\": \"/absolute/path/to/your/vault\""
+  echo "Config already exists at $CB_DIR/config.json — skipping."
+  echo "  Vault: $EXISTING_VAULT"
 fi
 
 # ---------------------------------------------------------------------------
@@ -198,14 +232,14 @@ else:
 echo ""
 BACKEND=$(python3 -c "
 import json, os
-path = os.path.expanduser('~/.claude/cyberbrain.json')
+path = os.path.expanduser('~/.claude/cyberbrain/config.json')
 cfg = json.load(open(path)) if os.path.exists(path) else {}
 print(cfg.get('backend', 'claude-code'))
 " 2>/dev/null || echo "claude-code")
 
 if [ "$BACKEND" = "bedrock" ]; then
   echo "Installing Python dependencies (bedrock backend)..."
-  if python3 -m pip install -r "$CLAUDE_DIR/extractors/requirements.txt" -q; then
+  if python3 -m pip install -r "$CB_DIR/extractors/requirements.txt" -q; then
     echo "  [OK] dependencies installed"
   else
     echo "  [WARN] pip install failed. Run: pip install anthropic pyyaml"
@@ -223,7 +257,7 @@ else
 fi
 
 # Install MCP package into a dedicated venv (avoids system/conda Python conflicts)
-MCP_VENV="$CLAUDE_DIR/cyberbrain/venv"
+MCP_VENV="$CB_DIR/venv"
 MCP_PYTHON=""
 # Prefer Python 3.11/3.12 — mcp wheels are not yet available for Python 3.14+
 for candidate in python3.12 python3.11 /opt/homebrew/bin/python3.12 /opt/homebrew/bin/python3.11 /opt/homebrew/bin/python3 /usr/local/bin/python3 python3; do
@@ -237,17 +271,17 @@ if [ -n "$MCP_PYTHON" ]; then
   if [ ! -d "$MCP_VENV" ]; then
     "$MCP_PYTHON" -m venv "$MCP_VENV"
   fi
-  echo "  Installing mcp + ruamel.yaml into venv ($MCP_PYTHON)..."
-  if "$MCP_VENV/bin/pip" install mcp pyyaml "ruamel.yaml" -q; then
-    if "$MCP_VENV/bin/python3" -c "from mcp.server.fastmcp import FastMCP" 2>/dev/null; then
-      echo "  [OK] mcp venv ready at $MCP_VENV"
+  echo "  Installing fastmcp + mcp + ruamel.yaml into venv ($MCP_PYTHON)..."
+  if "$MCP_VENV/bin/pip" install "fastmcp>=3.0.0" mcp pyyaml "ruamel.yaml" -q; then
+    if "$MCP_VENV/bin/python3" -c "from fastmcp import FastMCP" 2>/dev/null; then
+      echo "  [OK] fastmcp venv ready at $MCP_VENV"
     else
       echo "  [ERROR] FastMCP import failed after install — MCP server will not work."
-      echo "          Try: $MCP_PYTHON -m venv $MCP_VENV && $MCP_VENV/bin/pip install mcp"
+      echo "          Try: $MCP_PYTHON -m venv $MCP_VENV && $MCP_VENV/bin/pip install fastmcp>=3.0.0 mcp"
     fi
   else
-    echo "  [ERROR] pip install mcp failed — see output above."
-    echo "          Try: $MCP_PYTHON -m venv $MCP_VENV && $MCP_VENV/bin/pip install mcp"
+    echo "  [ERROR] pip install fastmcp failed — see output above."
+    echo "          Try: $MCP_PYTHON -m venv $MCP_VENV && $MCP_VENV/bin/pip install fastmcp>=3.0.0 mcp"
   fi
 
   # Optional: semantic search layer (fastembed + usearch)
@@ -329,7 +363,7 @@ elif existing == ENTRY:
 else:
     print(f'  [OK] cyberbrain MCP server updated in Claude Desktop')
 print('  Restart Claude Desktop for the change to take effect.')
-" "$DESKTOP_CONFIG" "$CLAUDE_DIR/cyberbrain/mcp/server.py" "${MCP_VENV:-}/bin/python3"
+" "$DESKTOP_CONFIG" "$CB_DIR/mcp/server.py" "${MCP_VENV:-}/bin/python3"
 else
   echo "  [skip] Claude Desktop not found (macOS only)"
 fi
@@ -343,7 +377,7 @@ python3 -c "
 import sys, json
 from pathlib import Path
 
-config_path = Path.home() / '.claude' / 'cyberbrain.json'
+config_path = Path.home() / '.claude' / 'cyberbrain' / 'config.json'
 if not config_path.exists():
     print('  [skip] No config found — skipping prune.')
     sys.exit(0)
@@ -360,7 +394,7 @@ if not Path(db_path).exists():
     print('  [skip] No search index found — skipping prune.')
     sys.exit(0)
 
-sys.path.insert(0, str(Path.home() / '.claude' / 'extractors'))
+sys.path.insert(0, str(Path.home() / '.claude' / 'cyberbrain' / 'extractors'))
 from search_backends import FTS5Backend
 b = FTS5Backend(vault_path, db_path)
 pruned = b.prune_stale_notes()
@@ -378,14 +412,16 @@ echo "======================================================"
 echo "Installation complete."
 echo ""
 echo "Next steps:"
-echo "  1. Edit ~/.claude/cyberbrain.json — set vault_path to your Obsidian vault"
+echo "  1. Notes go to the vault path configured above."
+echo "     To switch: edit ~/.claude/cyberbrain/config.json (vault_path)"
+echo "     or run cb_configure(discover=True) in Claude Desktop."
 echo "  2. Set backend (optional):"
 echo "       - claude-code (default): uses your Claude subscription — no API key needed"
-echo "       - bedrock: add \"backend\": \"bedrock\" to cyberbrain.json, configure AWS credentials"
-echo "       - ollama: add \"backend\": \"ollama\" to cyberbrain.json (local model, no API key)"
+echo "       - bedrock: add \"backend\": \"bedrock\" to config.json, configure AWS credentials"
+echo "       - ollama: add \"backend\": \"ollama\" to config.json (local model, no API key)"
 echo "  3. (Optional) Copy cyberbrain.local.example.json to .claude/cyberbrain.local.json"
 echo "     in any project and update project_name and vault_folder"
-echo "  4. Run /compact in a Claude Code session to test the hook"
-echo "  5. Use /cb-recall <query> to retrieve knowledge in any session"
-echo "  6. Use /cb-extract <path> to backfill beats from old session logs"
+echo "  4. Restart Claude Desktop to load the MCP server"
+echo "  5. Use cb_recall in Claude Desktop to search your vault"
+echo "  6. Run /compact in Claude Code to test the PreCompact hook"
 echo ""

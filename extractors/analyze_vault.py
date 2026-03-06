@@ -77,8 +77,7 @@ def note_name_style(stem: str) -> str:
 def analyze_vault(vault_path: str, max_samples: int = 3) -> dict:
     root = Path(vault_path).expanduser().resolve()
     if not root.exists():
-        print(f"Error: vault path does not exist: {root}", file=sys.stderr)
-        sys.exit(1)
+        raise ValueError(f"vault path does not exist: {root}")
 
     # Exclude hidden directories (.obsidian, .trash, etc.)
     md_files = [
@@ -245,7 +244,11 @@ def main():
     parser.add_argument("--output", help="Write JSON to this file instead of stdout")
     args = parser.parse_args()
 
-    report = analyze_vault(args.vault_path, args.max_samples)
+    try:
+        report = analyze_vault(args.vault_path, args.max_samples)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
     output = json.dumps(report, indent=2)
     if args.output:

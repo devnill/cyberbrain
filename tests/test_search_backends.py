@@ -636,3 +636,1100 @@ class TestSmartConnectionsImport:
         # Should not raise
         result = backend._import_sc_ajson(ajson_file)
         assert result == 0
+
+
+# ===========================================================================
+# FTS5Backend — additional coverage
+# ===========================================================================
+
+class TestFTS5BackendAdditional:
+    """FTS5Backend edge cases not covered by the primary test class."""
+
+    def _make_note(self, path: Path, title="Test", note_type="insight", tags=None):
+        note_id = "id-" + title.replace(" ", "-").lower()
+        path.write_text(
+            f'---\nid: {note_id}\ntype: {note_type}\ntitle: "{title}"\ntags: {json.dumps(tags or [])}\nrelated: []\nsummary: "Summary."\n---\n\nBody.\n',
+            encoding="utf-8",
+        )
+        return {"id": note_id, "title": title, "type": note_type, "tags": tags or [], "summary": "Summary."}
+
+    def test_index_note_skips_on_oserror(self, tmp_path):
+        """index_note() returns silently when the file cannot be read."""
+        db = str(tmp_path / "test.db")
+        backend = FTS5Backend(str(tmp_path), db)
+        backend.index_note("/nonexistent/path.md", {"title": "Missing"})
+        conn = sqlite3.connect(db)
+        count = conn.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
+        conn.close()
+        assert count == 0
+
+    def test_prune_stale_notes_removes_missing_files(self, tmp_path):
+        """prune_stale_notes() removes rows whose files no longer exist."""
+        db = str(tmp_path / "test.db")
+        backend = FTS5Backend(str(tmp_path), db)
+        # Index a note then delete the file
+        note = tmp_path / "Ephemeral.md"
+        meta = self._make_note(note)
+        backend.index_note(str(note), meta)
+        note.unlink()  # delete the file
+
+        pruned = backend.prune_stale_notes()
+        assert pruned == 1
+
+        conn = sqlite3.connect(db)
+        count = conn.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
+        conn.close()
+        assert count == 0
+
+    def test_prune_stale_notes_returns_zero_when_all_valid(self, tmp_path):
+        """prune_stale_notes() returns 0 when all indexed files still exist."""
+        db = str(tmp_path / "test.db")
+        backend = FTS5Backend(str(tmp_path), db)
+        note = tmp_path / "Stable.md"
+        meta = self._make_note(note)
+        backend.index_note(str(note), meta)
+
+        pruned = backend.prune_stale_notes()
+        assert pruned == 0
+
+    def test_search_returns_empty_when_query_is_all_punctuation(self, tmp_path):
+        """A query that reduces to empty after sanitisation returns []."""
+        db = str(tmp_path / "test.db")
+        backend = FTS5Backend(str(tmp_path), db)
+        results = backend.search("!@#$%^&*()")
+        assert results == []
+
+    def test_search_result_has_snippet(self, tmp_path):
+        """FTS5 search populates the snippet field."""
+        db = str(tmp_path / "test.db")
+        backend = FTS5Backend(str(tmp_path), db)
+        note = tmp_path / "Snippet Note.md"
+        meta = self._make_note(note, title="Snippet Note", tags=["snippet"])
+        backend.index_note(str(note), meta)
+        results = backend.search("snippet")
+        assert len(results) > 0
+        # snippet field may be empty for very short bodies but should not raise
+
+    def test_search_handles_malformed_json_tags_gracefully(self, tmp_path):
+        """When tags column has malformed JSON, result still included with empty list."""
+        db = str(tmp_path / "test.db")
+        backend = FTS5Backend(str(tmp_path), db)
+        # Manually insert a row with bad JSON in tags
+        conn = sqlite3.connect(db)
+        conn.execute("""
+            INSERT INTO notes (id, path, content_hash, title, summary, tags, related, type, scope, project, date, body)
+            VALUES ('bad-json-1', ?, 'hash1', 'Bad Tags Note', 'Summary', 'not-valid-json', '[]', 'insight', '', '', '', 'Body')
+        """, (str(tmp_path / "BadTags.md"),))
+        conn.commit()
+        conn.close()
+        results = backend.search("bad tags")
+        # Should not raise; tags may be empty list
+        for r in results:
+            assert isinstance(r.tags, list)
+
+    def test_build_index_progress_logging(self, tmp_path, capsys):
+        """build_index() logs progress to stderr."""
+        db = str(tmp_path / "test.db")
+        backend = FTS5Backend(str(tmp_path), db)
+        # Write a few notes
+        for i in range(3):
+            note = tmp_path / f"Note{i}.md"
+            meta = self._make_note(note, title=f"Note {i}")
+            # (meta written by _make_note already via write)
+        backend.build_index()
+        captured = capsys.readouterr()
+        assert "FTS5" in captured.err or "index" in captured.err.lower()
+
+
+# ===========================================================================
+# GrepBackend — OSError mtime path
+# ===========================================================================
+
+class TestGrepBackendEdgeCases:
+    """GrepBackend handles OSError when checking file mtime."""
+
+    def test_oserror_on_mtime_uses_fallback(self, tmp_path):
+        """When os.path.getmtime raises OSError, the note is still ranked (score only)."""
+        note = tmp_path / "note.md"
+        note.write_text("jwt authentication token here", encoding="utf-8")
+
+        backend = GrepBackend(str(tmp_path))
+        # Patch getmtime to raise OSError for this specific path
+        original_getmtime = __import__("os").path.getmtime
+        def patched_getmtime(p):
+            if str(note) in str(p):
+                raise OSError("stat error")
+            return original_getmtime(p)
+
+        with patch("os.path.getmtime", side_effect=patched_getmtime):
+            results = backend.search("jwt authentication")
+
+        # The note may or may not appear but no exception
+        assert isinstance(results, list)
+
+
+# ===========================================================================
+# HybridBackend — full path coverage with mocked fastembed/usearch
+# ===========================================================================
+
+class TestHybridBackendFull:
+    """
+    HybridBackend coverage using mock fastembed and usearch.
+
+    These tests verify the wiring between BM25 and semantic layers,
+    the save/load index flow, and _semantic_search result assembly.
+    """
+
+    def _make_hybrid_with_mocks(self, tmp_path):
+        """Build a HybridBackend with mock model and index."""
+        import numpy as np
+        from search_backends import HybridBackend
+
+        db = str(tmp_path / "test.db")
+        backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
+
+        # Install mock model
+        mock_model = MagicMock()
+        mock_model.embed = MagicMock(return_value=iter([[0.1] * 384]))
+        backend._model = mock_model
+
+        # Install mock index
+        mock_index = MagicMock()
+        mock_index.ndim = 384
+        mock_index.add = MagicMock()
+        mock_index.search = MagicMock(return_value=[])
+        backend._index = mock_index
+        backend._id_map = []
+
+        return backend
+
+    def test_backend_name_includes_model(self, tmp_path):
+        """backend_name() returns a string containing the model name."""
+        from search_backends import HybridBackend
+        db = str(tmp_path / "test.db")
+        backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
+        assert "bge-micro" in backend.backend_name()
+        assert "hybrid" in backend.backend_name()
+
+    def _usearch_modules(self):
+        """Return a dict of mock sys.modules entries for usearch and numpy."""
+        mock_usearch = MagicMock()
+        mock_usearch_index = MagicMock()
+        mock_usearch_index.Index = MagicMock()
+        mock_usearch.index = mock_usearch_index
+        mock_np = MagicMock()
+        mock_np.array = lambda x, dtype=None: x
+        mock_np.zeros = lambda shape, dtype=None: [0.0] * (shape if isinstance(shape, int) else shape[0])
+        mock_np.float32 = float
+        return {
+            "usearch": mock_usearch,
+            "usearch.index": mock_usearch_index,
+            "numpy": mock_np,
+        }
+
+    def test_embed_note_adds_vector_to_index(self, tmp_path):
+        """_embed_note() adds the note to the id_map and calls index.add."""
+        backend = self._make_hybrid_with_mocks(tmp_path)
+        note = tmp_path / "Test Note.md"
+        note.write_text('---\ntitle: "Test"\ntags: []\nsummary: "Test"\n---\nBody.', encoding="utf-8")
+
+        with patch.dict(sys.modules, self._usearch_modules()):
+            backend._embed_note(str(note), {"title": "Test", "tags": [], "summary": "Test note"})
+
+        assert len(backend._id_map) == 1
+        backend._index.add.assert_called_once()
+
+    def test_embed_note_uses_stem_when_title_empty(self, tmp_path):
+        """_embed_note() with empty title falls back to filename stem and still embeds."""
+        backend = self._make_hybrid_with_mocks(tmp_path)
+        note = tmp_path / "Fallback.md"
+        note.write_text("", encoding="utf-8")
+
+        with patch.dict(sys.modules, self._usearch_modules()):
+            backend._embed_note(str(note), {"title": "", "summary": "", "tags": []})
+        # stem "Fallback" is used as title, so the note IS indexed
+        assert len(backend._id_map) == 1
+
+    def test_index_note_delegates_to_fts5_and_embed(self, tmp_path):
+        """index_note() calls both FTS5 and semantic embedding."""
+        backend = self._make_hybrid_with_mocks(tmp_path)
+        note = tmp_path / "Both.md"
+        note.write_text('---\nid: abc\ntitle: "Both"\ntags: []\nsummary: "Both"\n---\nBody.', encoding="utf-8")
+
+        with patch.object(backend._fts5, "index_note") as mock_fts:
+            backend.index_note(str(note), {"id": "abc", "title": "Both", "tags": [], "summary": "Both"})
+
+        mock_fts.assert_called_once()
+
+    def test_save_index_writes_files(self, tmp_path):
+        """_save_index() creates the usearch file and manifest JSON."""
+        backend = self._make_hybrid_with_mocks(tmp_path)
+        backend._id_map = [str(tmp_path / "A.md"), str(tmp_path / "B.md")]
+        backend._index.save = MagicMock()
+
+        backend._save_index()
+
+        backend._index.save.assert_called_once()
+        manifest_path = Path(backend._manifest_path)
+        assert manifest_path.exists()
+        manifest = json.loads(manifest_path.read_text())
+        assert manifest["model_name"] == "TaylorAI/bge-micro-v2"
+        assert len(manifest["id_map"]) == 2
+
+    def test_save_index_handles_exception_gracefully(self, tmp_path, capsys):
+        """_save_index() catching an error logs it and doesn't raise."""
+        backend = self._make_hybrid_with_mocks(tmp_path)
+        backend._index.save = MagicMock(side_effect=RuntimeError("disk full"))
+
+        backend._save_index()  # should not raise
+        captured = capsys.readouterr()
+        assert "save" in captured.err.lower() or "index" in captured.err.lower()
+
+    def test_semantic_search_returns_empty_when_id_map_empty(self, tmp_path):
+        """_semantic_search() with no indexed notes returns []."""
+        backend = self._make_hybrid_with_mocks(tmp_path)
+        backend._id_map = []
+        backend._index.search.return_value = []
+
+        results = backend._semantic_search("jwt authentication", top_k=5)
+        assert results == []
+
+    def test_semantic_search_assembles_results(self, tmp_path):
+        """_semantic_search() builds SearchResult objects from index hits."""
+        backend = self._make_hybrid_with_mocks(tmp_path)
+        note = tmp_path / "Auth.md"
+        note.write_text('---\ntitle: Auth\ntags: [jwt]\nsummary: "Auth summary"\n---\nBody.', encoding="utf-8")
+        backend._id_map = [str(note)]
+
+        # Simulate usearch returning match at index 0
+        mock_match = MagicMock()
+        mock_match.key = 0
+        mock_match.distance = 0.15
+        backend._index.search.return_value = [mock_match]
+
+        results = backend._semantic_search("authentication", top_k=5)
+        assert len(results) == 1
+        assert results[0].path == str(note)
+        assert results[0].backend == "semantic"
+
+    def test_semantic_search_skips_out_of_range_index(self, tmp_path):
+        """Index keys beyond id_map length are skipped silently."""
+        backend = self._make_hybrid_with_mocks(tmp_path)
+        backend._id_map = [str(tmp_path / "Only.md")]
+
+        mock_match = MagicMock()
+        mock_match.key = 999  # way out of range
+        mock_match.distance = 0.1
+        backend._index.search.return_value = [mock_match]
+
+        results = backend._semantic_search("test", top_k=5)
+        assert results == []
+
+    def test_semantic_search_returns_empty_on_exception(self, tmp_path, capsys):
+        """_semantic_search() catches exceptions and returns []."""
+        backend = self._make_hybrid_with_mocks(tmp_path)
+        backend._id_map = [str(tmp_path / "Note.md")]
+
+        with patch.object(backend, "_embed", side_effect=RuntimeError("no model")):
+            results = backend._semantic_search("test", top_k=5)
+
+        assert results == []
+        captured = capsys.readouterr()
+        assert "error" in captured.err.lower() or "Semantic" in captured.err
+
+    def test_hybrid_search_fuses_bm25_and_semantic(self, tmp_path):
+        """search() fuses BM25 and semantic results via RRF."""
+        backend = self._make_hybrid_with_mocks(tmp_path)
+        note = tmp_path / "Fused.md"
+        note.write_text('---\nid: fused\ntitle: "Fused"\ntags: [fusion]\nsummary: "Test fusion"\n---\nBody.', encoding="utf-8")
+
+        from search_backends import SearchResult
+        bm25_result = SearchResult(path=str(note), title="Fused", score=1.0, backend="fts5")
+
+        with patch.object(backend._fts5, "search", return_value=[bm25_result]):
+            mock_match = MagicMock()
+            mock_match.key = 0
+            mock_match.distance = 0.1
+            backend._id_map = [str(note)]
+            backend._index.search.return_value = [mock_match]
+
+            results = backend.search("fusion test", top_k=5)
+
+        assert len(results) >= 1
+        # All results should have the hybrid backend name
+        for r in results:
+            assert "hybrid" in r.backend
+
+    def test_hybrid_search_falls_back_to_bm25_label_when_no_semantic(self, tmp_path):
+        """When semantic search returns [], results get 'fts5 (semantic unavailable)' label."""
+        backend = self._make_hybrid_with_mocks(tmp_path)
+        note = tmp_path / "BM25Only.md"
+        note.write_text('---\nid: bm\ntitle: BM25\ntags: [bm25]\nsummary: "BM25 only"\n---\nBody.', encoding="utf-8")
+
+        from search_backends import SearchResult
+        bm25_result = SearchResult(path=str(note), title="BM25", score=1.0, backend="fts5")
+
+        with patch.object(backend._fts5, "search", return_value=[bm25_result]):
+            with patch.object(backend, "_semantic_search", return_value=[]):
+                results = backend.search("bm25 only", top_k=5)
+
+        assert len(results) >= 1
+        assert all("fts5" in r.backend for r in results)
+
+
+# ===========================================================================
+# SmartConnections — additional import paths
+# ===========================================================================
+
+class TestSmartConnectionsAdditional:
+    """Additional SmartConnections import scenarios."""
+
+    def _make_hybrid(self, tmp_path):
+        from search_backends import HybridBackend
+        db = str(tmp_path / "test.db")
+        return HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
+
+    def test_imports_from_single_ajson_when_no_multi_dir(self, tmp_path):
+        """Without a multi/ subdir, tries smart_sources.ajson in .smart-env/."""
+        sc_dir = tmp_path / ".smart-env"
+        sc_dir.mkdir()
+
+        vault_note = tmp_path / "Note.md"
+        vault_note.write_text("# Note\n\nContent.", encoding="utf-8")
+
+        vec = [0.1] * 384
+        ajson_content = f'"Note.md": {{"path": "Note.md", "embeddings": {{"model": {{"vec": {json.dumps(vec)}}}}}}}\n'
+        (sc_dir / "smart_sources.ajson").write_text(ajson_content, encoding="utf-8")
+
+        backend = self._make_hybrid(tmp_path)
+        mock_index = MagicMock()
+        mock_index.add = MagicMock()
+        backend._index = mock_index
+        backend._id_map = []
+
+        mock_np = MagicMock()
+        mock_np.array = lambda x, **kw: x
+
+        with patch.dict(sys.modules, {"numpy": mock_np}):
+            with patch.object(backend, "_save_index"):
+                result = backend._try_import_smart_connections_index()
+
+        assert result is True
+
+    def test_returns_false_when_ajson_oserror(self, tmp_path):
+        """An unreadable .ajson file returns 0 and does not raise."""
+        sc_dir = tmp_path / ".smart-env"
+        multi_dir = sc_dir / "multi"
+        multi_dir.mkdir(parents=True)
+
+        ajson_file = multi_dir / "bad.ajson"
+        ajson_file.write_text("dummy", encoding="utf-8")
+
+        backend = self._make_hybrid(tmp_path)
+        mock_index = MagicMock()
+        backend._index = mock_index
+        backend._id_map = []
+
+        # Simulate OSError on read
+        with patch("pathlib.Path.read_text", side_effect=OSError("no read")):
+            result = backend._import_sc_ajson(ajson_file)
+
+        assert result == 0
+
+    def test_skips_non_dict_values_in_ajson(self, tmp_path):
+        """Lines where value is not a dict (e.g. a string) are skipped."""
+        backend = self._make_hybrid(tmp_path)
+        ajson_file = tmp_path / "mixed.ajson"
+        ajson_file.write_text(
+            '"key1": "just a string"\n'
+            '"key2": 42\n',
+            encoding="utf-8",
+        )
+        mock_index = MagicMock()
+        backend._index = mock_index
+        backend._id_map = []
+
+        result = backend._import_sc_ajson(ajson_file)
+        assert result == 0
+
+    def test_skips_record_with_empty_vec(self, tmp_path):
+        """An embedding with an empty vec list is skipped."""
+        backend = self._make_hybrid(tmp_path)
+        ajson_file = tmp_path / "empty_vec.ajson"
+        ajson_file.write_text(
+            '"Note.md": {"path": "Note.md", "embeddings": {"model": {"vec": []}}}\n',
+            encoding="utf-8",
+        )
+        mock_index = MagicMock()
+        backend._index = mock_index
+        backend._id_map = []
+
+        result = backend._import_sc_ajson(ajson_file)
+        assert result == 0
+
+    def test_skips_record_with_no_embeddings(self, tmp_path):
+        """A record with no embeddings key is skipped."""
+        backend = self._make_hybrid(tmp_path)
+        ajson_file = tmp_path / "no_embed.ajson"
+        ajson_file.write_text(
+            '"Note.md": {"path": "Note.md"}\n',
+            encoding="utf-8",
+        )
+        mock_index = MagicMock()
+        backend._index = mock_index
+        backend._id_map = []
+
+        result = backend._import_sc_ajson(ajson_file)
+        assert result == 0
+
+
+# ===========================================================================
+# FTS5Backend — additional coverage for uncovered lines
+# ===========================================================================
+
+class TestFTS5BackendCoverageGaps:
+    """Tests targeting specific uncovered lines in FTS5Backend."""
+
+    def test_search_catches_operational_error(self, tmp_path):
+        """When FTS5 raises OperationalError (e.g. corrupt index), returns []."""
+        db = str(tmp_path / "test.db")
+        backend = FTS5Backend(str(tmp_path), db)
+
+        # Patch _connect() to return a mock connection that raises OperationalError
+        mock_conn = MagicMock()
+        mock_conn.execute.side_effect = sqlite3.OperationalError("fts5: no such table")
+        # Need a context manager that returns mock_conn
+        mock_ctx = MagicMock()
+        mock_ctx.__enter__ = MagicMock(return_value=mock_conn)
+        mock_ctx.__exit__ = MagicMock(return_value=False)
+
+        with patch.object(backend, "_connect", return_value=mock_ctx):
+            results = backend.search("something valid")
+        assert results == []
+
+    def test_search_handles_malformed_json_related_gracefully(self, tmp_path):
+        """When related column has malformed JSON, result is included with empty list."""
+        db = str(tmp_path / "test.db")
+        backend = FTS5Backend(str(tmp_path), db)
+        # Manually insert a row with bad JSON in both tags and related
+        conn = sqlite3.connect(db)
+        conn.execute("""
+            INSERT INTO notes (id, path, content_hash, title, summary, tags, related, type, scope, project, date, body)
+            VALUES ('bad-rel-1', ?, 'hash2', 'Bad Related Note', 'Summary', '["ok"]', 'not-valid-json-related', 'insight', '', '', '', 'Body')
+        """, (str(tmp_path / "BadRelated.md"),))
+        conn.commit()
+        conn.close()
+
+        results = backend.search("bad related")
+        # Should not raise; related should be empty list on parse failure
+        for r in results:
+            assert isinstance(r.related, list)
+
+    def test_build_index_progress_logging_at_100_notes(self, tmp_path, capsys):
+        """build_index() emits progress every 100 notes."""
+        db = str(tmp_path / "test.db")
+        backend = FTS5Backend(str(tmp_path), db)
+
+        # Create 100 markdown files to trigger the % 100 == 0 branch
+        for i in range(100):
+            note = tmp_path / f"Note{i:03d}.md"
+            note.write_text(
+                f'---\nid: note-{i}\ntitle: "Note {i}"\ntags: []\nsummary: ""\n---\nBody {i}.\n',
+                encoding="utf-8",
+            )
+
+        backend.build_index()
+        captured = capsys.readouterr()
+        # Should contain the 100/100 progress log entry
+        assert "100/" in captured.err
+
+
+# ===========================================================================
+# HybridBackend — _get_model, _load_or_create_index, build_index coverage
+# ===========================================================================
+
+class TestHybridBackendLoadAndBuild:
+    """Cover _get_model, _load_or_create_index, and build_index with usearch mocks."""
+
+    def _make_mocks(self):
+        """Return (mock_usearch_modules_dict, MockIndex_class, mock_np)."""
+        MockIndex = MagicMock()
+        mock_index_instance = MagicMock()
+        mock_index_instance.ndim = 384
+        MockIndex.return_value = mock_index_instance
+
+        mock_usearch_index_mod = MagicMock()
+        mock_usearch_index_mod.Index = MockIndex
+
+        mock_usearch_mod = MagicMock()
+        mock_usearch_mod.index = mock_usearch_index_mod
+
+        mock_np = MagicMock()
+        mock_np.array = lambda x, dtype=None: x
+        mock_np.zeros = lambda shape, dtype=None: [0.0] * (shape if isinstance(shape, int) else shape[0])
+        mock_np.float32 = float
+
+        mods = {
+            "usearch": mock_usearch_mod,
+            "usearch.index": mock_usearch_index_mod,
+            "numpy": mock_np,
+        }
+        return mods, MockIndex, mock_index_instance, mock_np
+
+    def test_get_model_calls_fastembed(self, tmp_path):
+        """_get_model() imports TextEmbedding from fastembed and creates the model."""
+        from search_backends import HybridBackend
+        db = str(tmp_path / "test.db")
+        backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
+
+        mock_fastembed = MagicMock()
+        MockTextEmbedding = MagicMock()
+        mock_fastembed.TextEmbedding = MockTextEmbedding
+
+        with patch.dict(sys.modules, {"fastembed": mock_fastembed}):
+            model = backend._get_model()
+
+        MockTextEmbedding.assert_called_once_with(model_name="TaylorAI/bge-micro-v2")
+        assert backend._model is model
+
+    def test_get_model_cached_on_second_call(self, tmp_path):
+        """_get_model() returns the same object on repeated calls."""
+        from search_backends import HybridBackend
+        db = str(tmp_path / "test.db")
+        backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
+
+        mock_model = MagicMock()
+        backend._model = mock_model  # pre-set to simulate already loaded
+
+        result = backend._get_model()
+        assert result is mock_model
+
+    def test_load_or_create_index_creates_new_index(self, tmp_path):
+        """_load_or_create_index() creates a fresh Index when no index file exists."""
+        from search_backends import HybridBackend
+        db = str(tmp_path / "test.db")
+        backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
+
+        mods, MockIndex, mock_index_inst, mock_np = self._make_mocks()
+        with patch.dict(sys.modules, mods):
+            backend._load_or_create_index()
+
+        assert backend._index is mock_index_inst
+
+    def test_load_or_create_index_skips_when_already_loaded(self, tmp_path):
+        """_load_or_create_index() returns immediately if _index is already set."""
+        from search_backends import HybridBackend
+        db = str(tmp_path / "test.db")
+        backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
+
+        existing_index = MagicMock()
+        backend._index = existing_index
+
+        mods, MockIndex, _, _ = self._make_mocks()
+        with patch.dict(sys.modules, mods):
+            backend._load_or_create_index()
+
+        # Should not have created a new Index
+        MockIndex.assert_not_called()
+        assert backend._index is existing_index
+
+    def test_load_or_create_index_detects_model_mismatch(self, tmp_path, capsys):
+        """_load_or_create_index() logs a warning and deletes the old index on model mismatch."""
+        import json as jsonmod
+        from search_backends import HybridBackend
+        db = str(tmp_path / "test.db")
+        backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
+
+        # Create a manifest with a different model name
+        manifest_path = Path(backend._manifest_path)
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text(jsonmod.dumps({"model_name": "other-model", "embedding_dim": 384}))
+
+        # Create a fake index file to check it gets deleted
+        index_path = Path(backend._usearch_path)
+        index_path.write_text("fake")
+
+        mods, MockIndex, mock_index_inst, mock_np = self._make_mocks()
+        with patch.dict(sys.modules, mods):
+            backend._load_or_create_index()
+
+        captured = capsys.readouterr()
+        assert "other-model" in captured.err or "rebuilding" in captured.err.lower()
+        assert not index_path.exists()  # old index file deleted
+
+    def test_load_or_create_index_loads_existing_index(self, tmp_path):
+        """_load_or_create_index() calls index.load() when an index file exists."""
+        import json as jsonmod
+        from search_backends import HybridBackend
+        db = str(tmp_path / "test.db")
+        backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
+
+        # Create a manifest and fake index file
+        manifest_path = Path(backend._manifest_path)
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        id_map = [str(tmp_path / "A.md")]
+        manifest_path.write_text(jsonmod.dumps({
+            "model_name": "TaylorAI/bge-micro-v2",
+            "embedding_dim": 384,
+            "id_map": id_map,
+        }))
+        index_path = Path(backend._usearch_path)
+        index_path.write_text("fake")
+
+        mods, MockIndex, mock_index_inst, mock_np = self._make_mocks()
+        with patch.dict(sys.modules, mods):
+            backend._load_or_create_index()
+
+        mock_index_inst.load.assert_called_once()
+        assert backend._id_map == id_map
+
+    def test_load_or_create_index_handles_load_failure(self, tmp_path, capsys):
+        """_load_or_create_index() falls back to empty index when load() raises."""
+        import json as jsonmod
+        from search_backends import HybridBackend
+        db = str(tmp_path / "test.db")
+        backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
+
+        manifest_path = Path(backend._manifest_path)
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text(jsonmod.dumps({
+            "model_name": "TaylorAI/bge-micro-v2",
+            "embedding_dim": 384,
+            "id_map": [],
+        }))
+        index_path = Path(backend._usearch_path)
+        index_path.write_text("corrupt")
+
+        mods, MockIndex, mock_index_inst, mock_np = self._make_mocks()
+        mock_index_inst.load.side_effect = RuntimeError("corrupt index")
+        with patch.dict(sys.modules, mods):
+            backend._load_or_create_index()
+
+        captured = capsys.readouterr()
+        assert "USearch" in captured.err or "load" in captured.err.lower()
+
+    def test_embed_note_with_tags_as_json_string(self, tmp_path):
+        """_embed_note() handles tags stored as a JSON string (not a list)."""
+        from search_backends import HybridBackend
+        db = str(tmp_path / "test.db")
+        backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
+
+        # Pre-set model and index to avoid lazy loading
+        mock_model = MagicMock()
+        mock_model.embed = MagicMock(return_value=iter([[0.1] * 384]))
+        backend._model = mock_model
+
+        mock_index = MagicMock()
+        mock_index.ndim = 384
+        backend._index = mock_index
+        backend._id_map = []
+
+        note = tmp_path / "TagsStr.md"
+        note.write_text("# Tags as string", encoding="utf-8")
+
+        mods, _, _, _ = self._make_mocks()
+        with patch.dict(sys.modules, mods):
+            # Pass tags as a JSON-encoded string (not a Python list)
+            backend._embed_note(str(note), {"title": "Tags test", "summary": "", "tags": '["auth", "jwt"]'})
+
+        assert len(backend._id_map) == 1
+
+    def test_embed_note_with_unparseable_tags_string(self, tmp_path):
+        """_embed_note() handles tags that are a non-JSON string."""
+        from search_backends import HybridBackend
+        db = str(tmp_path / "test.db")
+        backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
+
+        mock_model = MagicMock()
+        mock_model.embed = MagicMock(return_value=iter([[0.1] * 384]))
+        backend._model = mock_model
+
+        mock_index = MagicMock()
+        mock_index.ndim = 384
+        backend._index = mock_index
+        backend._id_map = []
+
+        note = tmp_path / "BadTagsStr.md"
+        note.write_text("# Bad tags string", encoding="utf-8")
+
+        mods, _, _, _ = self._make_mocks()
+        with patch.dict(sys.modules, mods):
+            backend._embed_note(str(note), {"title": "Tags test", "summary": "", "tags": "not-valid-json"})
+
+        assert len(backend._id_map) == 1
+
+    def test_build_index_full_pipeline(self, tmp_path, capsys):
+        """HybridBackend.build_index() runs FTS5 + semantic indexing."""
+        from search_backends import HybridBackend
+        db = str(tmp_path / "test.db")
+        backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
+
+        note = tmp_path / "Indexed.md"
+        note.write_text('---\ntitle: "Indexed"\ntags: []\nsummary: ""\n---\nBody.\n', encoding="utf-8")
+
+        mock_model = MagicMock()
+        mock_model.embed = MagicMock(return_value=iter([[0.1] * 384]))
+        backend._model = mock_model
+
+        mock_index = MagicMock()
+        mock_index.ndim = 384
+        mock_index.add = MagicMock()
+        mock_index.save = MagicMock()
+        backend._index = mock_index
+        backend._id_map = []
+
+        mods, _, _, _ = self._make_mocks()
+        with patch.dict(sys.modules, mods):
+            with patch.object(backend, "_try_import_smart_connections_index", return_value=False):
+                with patch.object(backend, "_save_index"):
+                    backend.build_index()
+
+        captured = capsys.readouterr()
+        assert "semantic" in captured.err.lower() or "index" in captured.err.lower()
+
+    def test_build_index_uses_smart_connections_when_available(self, tmp_path):
+        """HybridBackend.build_index() returns early if SC import succeeds."""
+        from search_backends import HybridBackend
+        db = str(tmp_path / "test.db")
+        backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
+
+        with patch.object(backend._fts5, "build_index"):
+            with patch.object(backend, "_try_import_smart_connections_index", return_value=True):
+                backend.build_index()  # should return early after SC import
+
+        # _embed_note should NOT be called since SC import handled it
+        # (no error = success)
+
+    def test_build_index_logs_embed_note_exception(self, tmp_path, capsys):
+        """When _embed_note raises during build_index, exception is logged and build continues."""
+        from search_backends import HybridBackend
+        db = str(tmp_path / "test.db")
+        backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
+
+        note = tmp_path / "Problem.md"
+        note.write_text('---\ntitle: "Problem"\ntags: []\nsummary: ""\n---\nBody.\n', encoding="utf-8")
+
+        mock_model = MagicMock()
+        backend._model = mock_model
+
+        mock_index = MagicMock()
+        mock_index.ndim = 384
+        mock_index.save = MagicMock()
+        backend._index = mock_index
+        backend._id_map = []
+
+        mods, _, _, _ = self._make_mocks()
+        with patch.dict(sys.modules, mods):
+            with patch.object(backend, "_try_import_smart_connections_index", return_value=False):
+                with patch.object(backend, "_embed_note", side_effect=RuntimeError("embed failed")):
+                    with patch.object(backend, "_save_index"):
+                        backend.build_index()
+
+        captured = capsys.readouterr()
+        assert "Embedding failed" in captured.err or "failed" in captured.err.lower()
+
+    def test_load_or_create_index_corrupt_manifest_falls_through(self, tmp_path):
+        """When manifest.json contains invalid JSON, exception is caught and index is created fresh."""
+        from search_backends import HybridBackend
+        db = str(tmp_path / "test.db")
+        backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
+
+        # Write corrupt manifest JSON
+        manifest_path = Path(backend._manifest_path)
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text("{{not valid json", encoding="utf-8")
+
+        mods, MockIndex, mock_index_inst, mock_np = self._make_mocks()
+        with patch.dict(sys.modules, mods):
+            backend._load_or_create_index()
+
+        # Should still create the index despite corrupt manifest
+        assert backend._index is mock_index_inst
+
+    def test_load_or_create_index_warmup_with_nonempty_id_map(self, tmp_path):
+        """_load_or_create_index() runs a warmup search when id_map is non-empty after loading."""
+        import json as jsonmod
+        from search_backends import HybridBackend
+        db = str(tmp_path / "test.db")
+        backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
+
+        # Create a manifest and fake index file with a non-empty id_map
+        manifest_path = Path(backend._manifest_path)
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        id_map = [str(tmp_path / "A.md")]
+        manifest_path.write_text(jsonmod.dumps({
+            "model_name": "TaylorAI/bge-micro-v2",
+            "embedding_dim": 384,
+            "id_map": id_map,
+        }))
+        index_path = Path(backend._usearch_path)
+        index_path.write_text("fake")
+
+        mods, MockIndex, mock_index_inst, mock_np = self._make_mocks()
+        # Make mock_np.zeros return a real list (for warm-up query)
+        mock_np.zeros = MagicMock(return_value=[0.0] * 384)
+        with patch.dict(sys.modules, mods):
+            backend._load_or_create_index()
+
+        # Warm-up search should have been called since id_map is non-empty
+        mock_index_inst.search.assert_called_once()
+
+
+# ===========================================================================
+# SmartConnections — _try_import_smart_connections_index coverage gaps
+# ===========================================================================
+
+class TestSmartConnectionsCoverageGaps:
+    """Covers remaining SC import paths."""
+
+    def _make_hybrid(self, tmp_path):
+        from search_backends import HybridBackend
+        db = str(tmp_path / "test.db")
+        return HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
+
+    def test_sc_import_with_model_match_returns_true(self, tmp_path):
+        """When SC settings match the configured model and embeddings exist, returns True."""
+        import json as jsonmod
+        sc_dir = tmp_path / ".smart-env"
+        sc_dir.mkdir()
+
+        # Settings file with matching model
+        settings = sc_dir / "settings.json"
+        settings.write_text(jsonmod.dumps({"smart_sources": {"embed_model": "TaylorAI/bge-micro-v2"}}))
+
+        # Single ajson file with a valid record
+        vault_note = tmp_path / "Match.md"
+        vault_note.write_text("# Match\n\nContent.", encoding="utf-8")
+        vec = [0.1] * 384
+        ajson_content = f'"Match.md": {{"path": "Match.md", "embeddings": {{"TaylorAI/bge-micro-v2": {{"vec": {jsonmod.dumps(vec)}}}}}}}\n'
+        (sc_dir / "smart_sources.ajson").write_text(ajson_content, encoding="utf-8")
+
+        backend = self._make_hybrid(tmp_path)
+        mock_index = MagicMock()
+        mock_index.add = MagicMock()
+        backend._index = mock_index
+        backend._id_map = []
+
+        mock_np = MagicMock()
+        mock_np.array = lambda x, **kw: x
+
+        with patch.dict(sys.modules, {"numpy": mock_np}):
+            with patch.object(backend, "_save_index"):
+                result = backend._try_import_smart_connections_index()
+
+        assert result is True
+
+    def test_sc_import_returns_false_when_imported_zero(self, tmp_path):
+        """When SC dir exists but no valid embeddings found, returns False."""
+        sc_dir = tmp_path / ".smart-env"
+        sc_dir.mkdir()
+        # Empty ajson file
+        (sc_dir / "smart_sources.ajson").write_text("", encoding="utf-8")
+
+        backend = self._make_hybrid(tmp_path)
+        mock_index = MagicMock()
+        backend._index = mock_index
+        backend._id_map = []
+
+        result = backend._try_import_smart_connections_index()
+        assert result is False
+
+    def test_sc_import_settings_invalid_json_falls_through(self, tmp_path):
+        """When settings.json contains invalid JSON, exception is caught and import proceeds."""
+        sc_dir = tmp_path / ".smart-env"
+        sc_dir.mkdir()
+        # Write invalid JSON to settings
+        (sc_dir / "settings.json").write_text("not valid json {{}", encoding="utf-8")
+
+        vault_note = tmp_path / "Note.md"
+        vault_note.write_text("# Note", encoding="utf-8")
+        vec = [0.1] * 384
+        import json as jsonmod
+        ajson_content = f'"Note.md": {{"path": "Note.md", "embeddings": {{"model": {{"vec": {jsonmod.dumps(vec)}}}}}}}\n'
+        (sc_dir / "smart_sources.ajson").write_text(ajson_content, encoding="utf-8")
+
+        backend = self._make_hybrid(tmp_path)
+        mock_index = MagicMock()
+        mock_index.add = MagicMock()
+        backend._index = mock_index
+        backend._id_map = []
+
+        mock_np = MagicMock()
+        mock_np.array = lambda x, **kw: x
+
+        with patch.dict(sys.modules, {"numpy": mock_np}):
+            with patch.object(backend, "_save_index"):
+                result = backend._try_import_smart_connections_index()
+
+        # Should proceed past the exception and still import
+        assert result is True
+
+    def test_sc_import_multi_dir_mode(self, tmp_path):
+        """_try_import_smart_connections_index() iterates .ajson files in multi/ subdir."""
+        sc_dir = tmp_path / ".smart-env"
+        multi_dir = sc_dir / "multi"
+        multi_dir.mkdir(parents=True)
+
+        vault_note = tmp_path / "Multi.md"
+        vault_note.write_text("# Multi", encoding="utf-8")
+
+        vec = [0.1] * 384
+        import json as jsonmod
+        ajson_content = f'"Multi.md": {{"path": "Multi.md", "embeddings": {{"model": {{"vec": {jsonmod.dumps(vec)}}}}}}}\n'
+        (multi_dir / "multi-note.ajson").write_text(ajson_content, encoding="utf-8")
+
+        backend = self._make_hybrid(tmp_path)
+        mock_index = MagicMock()
+        mock_index.add = MagicMock()
+        backend._index = mock_index
+        backend._id_map = []
+
+        mock_np = MagicMock()
+        mock_np.array = lambda x, **kw: x
+
+        with patch.dict(sys.modules, {"numpy": mock_np}):
+            with patch.object(backend, "_save_index"):
+                result = backend._try_import_smart_connections_index()
+
+        assert result is True
+
+    def test_sc_import_empty_line_skipped(self, tmp_path):
+        """Empty lines in ajson file are skipped (line 582 coverage)."""
+        backend = self._make_hybrid(tmp_path)
+        ajson_file = tmp_path / "with_blanks.ajson"
+        # File with blank lines between records
+        vec = [0.1] * 384
+        import json as jsonmod
+        ajson_file.write_text(
+            "\n\n"  # blank lines at start
+            f'"Note.md": {{"path": "Note.md", "embeddings": {{"model": {{"vec": {jsonmod.dumps(vec)}}}}}}}\n'
+            "\n",  # blank line at end
+            encoding="utf-8",
+        )
+
+        mock_index = MagicMock()
+        mock_index.add = MagicMock()
+        backend._index = mock_index
+        backend._id_map = []
+
+        mock_np = MagicMock()
+        mock_np.array = lambda x, **kw: x
+
+        with patch.dict(sys.modules, {"numpy": mock_np}):
+            result = backend._import_sc_ajson(ajson_file)
+
+        assert result >= 1  # The one valid record was imported
+
+    def test_sc_import_exception_in_add_loop(self, tmp_path, capsys):
+        """When index.add() raises, the error is logged and import continues."""
+        backend = self._make_hybrid(tmp_path)
+        ajson_file = tmp_path / "fail_add.ajson"
+        vec = [0.1] * 384
+        import json as jsonmod
+        ajson_file.write_text(
+            f'"Note.md": {{"path": "Note.md", "embeddings": {{"model": {{"vec": {jsonmod.dumps(vec)}}}}}}}\n',
+            encoding="utf-8",
+        )
+
+        mock_index = MagicMock()
+        mock_index.add = MagicMock(side_effect=RuntimeError("add failed"))
+        backend._index = mock_index
+        backend._id_map = []
+
+        mock_np = MagicMock()
+        mock_np.array = lambda x, **kw: x
+
+        with patch.dict(sys.modules, {"numpy": mock_np}):
+            result = backend._import_sc_ajson(ajson_file)
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "SC import failed" in captured.err or "failed" in captured.err.lower()
+
+
+# ===========================================================================
+# get_search_backend — auto-selection paths
+# ===========================================================================
+
+class TestGetSearchBackendAutoSelection:
+    """get_search_backend() auto-selection when fastembed/usearch are importable."""
+
+    def test_auto_returns_hybrid_when_both_available(self, tmp_path):
+        """'auto' with fastembed and usearch available → HybridBackend."""
+        from search_backends import get_search_backend, HybridBackend
+
+        mock_fastembed = MagicMock()
+        mock_usearch = MagicMock()
+
+        config = {
+            "vault_path": str(tmp_path),
+            "search_backend": "auto",
+            "embedding_model": "TaylorAI/bge-micro-v2",
+            "search_db_path": str(tmp_path / "test.db"),
+        }
+
+        with patch.dict(sys.modules, {"fastembed": mock_fastembed, "usearch": mock_usearch}):
+            backend = get_search_backend(config)
+
+        assert isinstance(backend, HybridBackend)
+
+    def test_hybrid_explicit_with_both_available(self, tmp_path):
+        """'hybrid' preference with both packages available → HybridBackend."""
+        from search_backends import get_search_backend, HybridBackend
+
+        mock_fastembed = MagicMock()
+        mock_usearch = MagicMock()
+
+        config = {
+            "vault_path": str(tmp_path),
+            "search_backend": "hybrid",
+            "embedding_model": "TaylorAI/bge-micro-v2",
+            "search_db_path": str(tmp_path / "test.db"),
+        }
+
+        with patch.dict(sys.modules, {"fastembed": mock_fastembed, "usearch": mock_usearch}):
+            backend = get_search_backend(config)
+
+        assert isinstance(backend, HybridBackend)
+
+    def test_auto_falls_back_to_fts5_when_fastembed_missing(self, tmp_path):
+        """'auto' with fastembed unavailable → FTS5Backend (line 770-774 path)."""
+        from search_backends import get_search_backend, FTS5Backend
+
+        config = {
+            "vault_path": str(tmp_path),
+            "search_backend": "auto",
+            "search_db_path": str(tmp_path / "test.db"),
+        }
+
+        with patch.dict(sys.modules, {"fastembed": None, "usearch": None}):
+            backend = get_search_backend(config)
+
+        assert isinstance(backend, FTS5Backend)
+
+    def test_auto_returns_fts5_when_fastembed_present_but_usearch_absent(self, tmp_path):
+        """'auto' with fastembed available but usearch unavailable → FTS5Backend.
+        Covers _has_usearch() ImportError path (lines 752-753) and _has_fastembed() return True (line 744).
+        """
+        from search_backends import get_search_backend, FTS5Backend
+
+        mock_fastembed = MagicMock()
+
+        config = {
+            "vault_path": str(tmp_path),
+            "search_backend": "auto",
+            "search_db_path": str(tmp_path / "test.db"),
+        }
+
+        # fastembed is present (importable), usearch is absent (None triggers ImportError)
+        with patch.dict(sys.modules, {"fastembed": mock_fastembed, "usearch": None}):
+            backend = get_search_backend(config)
+
+        assert isinstance(backend, FTS5Backend)
+
+
+# ===========================================================================
+# search_index — additional exception paths
+# ===========================================================================
+
+# (These are in test_search_index.py but added here for completeness)

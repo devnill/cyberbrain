@@ -184,3 +184,39 @@ class TestActiveBackendName:
             result = si.active_backend_name(config)
 
         assert result == "none"
+
+
+# ===========================================================================
+# Additional exception path coverage
+# ===========================================================================
+
+class TestBuildFullIndexExceptions:
+    """build_full_index handles backend exceptions gracefully."""
+
+    def test_swallows_build_index_exception(self, tmp_path, capsys):
+        """If backend.build_index() raises, the error is logged and not propagated."""
+        mock_backend = MagicMock()
+        mock_backend.backend_name.return_value = "fts5"
+        mock_backend.build_index.side_effect = RuntimeError("build failed")
+        config = {"vault_path": str(tmp_path)}
+
+        with patch.object(si, "_get_backend", return_value=mock_backend):
+            si.build_full_index(config)  # should not raise
+
+        captured = capsys.readouterr()
+        assert "failed" in captured.err.lower() or "error" in captured.err.lower()
+
+
+class TestActiveBackendNameExceptions:
+    """active_backend_name() handles backend_name() exceptions gracefully."""
+
+    def test_returns_unknown_when_backend_name_raises(self, tmp_path):
+        """If backend.backend_name() raises, 'unknown' is returned."""
+        mock_backend = MagicMock()
+        mock_backend.backend_name.side_effect = RuntimeError("name error")
+        config = {"vault_path": str(tmp_path)}
+
+        with patch.object(si, "_get_backend", return_value=mock_backend):
+            result = si.active_backend_name(config)
+
+        assert result == "unknown"

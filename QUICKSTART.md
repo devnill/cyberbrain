@@ -14,20 +14,19 @@ bash install.sh
 
 ### Step 1 — Point at a vault
 
-Edit `~/.claude/cyberbrain.json`:
+The installer prompts for your vault path. Press Enter to use the default (`~/.claude/cyberbrain/vault/`), or enter the path to an existing Obsidian vault.
+
+To change the vault later, edit `~/.claude/cyberbrain/config.json`:
 
 ```json
 {
   "vault_path": "/absolute/path/to/your/vault",
-  "inbox": "AI/Claude-Sessions",
+  "inbox": "AI/Claude-Sessions"
 }
 ```
 
-**Don't have an Obsidian vault yet?**
-Create a new vault in Obsidian, then set `vault_path` to that directory. The folders above will be created automatically.
-
 **Don't use Obsidian?**
-Set `vault_path` to any existing directory. Notes are plain markdown — any editor works.
+Set `vault_path` to any directory. Notes are plain markdown — any editor works.
 
 ---
 
@@ -66,24 +65,45 @@ Requires Ollama running locally with a model pulled.
 
 Start a Claude Code session in any project. Run `/compact` (or let context fill naturally). You'll see **"Extracting knowledge before compaction..."** in the status bar. Beats appear in your vault under `AI/Claude-Sessions/`.
 
-To preview what would be extracted from the current session without writing anything:
-```
-/cb-extract --dry-run
-```
+---
+
+## Claude Desktop Quick Start
+
+The installer registers the MCP server in Claude Desktop automatically (macOS). After installation, restart Claude Desktop — a hammer icon in the chat input confirms it's connected.
+
+**If you're a Claude Desktop user who doesn't use Claude Code**, this is your primary interface for cyberbrain.
+
+### Step 1 — Open a Project
+
+In Claude Desktop: **Projects** → create or open a project → **Customize** → **Custom instructions**.
+Paste the contents of `prompts/claude-desktop-project.md`. This teaches Claude to use the vault tools.
+
+### Step 2 — Configure through conversation
+
+The installer creates `~/.claude/cyberbrain/vault/` as a default vault. You don't need to edit any config files. To switch to an Obsidian vault, just ask Claude:
+
+> "Set up my cyberbrain vault"
+
+Claude will call `cb_configure(discover=True)` to find Obsidian vaults on your Mac and guide you through picking one.
+
+You can also configure settings directly:
+- **Find vaults:** ask "Find my Obsidian vaults"
+- **Set vault:** ask "Use my vault at ~/Documents/MyVault"
+- **Change capture behavior:** ask "Set capture mode to auto" (files immediately), "to suggest" (offers first), or "to manual" (only when asked)
+
+### Step 3 — Start a session
+
+Use the `orient` prompt from the `+` menu at session start. This loads your behavioral guide and checks vault health automatically.
+
+Or just start working — Claude will:
+- Search your vault when you mention familiar projects or topics
+- Offer to save valuable knowledge (in `suggest` mode) or save it automatically (in `auto` mode)
 
 ---
 
 ## Using with Claude Desktop (optional)
 
-`install.sh` registers the MCP server in Claude Desktop automatically (macOS). Restart Claude Desktop after installation — a hammer icon (🔨) in the chat input confirms the server is connected.
-
-To enable proactive recall and filing in Claude Desktop, create a **Project** and add the system prompt from `prompts/claude-desktop-project.md` to it:
-
-1. Open Claude Desktop → **Projects** → create or open a project
-2. Click **Customize** → **Custom instructions**
-3. Paste the contents of `prompts/claude-desktop-project.md`
-
-This teaches Claude to call `cb_recall` automatically when topics come up and `cb_file` when you ask it to save something.
+See the **Claude Desktop Quick Start** section above for full setup instructions.
 
 **If the server isn't connecting:** go to **Settings → Developer → Edit Config** and verify the `cyberbrain` entry is present in `mcpServers`. See the README for the manual config format.
 
@@ -136,38 +156,41 @@ The system walks up from the session's working directory to find this file.
 
 ## Generate vault filing instructions (optional)
 
-If you have an existing vault, run this once to generate a `CLAUDE.md` at the vault root. It teaches Claude your vault's structure so that `/cb-file` and future extractions stay consistent with your conventions:
+If you have an existing vault, ask Claude to analyze it and generate a `CLAUDE.md` at the vault root. This teaches Claude your vault's structure so extractions and filings stay consistent with your conventions:
 
-```
-/cb-setup
-```
+> "Analyze my vault and set it up for cyberbrain"
+
+Claude will call `cb_setup` with a two-phase flow: first it analyzes the vault and asks clarifying questions, then it generates the CLAUDE.md.
 
 For a new vault, skip this until you have a few dozen notes.
 
 ---
 
-## Skills reference
+## MCP tools reference
 
-| Command | What it does |
+| Tool | What it does |
 |---|---|
-| `/cb-extract` | Extract beats from the current session (or a path to any `.jsonl`) |
-| `/cb-recall <query>` | Search your vault and inject context into the session |
-| `/cb-file` | Manually save any piece of information to the vault |
-| `/cb-enrich` | Backfill metadata on notes that are missing tags/summaries |
-| `/cb-setup` | Analyze vault and generate/update its `CLAUDE.md` |
+| `cb_extract` | Extract beats from a transcript file and file them to the vault |
+| `cb_recall` | Search your vault and inject context into the session |
+| `cb_read` | Read a specific vault note by path or title |
+| `cb_file` | Manually save any piece of information to the vault |
+| `cb_enrich` | Backfill metadata on notes that are missing tags/summaries |
+| `cb_setup` | Analyze vault and generate/update its `CLAUDE.md` (two-phase) |
+| `cb_configure` | View or change vault path, inbox, and capture mode |
+| `cb_status` | Show recent extraction runs and index health |
 
 ---
 
 ## Troubleshooting
 
 **No beats appear after /compact**
-Check `vault_path` in `~/.claude/cyberbrain.json` points to a real directory, and that the hook is registered: `cat ~/.claude/settings.json | grep PreCompact`
+Check `vault_path` in `~/.claude/cyberbrain/config.json` points to a real directory, and that the hook is registered: `grep PreCompact ~/.claude/settings.json`
 
 **"Reached max turns" or backend error**
-The transcript may be very long. Add `"claude_timeout": 180` to `~/.claude/cyberbrain.json` to extend the timeout.
+The transcript may be very long. Add `"claude_timeout": 180` to `~/.claude/cyberbrain/config.json` to extend the timeout.
 
 **Beats land in inbox instead of project folder**
 Confirm `.claude/cyberbrain.local.json` exists in the project root (or a parent directory up to `~`).
 
-**Skills not found after install**
-Skills load at session start. Open a new Claude Code session after running `bash install.sh`.
+**MCP tools not available in Claude Desktop**
+Restart Claude Desktop after running `bash install.sh`. Check Settings → Developer → Edit Config to verify the `cyberbrain` entry is present in `mcpServers`.

@@ -112,9 +112,9 @@ if __name__ == "__main__":
     import json
     from pathlib import Path
 
-    config_path = Path.home() / ".claude" / "cyberbrain.json"
+    config_path = Path.home() / ".claude" / "cyberbrain" / "config.json"
     if not config_path.exists():
-        print("No config found at ~/.claude/cyberbrain.json", file=sys.stderr)
+        print("No config found at ~/.claude/cyberbrain/config.json", file=sys.stderr)
         sys.exit(1)
     config = json.loads(config_path.read_text())
     build_full_index(config)

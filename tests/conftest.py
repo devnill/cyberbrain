@@ -9,6 +9,7 @@ import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -21,6 +22,58 @@ if str(REPO_ROOT) not in sys.path:
 EXTRACTORS_DIR = REPO_ROOT / "extractors"
 if str(EXTRACTORS_DIR) not in sys.path:
     sys.path.insert(0, str(EXTRACTORS_DIR))
+
+# Ensure the mcp/ directory is on sys.path for tool module imports
+MCP_DIR = REPO_ROOT / "mcp"
+if str(MCP_DIR) not in sys.path:
+    sys.path.insert(0, str(MCP_DIR))
+
+# ---------------------------------------------------------------------------
+# Shared extract_beats mock — installed ONCE before any test module imports it.
+#
+# All test files that need to mock extract_beats (test_mcp_server.py,
+# test_extract_file_tools.py, test_recall_read_tools.py) must use the SAME
+# BackendError class, otherwise `except BackendError` in the tool code won't
+# catch the test's side_effect exception.
+#
+# Installing here in conftest.py (which runs before any test module) ensures
+# there is exactly one BackendError class across the whole test session.
+# ---------------------------------------------------------------------------
+
+
+class _SharedBackendError(Exception):
+    """Shared BackendError used by all MCP tool tests.
+
+    This must be a common base for any BackendError class used by individual
+    test files. test_mcp_server.py creates its own `_BackendError(Exception)`
+    and uses it as a side_effect. For `except BackendError` in the tool code
+    to catch it, `BackendError` must be a superclass. Using `Exception` as a
+    shared base ensures any `_BackendError(Exception)` is caught.
+    """
+    pass
+
+
+if "extract_beats" not in sys.modules:
+    _shared_mock_eb = MagicMock()
+    # Use Exception as BackendError so any exception subclassing Exception is caught
+    # by the `except BackendError` clause in tool code. This is safe for tests.
+    _shared_mock_eb.BackendError = Exception
+    _shared_mock_eb.RUNS_LOG_PATH = "/tmp/fake-runs.log"
+    _shared_mock_eb.resolve_config = MagicMock(return_value={
+        "vault_path": "/tmp/test_vault",
+        "inbox": "AI/Claude-Sessions",
+        "backend": "claude-code",
+        "model": "claude-haiku-4-5",
+        "autofile": False,
+        "daily_journal": False,
+    })
+    _shared_mock_eb.parse_jsonl_transcript = MagicMock(return_value="User: hello\nAssistant: hi")
+    _shared_mock_eb.extract_beats = MagicMock(return_value=[])
+    _shared_mock_eb.write_beat = MagicMock()
+    _shared_mock_eb.autofile_beat = MagicMock()
+    _shared_mock_eb.write_journal_entry = MagicMock()
+    _shared_mock_eb._call_claude_code = MagicMock(return_value="synthesis result")
+    sys.modules["extract_beats"] = _shared_mock_eb
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 

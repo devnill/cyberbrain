@@ -782,7 +782,7 @@ Both formats feed through the same beat extraction pipeline used by `/cb-extract
 
 ## 10. Configuration
 
-### Global: `~/.claude/cyberbrain.json`
+### Global: `~/.claude/cyberbrain/config.json`
 
 ```json
 {
@@ -1199,7 +1199,50 @@ V1 is a clean implementation, not an accumulation of prior iterations. Any code 
 
 ---
 
-## 20. Success Criteria
+## 20. Installation Layout
+
+All cyberbrain files live under a single `~/.claude/cyberbrain/` subtree. Hooks and Claude Code system files are exceptions that must remain at their Claude Code-required locations.
+
+### Target layout
+
+```
+~/.claude/
+  hooks/                    ← unchanged (Claude Code requirement)
+  skills/                   ← unchanged (Claude Code requirement)
+  settings.json             ← unchanged (Claude Code requirement)
+  cyberbrain/
+    config.json             ← global config (was: ~/.claude/cyberbrain.json)
+    vault/                  ← default vault location (created at install time)
+    extractors/             ← extractor Python files (was: ~/.claude/extractors/)
+    prompts/                ← LLM prompt files (was: ~/.claude/prompts/)
+    logs/                   ← extraction logs (was: ~/.claude/logs/)
+    mcp/                    ← MCP server
+    venv/                   ← MCP Python venv
+    search-index.db         ← FTS5 search index
+    search-index.usearch    ← vector index (optional)
+    search-index-manifest.json
+    import-state.json       ← import script state (was: ~/.claude/import-state.json)
+```
+
+### Migration from pre-consolidation layout
+
+`install.sh` detects and moves old artifacts into the consolidated `~/.claude/cyberbrain/` subtree before installing new files. Old locations are removed after successful migration. The migration is one-way and safe: if the destination already exists, the old artifact is left in place (the user can remove it manually).
+
+| Old path | New path |
+|---|---|
+| `~/.claude/cyberbrain.json` | `~/.claude/cyberbrain/config.json` |
+| `~/.claude/extractors/` | `~/.claude/cyberbrain/extractors/` |
+| `~/.claude/prompts/` | `~/.claude/cyberbrain/prompts/` |
+| `~/.claude/logs/` | `~/.claude/cyberbrain/logs/` |
+| `~/.claude/import-state.json` | `~/.claude/cyberbrain/import-state.json` |
+
+### Vault path prompt
+
+On a fresh install (no existing config), `install.sh` prompts the user for their vault path. The default is `~/.claude/cyberbrain/vault/`. On upgrade, the existing vault path in `config.json` is preserved.
+
+---
+
+## 21. Success Criteria
 
 V1 is complete when:
 

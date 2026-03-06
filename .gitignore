@@ -4,3 +4,4 @@ dist/
 *.skill
 __pycache__/
 *.pyc
+.coverage

@@ -777,45 +777,48 @@ def get_search_backend(config: dict) -> SearchBackend:
 
 
 # ---------------------------------------------------------------------------
-# Shared helpers
+# Shared helpers (canonical implementations live in frontmatter.py)
 # ---------------------------------------------------------------------------
 
-def _read_frontmatter(path: str) -> dict:
-    """Read YAML frontmatter from a markdown file. Returns empty dict on any error."""
-    try:
-        text = Path(path).read_text(encoding="utf-8")
-    except OSError:
-        return {}
-    if not text.startswith("---"):
-        return {}
-    end = text.find("\n---", 3)
-    if end == -1:
-        return {}
-    try:
-        import yaml
-        fm = yaml.safe_load(text[3:end])
-        return fm if isinstance(fm, dict) else {}
-    except Exception:
-        return {}
+try:
+    from frontmatter import read_frontmatter as _read_frontmatter
+    from frontmatter import normalise_list as _normalise_list
+    from frontmatter import derive_id as _derive_id
+except ImportError:
+    # Fallback implementations for environments where frontmatter.py is not yet available
+    from pathlib import Path as _Path
 
-
-def _normalise_list(value) -> list[str]:
-    """Coerce a frontmatter list value (may be JSON string or Python list) to list[str]."""
-    if isinstance(value, list):
-        return [str(v) for v in value if v]
-    if isinstance(value, str):
-        import json
+    def _read_frontmatter(path: str) -> dict:
         try:
-            parsed = json.loads(value)
-            if isinstance(parsed, list):
-                return [str(v) for v in parsed if v]
-        except (json.JSONDecodeError, ValueError):
-            pass
-        return [value] if value.strip() else []
-    return []
+            text = _Path(path).read_text(encoding="utf-8")
+        except OSError:
+            return {}
+        if not text.startswith("---"):
+            return {}
+        end = text.find("\n---", 3)
+        if end == -1:
+            return {}
+        try:
+            import yaml
+            fm = yaml.safe_load(text[3:end])
+            return fm if isinstance(fm, dict) else {}
+        except Exception:
+            return {}
 
+    def _normalise_list(value) -> list:
+        if isinstance(value, list):
+            return [str(v) for v in value if v]
+        if isinstance(value, str):
+            import json
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, list):
+                    return [str(v) for v in parsed if v]
+            except (json.JSONDecodeError, ValueError):
+                pass
+            return [value] if value.strip() else []
+        return []
 
-def _derive_id(note_path: str) -> str:
-    """Derive a stable ID from path when no UUID is in frontmatter."""
-    import hashlib
-    return hashlib.sha256(note_path.encode()).hexdigest()[:36]
+    def _derive_id(note_path: str) -> str:
+        import hashlib
+        return hashlib.sha256(note_path.encode()).hexdigest()[:36]

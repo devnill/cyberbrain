@@ -45,7 +45,7 @@ fi
 if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/extractors/extract_beats.py" ]; then
   EXTRACTOR="$CLAUDE_PLUGIN_ROOT/extractors/extract_beats.py"
 else
-  EXTRACTOR="$HOME/.claude/extractors/extract_beats.py"
+  EXTRACTOR="$HOME/.claude/cyberbrain/extractors/extract_beats.py"
 fi
 
 if [ ! -f "$EXTRACTOR" ]; then

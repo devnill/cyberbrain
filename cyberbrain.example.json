@@ -7,5 +7,6 @@
   "autofile": false,
   "daily_journal": false,
   "journal_folder": "AI/Journal",
-  "journal_name": "%Y-%m-%d"
+  "journal_name": "%Y-%m-%d",
+  "desktop_capture_mode": "suggest"
 }

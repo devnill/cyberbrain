@@ -13,7 +13,7 @@ Usage:
     python3 import.py --export ~/Downloads/conversations.json --format claude --limit 10
     python3 import.py --export ~/Downloads/conversations.json --format claude --since 2026-01-01
 
-The extractor lives at ~/.claude/extractors/extract_beats.py (installed by install.sh).
+The extractor lives at ~/.claude/cyberbrain/extractors/extract_beats.py (installed by install.sh).
 All vault writes go through that extractor — import.py never writes vault files directly.
 """
 
@@ -28,8 +28,8 @@ from pathlib import Path
 # Constants
 # ---------------------------------------------------------------------------
 
-STATE_PATH = Path.home() / ".claude" / "import-state.json"
-EXTRACTORS_DIR = Path.home() / ".claude" / "extractors"
+STATE_PATH = Path.home() / ".claude" / "cyberbrain" / "import-state.json"
+EXTRACTORS_DIR = Path.home() / ".claude" / "cyberbrain" / "extractors"
 MAX_TRANSCRIPT_CHARS = 150_000
 
 # Minimum rendered character count to bother passing to the extraction LLM.

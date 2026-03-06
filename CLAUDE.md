@@ -18,18 +18,17 @@ Read `.specs/v1_spec.md` before making any significant changes. It supersedes al
 
 A knowledge capture and retrieval system for LLM interactions. It automatically extracts durable knowledge ("beats") from Claude sessions and stores them as structured Obsidian markdown notes, making that knowledge searchable and injectable into future sessions.
 
-The system exposes five slash command skills (`/cb-recall`, `/cb-file`, `/cb-extract`, `/cb-setup`, `/cb-enrich`), an MCP server for Claude Desktop, a PreCompact hook for automatic capture, and CLI import scripts for Claude and ChatGPT data exports.
+The system exposes an MCP server with eight tools (`cb_extract`, `cb_file`, `cb_recall`, `cb_read`, `cb_setup`, `cb_enrich`, `cb_configure`, `cb_status`), a PreCompact hook for automatic capture, and CLI import scripts for Claude and ChatGPT data exports. The MCP server is the single interface — no slash command skills.
 
 ---
 
 ## Build & Install
 
 ```bash
-bash build.sh                  # build all .skill files + release tarball
-bash build.sh --skills-only    # build .skill files only
-bash build.sh --clean          # wipe dist/ before building
-bash install.sh                # install to ~/.claude/
-bash uninstall.sh [--yes]      # uninstall
+bash build.sh          # build release tarball
+bash build.sh --clean  # wipe dist/ before building
+bash install.sh        # install to ~/.claude/
+bash uninstall.sh [--yes]  # uninstall
 ```
 
 **Validate the extractor directly:**
@@ -54,7 +53,7 @@ echo '{"transcript_path": "/path/to/transcript.jsonl", "session_id": "test-123",
 python3 -m pytest tests/
 ```
 
-**Hot reload:** Skills load at session start — start a new Claude Code session after `install.sh`. The hook and `extract_beats.py` reload on each invocation. MCP server changes require restarting Claude Desktop.
+**Hot reload:** The hook and `extract_beats.py` reload on each invocation. MCP server changes require restarting Claude Desktop.
 
 ---
 
@@ -80,14 +79,18 @@ Beat routing:
 |---|---|
 | `hooks/pre-compact-extract.sh` | PreCompact hook; reads hook context JSON from stdin, strips nested-session env vars, calls extractor; always exits 0 |
 | `extractors/extract_beats.py` | Core engine; parses JSONL/text transcripts, calls LLM backend, writes vault notes, daily journal |
+| `extractors/backends.py` | LLM backend implementations (claude-code, bedrock, ollama); env var stripping; subprocess hardening |
+| `extractors/analyze_vault.py` | Vault structure analyzer used by `cb_setup`; produces JSON report |
 | `prompts/extract-beats-system.md` / `extract-beats-user.md` | Extraction LLM prompts — edit to change extraction behavior |
 | `prompts/autofile-system.md` / `autofile-user.md` | Autofile routing prompts |
-| `mcp/server.py` | FastMCP server for Claude Desktop; wraps extraction logic; runs in `~/.claude/cyberbrain/venv/` |
-| `skills/cb-recall/SKILL.md` | `/cb-recall` slash command |
-| `skills/cb-file/SKILL.md` | `/cb-file` slash command |
-| `skills/cb-extract/SKILL.md` | `/cb-extract` slash command |
-| `skills/cb-setup/SKILL.md` | `/cb-setup` slash command (vault analyzer + CLAUDE.md generator) |
-| `skills/cb-enrich/SKILL.md` | `/cb-enrich` slash command |
+| `prompts/enrich-system.md` / `enrich-user.md` | Batch enrichment prompts — support `{vault_type_context}` injection |
+| `mcp/server.py` | FastMCP v3 server for Claude Desktop; registers all tools; runs in `~/.claude/cyberbrain/venv/` |
+| `mcp/tools/extract.py` | `cb_extract` tool |
+| `mcp/tools/file.py` | `cb_file` tool |
+| `mcp/tools/recall.py` | `cb_recall` + `cb_read` tools |
+| `mcp/tools/setup.py` | `cb_setup` tool — two-phase vault analysis and CLAUDE.md generation |
+| `mcp/tools/enrich.py` | `cb_enrich` tool — batch frontmatter enrichment |
+| `mcp/tools/manage.py` | `cb_configure` + `cb_status` tools |
 | `scripts/import.py` | Unified import for Claude Desktop and ChatGPT data exports |
 | `tests/` | Test suite — unit and integration tests with mocked LLM calls |
 
@@ -104,7 +107,7 @@ The extractor uses 4 types (defined by the vault's CLAUDE.md; these are the defa
 
 ### Configuration
 
-Global config at `~/.claude/cyberbrain.json`:
+Global config at `~/.claude/cyberbrain/config.json`:
 ```json
 {
   "vault_path": "/path/to/vault",
@@ -147,24 +150,24 @@ When `claude -p` is spawned as a subprocess, these inherited env vars cause hang
 - `CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY`
 - `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`
 
-The `claude-code` backend strips all four. Skills running inside an active session cannot spawn `claude -p` subprocesses — they use Claude's in-context tools (Grep, Read, Edit, Write) instead.
+The `claude-code` backend strips all four unconditionally and uses `start_new_session=True` to fully detach from the parent process group. The subprocess also runs from a neutral working directory (`~/.claude/cyberbrain/`) that has no CLAUDE.md, preventing project config injection.
 
-**Architectural constraint:** Skills never write vault files directly using Claude's Write tool. All vault writes go through `extract_beats.py` or `import.py`. This ensures path validation, logging, and error fallback are consistently enforced in Python.
+**Architectural constraint:** All vault writes go through `extract_beats.py` or `import.py`. This ensures path validation, logging, and error fallback are consistently enforced in Python. MCP tools never write vault files directly.
 
 **Filename character constraint:** Beat titles (used as vault filenames) must not contain `#`, `[`, `]`, or `^`. These characters are valid on the filesystem but break Obsidian wikilink resolution — Obsidian uses `#` as a heading anchor separator and `^` as a block reference marker inside link syntax. The `make_filename()` function in `extract_beats.py` strips them, and the extraction and autofile prompts instruct the LLM not to generate them. When writing prompts or testing, verify titles avoid these characters (e.g. use "CSharp" not "C#").
 
-### Skills vs MCP
+### MCP Interface
 
-Skills (`skills/`) are slash commands for Claude Code CLI. The MCP server (`mcp/`) exposes the same capabilities to Claude Desktop. Both are built and distributed separately.
+The MCP server (`mcp/`) is the single interface for both Claude Desktop and Claude Code. It runs as a separate process (stdio transport) — architecturally isolated from the user's main Claude session. All LLM inference for extraction, enrichment, and setup happens in `claude -p` subprocess calls spawned from the MCP server process, not from the user's session.
+
+```
+Claude Code / Claude Desktop (process A — user session, expensive model)
+  └── MCP server (process B — launched at startup, stdio transport)
+        └── claude -p (process C — spawned per extraction, cheap model)
+```
 
 ---
 
 ## Distribution
 
-Skills are packaged as `.skill` zip archives. The release tarball includes hooks, extractors, prompts, skills, and the MCP server. `install.sh` copies files to `~/.claude/` and registers the PreCompact hook in `~/.claude/settings.json`.
-
-Plugin mode (no install required):
-```bash
-claude --plugin-dir ~/code/cyberbrain
-```
-Skills appear namespaced: `/cyberbrain:cb-recall` etc.
+The release tarball includes hooks, extractors, prompts, and the MCP server. `install.sh` copies files to `~/.claude/` and registers the PreCompact hook in `~/.claude/settings.json`.

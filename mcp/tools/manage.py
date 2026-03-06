@@ -1,0 +1,314 @@
+"""cb_configure and cb_status tools — configuration and system status."""
+
+from pathlib import Path
+from typing import Annotated
+
+from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
+from mcp.types import ToolAnnotations
+from pydantic import Field
+
+from shared import _load_config, RUNS_LOG_PATH
+from tools.recall import _DEFAULT_DB_PATH, _DEFAULT_MANIFEST_PATH
+
+
+def _read_index_stats(config: dict) -> dict:
+    """Query SQLite index for note counts, relation count, and stale path count."""
+    import sqlite3
+    db_path = config.get("search_db_path", _DEFAULT_DB_PATH)
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        by_type = {}
+        for row in conn.execute("SELECT type, COUNT(*) AS cnt FROM notes GROUP BY type ORDER BY cnt DESC"):
+            by_type[row["type"] or "(none)"] = row["cnt"]
+        total = sum(by_type.values())
+        relations_count = conn.execute("SELECT COUNT(*) FROM relations").fetchone()[0]
+        all_paths = [r[0] for r in conn.execute("SELECT path FROM notes").fetchall()]
+        stale_count = sum(1 for p in all_paths if not Path(p).exists())
+        conn.close()
+        return {"total": total, "by_type": by_type, "relations_count": relations_count, "stale_count": stale_count}
+    except Exception:
+        return {}
+
+
+def register(mcp: FastMCP) -> None:
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, idempotentHint=True))
+    def cb_configure(
+        vault_path: Annotated[str | None, Field(
+            description="Absolute path to your notes folder. Creates the directory if it doesn't exist. Must be within your home directory."
+        )] = None,
+        inbox: Annotated[str | None, Field(
+            description="Vault-relative subfolder for general notes, e.g. 'AI/Claude-Sessions'. Default: 'AI/Claude-Sessions'."
+        )] = None,
+        capture_mode: Annotated[str | None, Field(
+            description="How to file insights in Claude Desktop: 'suggest' (offer first), 'auto' (file immediately), 'manual' (only when asked)."
+        )] = None,
+        discover: Annotated[bool, Field(
+            description="Search this Mac for existing Obsidian vaults and return candidates."
+        )] = False,
+    ) -> str:
+        """
+        Configure cyberbrain or show current configuration.
+
+        Call with no arguments to see current config and health status.
+        Call with discover=True to find Obsidian vaults on this Mac.
+        Call with vault_path=... to set where notes are stored.
+        Call with capture_mode='suggest'|'auto'|'manual' to set filing behavior.
+
+        Use this to set up cyberbrain through conversation instead of editing config files.
+        """
+        import json as _json
+        import threading
+
+        cfg_path = Path.home() / ".claude" / "cyberbrain" / "config.json"
+
+        def _load_raw() -> dict:
+            if cfg_path.exists():
+                try:
+                    return _json.loads(cfg_path.read_text())
+                except Exception:
+                    return {}
+            return {}
+
+        def _save_raw(cfg: dict) -> None:
+            cfg_path.write_text(_json.dumps(cfg, indent=2) + "\n")
+
+        # --- discover mode ---
+        if discover:
+            search_roots = [
+                Path.home() / "Documents",
+                Path.home() / "Library" / "Mobile Documents" / "iCloud~md~obsidian" / "Documents",
+                Path.home() / "Obsidian",
+                Path.home() / "Desktop",
+            ]
+            found = []
+            for root in search_roots:
+                if not root.exists():
+                    continue
+                try:
+                    for obsidian_dir in root.rglob(".obsidian"):
+                        vault_dir = obsidian_dir.parent
+                        found.append(vault_dir)
+                        if len(found) >= 10:
+                            break
+                except (PermissionError, OSError):
+                    continue
+                if len(found) >= 10:
+                    break
+
+            if not found:
+                return (
+                    "No Obsidian vaults found in ~/Documents/, ~/Library/Mobile Documents/, "
+                    "~/Obsidian/, or ~/Desktop/.\n\n"
+                    "To use a custom location, call cb_configure(vault_path='/absolute/path/to/folder')."
+                )
+
+            lines = ["Found Obsidian vaults on this Mac:\n"]
+            for i, v in enumerate(found, 1):
+                lines.append(f"  {i}. {v}")
+            lines.append(
+                "\nTo use one of these vaults, call cb_configure(vault_path='<path>') "
+                "with the full path from above."
+            )
+            return "\n".join(lines)
+
+        # --- writes ---
+        changed = []
+        if vault_path is not None or inbox is not None or capture_mode is not None:
+            cfg = _load_raw()
+
+            if vault_path is not None:
+                resolved = Path(vault_path).expanduser().resolve()
+                try:
+                    resolved.relative_to(Path.home())
+                except ValueError:
+                    raise ToolError(
+                        f"vault_path must be within your home directory. Got: {vault_path}"
+                    )
+                resolved.mkdir(parents=True, exist_ok=True)
+                cfg["vault_path"] = str(resolved)
+                changed.append(f"vault_path → {resolved}")
+
+                # Rebuild index in background
+                def _rebuild():
+                    try:
+                        from search_backends import get_search_backend
+                        backend = get_search_backend(cfg)
+                        if hasattr(backend, "build_full_index"):
+                            backend.build_full_index(cfg)
+                    except Exception:
+                        pass
+                threading.Thread(target=_rebuild, daemon=True).start()
+
+            if inbox is not None:
+                cfg["inbox"] = inbox
+                changed.append(f"inbox → {inbox}")
+
+            if capture_mode is not None:
+                valid = {"suggest", "auto", "manual"}
+                if capture_mode not in valid:
+                    raise ToolError(
+                        f"capture_mode must be 'suggest', 'auto', or 'manual'. Got: {capture_mode}"
+                    )
+                cfg["desktop_capture_mode"] = capture_mode
+                changed.append(f"desktop_capture_mode → {capture_mode}")
+
+            _save_raw(cfg)
+            result = "Configuration updated:\n" + "\n".join(f"  - {c}" for c in changed)
+            if vault_path is not None:
+                result += "\n\nSearch index rebuild started in background."
+            return result
+
+        # --- no-args: show current config + health ---
+        cfg = _load_config()
+        lines = ["## Cyberbrain Configuration\n"]
+
+        vault = cfg.get("vault_path", "(not set)")
+        vault_path_obj = Path(vault) if vault and vault != "(not set)" else None
+        if vault_path_obj and vault_path_obj.exists():
+            stats = _read_index_stats(cfg)
+            note_count = stats.get("total", 0)
+            lines.append(f"Vault:        {vault}")
+            lines.append(f"              ✓ exists ({note_count} notes indexed)")
+        elif vault_path_obj:
+            lines.append(f"Vault:        {vault}")
+            lines.append(f"              ⚠ directory does not exist")
+        else:
+            lines.append(f"Vault:        (not configured)")
+            lines.append(f"              Run cb_configure(discover=True) to find Obsidian vaults,")
+            lines.append(f"              or cb_configure(vault_path='/path/to/folder') to set one.")
+
+        lines.append(f"Inbox:        {cfg.get('inbox', 'AI/Claude-Sessions')}")
+        backend = cfg.get("backend", "claude-code")
+        model = cfg.get("model", "claude-haiku-4-5")
+        lines.append(f"Backend:      {backend} ({model})")
+        capture = cfg.get("desktop_capture_mode", "suggest")
+        lines.append(f"Capture mode: {capture}")
+
+        # Last extraction run
+        runs_log = Path(RUNS_LOG_PATH)
+        if runs_log.exists():
+            try:
+                import json as _json2
+                lines_raw = runs_log.read_text(encoding="utf-8").splitlines()
+                last_run = None
+                for line in reversed(lines_raw):
+                    line = line.strip()
+                    if line:
+                        try:
+                            last_run = _json2.loads(line)
+                            break
+                        except Exception:
+                            pass
+                if last_run:
+                    ts = last_run.get("timestamp", "")[:16].replace("T", " ")
+                    beats = last_run.get("beats_written", 0)
+                    sid = last_run.get("session_id", "")[:8]
+                    lines.append(f"Last capture: {ts} ({beats} beats from session {sid})")
+            except Exception:
+                pass
+
+        lines.append("")
+        lines.append("To change settings: cb_configure(vault_path=..., inbox=..., capture_mode=...)")
+        lines.append("To find Obsidian vaults: cb_configure(discover=True)")
+        return "\n".join(lines)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
+    def cb_status(
+        last_n_runs: Annotated[int, Field(ge=1, le=50, description="How many recent runs to show")] = 10,
+    ) -> str:
+        """
+        Show cyberbrain system status: recent extraction runs, index health, and config summary.
+        Call this to understand what cyberbrain has captured and whether the index is healthy.
+        """
+        import json as _json
+        config = _load_config()
+
+        # --- Recent runs ---
+        runs = []
+        runs_log = Path(RUNS_LOG_PATH)
+        if runs_log.exists():
+            try:
+                lines = runs_log.read_text(encoding="utf-8").splitlines()
+                for line in lines[-last_n_runs:]:
+                    line = line.strip()
+                    if line:
+                        try:
+                            runs.append(_json.loads(line))
+                        except _json.JSONDecodeError:
+                            pass
+            except OSError:
+                pass
+
+        # --- Index stats ---
+        stats = _read_index_stats(config)
+
+        # --- Manifest ---
+        manifest = {}
+        try:
+            manifest_path = Path(config.get("search_manifest_path", _DEFAULT_MANIFEST_PATH))
+            if manifest_path.exists():
+                manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+        # --- Format output ---
+        lines = ["## Cyberbrain Status", ""]
+
+        # Recent runs table
+        lines.append(f"### Recent Runs (last {last_n_runs})")
+        if runs:
+            lines.append("| Time | Session | Project | Trigger | Beats | Duration |")
+            lines.append("|------|---------|---------|---------|-------|----------|")
+            for r in reversed(runs):
+                ts = r.get("timestamp", "")[:16].replace("T", " ")
+                sid = r.get("session_id", "")[:8]
+                proj = r.get("project", "")[:20]
+                trigger = r.get("trigger", "")
+                beats = f"{r.get('beats_written', 0)}/{r.get('beats_extracted', 0)}"
+                dur = f"{r.get('duration_seconds', 0)}s"
+                lines.append(f"| {ts} | {sid} | {proj} | {trigger} | {beats} | {dur} |")
+        else:
+            lines.append("No runs recorded yet.")
+
+        # Last run detail
+        if runs:
+            last = runs[-1]
+            lines.append("")
+            lines.append("### Last Run — Beats Extracted")
+            for b in last.get("beats", []):
+                lines.append(f"- **{b.get('title', '')}** ({b.get('type', '')} · {b.get('scope', '')}) → {b.get('path', '')}")
+            for err in last.get("errors", []):
+                lines.append(f"- ⚠ {err}")
+            if not last.get("beats") and not last.get("errors"):
+                lines.append("No beats written in last run.")
+
+        # Index health
+        lines.append("")
+        lines.append("### Index Health")
+        if stats:
+            lines.append(f"- Notes indexed: {stats['total']}")
+            if stats["by_type"]:
+                type_str = ", ".join(f"{t}: {c}" for t, c in stats["by_type"].items())
+                lines.append(f"  - {type_str}")
+            lines.append(f"- Relations: {stats['relations_count']}")
+            stale = stats["stale_count"]
+            stale_note = "✓ all indexed notes exist on disk" if stale == 0 else f"⚠ {stale} path(s) not found on disk"
+            lines.append(f"- Stale paths: {stale} ({stale_note})")
+            if manifest.get("model_name"):
+                vec_count = len(manifest.get("id_map", []))
+                lines.append(f"- Semantic vectors: {vec_count} (model: {manifest['model_name']})")
+        else:
+            lines.append("Index not found or empty.")
+
+        # Config summary
+        lines.append("")
+        lines.append("### Config")
+        lines.append(f"- Vault: {config.get('vault_path', '(not set)')}")
+        lines.append(f"- Inbox: {config.get('inbox', '(not set)')}")
+        backend = config.get("backend", "claude-code")
+        model = config.get("model", "claude-haiku-4-5")
+        lines.append(f"- Backend: {backend} ({model})")
+
+        return "\n".join(lines)

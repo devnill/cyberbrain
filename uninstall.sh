@@ -5,10 +5,11 @@
 set -euo pipefail
 
 CLAUDE_DIR="$HOME/.claude"
+CB_DIR="$CLAUDE_DIR/cyberbrain"
 
 BACKEND=$(python3 -c "
 import json, os
-path = os.path.expanduser('~/.claude/cyberbrain.json')
+path = os.path.expanduser('~/.claude/cyberbrain/config.json')
 cfg = json.load(open(path)) if os.path.exists(path) else {}
 print(cfg.get('backend', 'claude-code'))
 " 2>/dev/null || echo "claude-code")
@@ -29,18 +30,16 @@ if [ "$YES" -eq 0 ]; then
   echo "This will remove:"
   echo "  $CLAUDE_DIR/hooks/pre-compact-extract.sh"
   echo "  $CLAUDE_DIR/hooks/session-end-extract.sh"
-  echo "  $CLAUDE_DIR/extractors/extract_beats.py"
-  echo "  $CLAUDE_DIR/extractors/requirements.txt"
-  echo "  $CLAUDE_DIR/prompts/extract-beats-*.md"
-  echo "  $CLAUDE_DIR/prompts/autofile-*.md"
-  echo "  $CLAUDE_DIR/prompts/enrich-*.md"
-  echo "  $CLAUDE_DIR/prompts/claude-desktop-project.md"
-  echo "  $CLAUDE_DIR/skills/cb-*/"
-  echo "  $CLAUDE_DIR/cyberbrain/mcp/server.py"
+  echo "  $CB_DIR/extractors/"
+  echo "  $CB_DIR/prompts/"
+  echo "  $CB_DIR/mcp/"
   echo "  PreCompact and SessionEnd hook entries from $CLAUDE_DIR/settings.json"
   echo ""
   echo "Preserving:"
-  echo "  $CLAUDE_DIR/cyberbrain.json (your settings)"
+  echo "  $CB_DIR/config.json (your settings)"
+  echo "  $CB_DIR/vault/ (your notes)"
+  echo "  $CB_DIR/logs/ (your extraction logs)"
+  echo "  $CB_DIR/venv/ (MCP Python venv)"
   echo ""
   printf "Continue? [y/N] "
   read -r REPLY
@@ -87,51 +86,23 @@ remove_file "$CLAUDE_DIR/hooks/pre-compact-extract.sh"
 remove_file "$CLAUDE_DIR/hooks/session-end-extract.sh"
 
 # ---------------------------------------------------------------------------
-# 2. Extractor
+# 2. Extractor and prompts (under cyberbrain/)
 # ---------------------------------------------------------------------------
 echo ""
-echo "Removing extractor..."
-remove_file "$CLAUDE_DIR/extractors/extract_beats.py"
-remove_file "$CLAUDE_DIR/extractors/requirements.txt"
-remove_file "$CLAUDE_DIR/extractors/.cb-version"
+echo "Removing extractors and prompts..."
+remove_dir "$CB_DIR/extractors"
+remove_dir "$CB_DIR/prompts"
 
 # ---------------------------------------------------------------------------
-# 3. Prompts
-# ---------------------------------------------------------------------------
-echo ""
-echo "Removing prompts..."
-remove_file "$CLAUDE_DIR/prompts/extract-beats-system.md"
-remove_file "$CLAUDE_DIR/prompts/extract-beats-user.md"
-remove_file "$CLAUDE_DIR/prompts/autofile-system.md"
-remove_file "$CLAUDE_DIR/prompts/autofile-user.md"
-remove_file "$CLAUDE_DIR/prompts/enrich-system.md"
-remove_file "$CLAUDE_DIR/prompts/enrich-user.md"
-remove_file "$CLAUDE_DIR/prompts/claude-desktop-project.md"
-
-# ---------------------------------------------------------------------------
-# 4. Skills
-# ---------------------------------------------------------------------------
-echo ""
-echo "Removing skills..."
-remove_dir "$CLAUDE_DIR/skills/cb-recall"
-remove_dir "$CLAUDE_DIR/skills/cb-file"
-remove_dir "$CLAUDE_DIR/skills/cb-extract"
-remove_dir "$CLAUDE_DIR/skills/cb-setup"
-remove_dir "$CLAUDE_DIR/skills/cb-enrich"
-remove_dir "$CLAUDE_DIR/skills/cb-claude-md"  # legacy: removed in v0.2
-
-# ---------------------------------------------------------------------------
-# 5. MCP server
+# 3. MCP server
 # ---------------------------------------------------------------------------
 echo ""
 echo "Removing MCP server..."
-remove_file "$CLAUDE_DIR/cyberbrain/mcp/server.py"
-prune_empty_dir "$CLAUDE_DIR/cyberbrain/mcp"
-prune_empty_dir "$CLAUDE_DIR/cyberbrain"
+remove_dir "$CB_DIR/mcp"
 
 # ---------------------------------------------------------------------------
-# 6. settings.json — remove PreCompact and SessionEnd hooks, preserve other settings
-# Note: cyberbrain.json (user settings) is intentionally NOT removed.
+# 4b. settings.json — remove PreCompact and SessionEnd hooks, preserve other settings
+# Note: config.json (user settings) and vault/ are intentionally NOT removed.
 # ---------------------------------------------------------------------------
 echo ""
 echo "Updating settings.json..."
@@ -171,13 +142,11 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 8. Prune empty directories
+# 4. Prune empty directories
 # ---------------------------------------------------------------------------
 echo ""
 echo "Pruning empty directories..."
 prune_empty_dir "$CLAUDE_DIR/hooks"
-prune_empty_dir "$CLAUDE_DIR/extractors"
-prune_empty_dir "$CLAUDE_DIR/prompts"
 
 # ---------------------------------------------------------------------------
 # Done
@@ -194,4 +163,7 @@ else
   echo "To uninstall pyyaml (used by cb-setup), run:"
   echo "  pip uninstall pyyaml"
 fi
+echo ""
+echo "Your notes and config are preserved at $CB_DIR/"
+echo "To fully remove: rm -rf $CB_DIR"
 echo ""
