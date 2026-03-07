@@ -87,9 +87,9 @@ def register(mcp: FastMCP) -> None:
         for beat in beats:
             try:
                 if autofile_enabled and not folder:
-                    path = autofile_beat(beat, effective_config, session_id, effective_cwd, now, vault_context=vault_context)
+                    path = autofile_beat(beat, effective_config, session_id, effective_cwd, now, vault_context=vault_context, source="manual-filing")
                 else:
-                    path = write_beat(beat, effective_config, session_id, effective_cwd, now)
+                    path = write_beat(beat, effective_config, session_id, effective_cwd, now, source="manual-filing")
                 if path:
                     written.append(path)
                     rel = _relpath(path, config["vault_path"])

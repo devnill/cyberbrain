@@ -341,7 +341,7 @@ class TestCbFileTypedParams:
                          "summary": "Test", "tags": [], "body": "body"}
         captured_beats = []
 
-        def fake_write(beat, cfg, session_id, cwd, now):
+        def fake_write(beat, cfg, session_id, cwd, now, **kwargs):
             captured_beats.append(dict(beat))
             path = vault / "AI" / "Claude-Sessions" / "A Note.md"
             path.write_text("content")
@@ -365,7 +365,7 @@ class TestCbFileTypedParams:
                 "summary": "Test", "tags": [], "body": "body"}
         captured_configs = []
 
-        def fake_write(beat, cfg, session_id, cwd, now):
+        def fake_write(beat, cfg, session_id, cwd, now, **kwargs):
             captured_configs.append(dict(cfg))
             path = vault / target_folder / "A Beat.md"
             path.write_text("content")
@@ -446,7 +446,7 @@ class TestCbFileErrors:
         good_path.write_text("content")
 
         call_count = {"n": 0}
-        def fake_write(beat, cfg, session_id, cwd, now):
+        def fake_write(beat, cfg, session_id, cwd, now, **kwargs):
             call_count["n"] += 1
             if call_count["n"] == 1:
                 return good_path
@@ -1042,14 +1042,14 @@ class TestResources:
         with patch.object(_resources_mod, "_load_config", return_value=config):
             result = fake_mcp._prompts["orient"]["fn"]()
         assert isinstance(result, list)
-        assert result[0]["role"] == "user"
-        assert "cyberbrain" in result[0]["content"].lower()
+        assert result[0].role == "user"
+        assert "cyberbrain" in result[0].content.text.lower()
 
     def test_recall_prompt_returns_list_with_user_role(self):
         result = fake_mcp._prompts["recall"]["fn"]()
         assert isinstance(result, list)
-        assert result[0]["role"] == "user"
-        assert "cb_recall" in result[0]["content"]
+        assert result[0].role == "user"
+        assert "cb_recall" in result[0].content.text
 
     def test_build_guide_proactive_recall_true(self):
         guide = _resources_mod._build_guide(

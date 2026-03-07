@@ -18,7 +18,7 @@ Read `.specs/v1_spec.md` before making any significant changes. It supersedes al
 
 A knowledge capture and retrieval system for LLM interactions. It automatically extracts durable knowledge ("beats") from Claude sessions and stores them as structured Obsidian markdown notes, making that knowledge searchable and injectable into future sessions.
 
-The system exposes an MCP server with eight tools (`cb_extract`, `cb_file`, `cb_recall`, `cb_read`, `cb_setup`, `cb_enrich`, `cb_configure`, `cb_status`), a PreCompact hook for automatic capture, and CLI import scripts for Claude and ChatGPT data exports. The MCP server is the single interface — no slash command skills.
+The system exposes an MCP server with ten tools (`cb_extract`, `cb_file`, `cb_recall`, `cb_read`, `cb_setup`, `cb_enrich`, `cb_configure`, `cb_status`, `cb_restructure`, `cb_review`, `cb_reindex`), a PreCompact hook for automatic capture, and CLI import scripts for Claude and ChatGPT data exports. The MCP server is the single interface — no slash command skills.
 
 ---
 
@@ -72,6 +72,7 @@ Claude Code session
 Beat routing:
 - `scope: project` → project vault folder (from `.claude/cyberbrain.local.json`)
 - `scope: general` → `inbox` folder (warn and skip if inbox is not configured)
+- `durability: working-memory` → working memory folder (`AI/Working Memory/<project>/` or `AI/Working Memory/`) regardless of scope
 
 ### Key Files
 
@@ -91,6 +92,11 @@ Beat routing:
 | `mcp/tools/setup.py` | `cb_setup` tool — two-phase vault analysis and CLAUDE.md generation |
 | `mcp/tools/enrich.py` | `cb_enrich` tool — batch frontmatter enrichment |
 | `mcp/tools/manage.py` | `cb_configure` + `cb_status` tools |
+| `mcp/tools/restructure.py` | `cb_restructure` tool — split large notes, merge related clusters, create hub pages, and move clusters into subfolders |
+| `mcp/tools/review.py` | `cb_review` tool — working memory review (promote/extend/delete) |
+| `prompts/restructure-system.md` / `restructure-user.md` | Restructure LLM prompts (split + merge) |\
+| `mcp/tools/reindex.py` | `cb_reindex` tool — prune stale index entries or full rebuild |
+| `prompts/review-system.md` / `review-user.md` | Working memory review LLM prompts |
 | `scripts/import.py` | Unified import for Claude Desktop and ChatGPT data exports |
 | `tests/` | Test suite — unit and integration tests with mocked LLM calls |
 
@@ -104,6 +110,10 @@ The extractor uses 4 types (defined by the vault's CLAUDE.md; these are the defa
 | `insight` | A non-obvious understanding or pattern discovered |
 | `problem` | Something broken, blocked, or constrained — with or without resolution |
 | `reference` | A fact, command, snippet, or configuration detail for future lookup |
+
+Each beat also carries a **durability** field:
+- `"durable"` — passes the six-month test: useful to someone with no memory of this session six months from now
+- `"working-memory"` — current project state that matters now but is unlikely to matter long-term (open bugs, in-flight refactors, temporary workarounds, unvalidated hypotheses)
 
 ### Configuration
 
@@ -119,9 +129,15 @@ Global config at `~/.claude/cyberbrain/config.json`:
   "daily_journal": false,
   "journal_folder": "AI/Journal",
   "journal_name": "%Y-%m-%d",
-  "proactive_recall": true
+  "proactive_recall": true,
+  "working_memory_folder": "AI/Working Memory",
+  "working_memory_review_days": 28,
+  "consolidation_log": "AI/Cyberbrain-Log.md",
+  "consolidation_log_enabled": true
 }
 ```
+
+The vault's `CLAUDE.md` may contain a `## Cyberbrain Preferences` section (managed via `cb_configure(show_prefs/set_prefs/reset_prefs)`) that is injected into extraction and restructure prompts to guide LLM behavior without editing prompt files directly.
 
 Per-project config at `.claude/cyberbrain.local.json` (searched up the directory tree from the session's cwd):
 ```json

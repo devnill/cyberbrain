@@ -36,10 +36,6 @@ from config import (  # noqa: E402
     load_global_config,
     find_project_config,
     resolve_config,
-    load_prompt,
-    GLOBAL_CONFIG_PATH,
-    PROJECT_CONFIG_NAME,
-    PROMPTS_DIR,
 )
 from backends import (  # noqa: E402
     BackendError,
@@ -49,18 +45,14 @@ from backends import (  # noqa: E402
     _call_ollama,
     DEFAULT_BACKEND,
     CLI_DEFAULT_MODEL,
-    BEDROCK_DEFAULT_MODEL,
-    OLLAMA_DEFAULT_URL,
     MAX_TRANSCRIPT_CHARS,
-    _STRIP_VARS,
 )
-from transcript import parse_jsonl_transcript, _extract_text_blocks  # noqa: E402
+from transcript import parse_jsonl_transcript  # noqa: E402
 from run_log import (  # noqa: E402
     is_session_already_extracted,
     write_extract_log_entry,
     write_runs_log_entry,
     write_journal_entry,
-    EXTRACT_LOG_PATH,
     RUNS_LOG_PATH,
 )
 from vault import (  # noqa: E402
@@ -69,15 +61,11 @@ from vault import (  # noqa: E402
     make_filename,
     build_vault_titles_set,
     resolve_relations,
-    search_vault,
     get_valid_types,
     parse_valid_types_from_claude_md,
     read_vault_claude_md,
     _is_within_vault,
     _DEFAULT_VALID_TYPES,
-    VALID_SCOPES,
-    VALID_PREDICATES,
-    _FILENAME_INVALID,
 )
 from extractor import extract_beats  # noqa: E402
 from autofile import (  # noqa: E402
@@ -86,10 +74,7 @@ from autofile import (  # noqa: E402
 )
 
 # Also re-export frontmatter helpers that tests reference via eb.*
-from frontmatter import (  # noqa: E402
-    read_frontmatter as _read_frontmatter_as_dict,
-    read_frontmatter_tags as _read_frontmatter_tags,
-)
+from frontmatter import read_frontmatter as _read_frontmatter_as_dict  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

@@ -11,7 +11,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
-from shared import _load_config, _parse_frontmatter
+from shared import _load_config, _parse_frontmatter, _index_paths
 
 _PROMPTS_DIR = Path.home() / ".claude" / "cyberbrain" / "prompts"
 _DAILY_JOURNAL_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
@@ -157,6 +157,8 @@ def _apply_frontmatter_update(
     if not fields_to_set:
         return True  # nothing to update
 
+    fields_to_set["cb_modified"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
     if has_fm:
         # Insert new fields before the closing ---
         fm_end = content.find("\n---", 3)
@@ -189,6 +191,8 @@ def _format_fm_fields(fields: dict) -> list[str]:
     if "tags" in fields:
         tags_str = "[" + ", ".join(fields["tags"]) + "]"
         lines.append(f"tags: {tags_str}")
+    if "cb_modified" in fields:
+        lines.append(f"cb_modified: {fields['cb_modified']}")
     return lines
 
 
@@ -363,6 +367,9 @@ def register(mcp: FastMCP) -> None:
                     enriched.append((f, cls))
                 else:
                     errors.append((f, "frontmatter update failed"))
+
+        # Update search index with enriched notes (metadata changed)
+        _index_paths([f for f, _ in enriched], config)
 
         # ── Report ──
         lines = [

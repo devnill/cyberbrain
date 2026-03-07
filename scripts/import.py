@@ -8,6 +8,7 @@ file tracks processed conversations so re-runs skip already-imported ones.
 
 Usage:
     python3 import.py --export ~/Downloads/conversations.json --format claude
+    python3 import.py --export ~/Downloads/conversations.json --format claude-web
     python3 import.py --export ~/Downloads/conversations.json --format chatgpt
     python3 import.py --export ~/Downloads/conversations.json --format claude --dry-run
     python3 import.py --export ~/Downloads/conversations.json --format claude --limit 10
@@ -73,8 +74,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Path to the export file (conversations.json)",
     )
     parser.add_argument(
-        "--format", required=True, choices=["claude", "chatgpt"],
-        help="Export format: 'claude' (Anthropic) or 'chatgpt' (OpenAI)",
+        "--format", required=True, choices=["claude", "claude-web", "chatgpt"],
+        help="Export format: 'claude' (Desktop app), 'claude-web' (claude.ai), or 'chatgpt' (OpenAI)",
     )
     parser.add_argument(
         "--dry-run", action="store_true",
@@ -434,13 +435,15 @@ def process_conversation(
                 "Use ontology types: decision, insight, problem, reference."
             )
 
+    cb_source = f"import-{fmt}"
+
     written: list[Path] = []
     for beat in beats:
         try:
             if autofile_enabled:
-                path = eb.autofile_beat(beat, config, conv_id, cwd, now, vault_context=vault_context)
+                path = eb.autofile_beat(beat, config, conv_id, cwd, now, vault_context=vault_context, source=cb_source)
             else:
-                path = eb.write_beat(beat, config, conv_id, cwd, now)
+                path = eb.write_beat(beat, config, conv_id, cwd, now, source=cb_source)
             if path:
                 written.append(path)
         except Exception as exc:

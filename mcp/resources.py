@@ -1,6 +1,7 @@
 """Cyberbrain MCP resource and prompts — behavioral guide and session orientation."""
 
 from fastmcp import FastMCP
+from fastmcp.prompts import Message
 
 from shared import _load_config
 
@@ -99,15 +100,15 @@ def register(mcp: FastMCP) -> None:
         return _get_guide()
 
     @mcp.prompt()
-    def orient() -> list[dict]:
+    def orient() -> list[Message]:
         """
         Orient at session start: load the cyberbrain usage guide and check vault status.
         Select this at the beginning of a new conversation to establish vault behavior.
         """
         guide = _get_guide()
-        return [{
-            "role": "user",
-            "content": (
+        return [Message(
+            role="user",
+            content=(
                 "I'm starting a new session. Please do the following:\n\n"
                 "1. Read my cyberbrain usage guide below — use it to govern how you interact "
                 "with my knowledge vault throughout this conversation.\n"
@@ -115,21 +116,21 @@ def register(mcp: FastMCP) -> None:
                 "or missing, guide me through cb_configure() before anything else.\n\n"
                 "Usage guide:\n\n" + guide
             ),
-        }]
+        )]
 
     @mcp.prompt()
-    def recall() -> list[dict]:
+    def recall() -> list[Message]:
         """
         Scan the current conversation for unfamiliar topics and query the vault for each.
         Select this mid-session when context has been lost or you want the model to catch up.
         """
-        return [{
-            "role": "user",
-            "content": (
+        return [Message(
+            role="user",
+            content=(
                 "Scan our current conversation for topics you are uncertain about or that "
                 "I may have prior context on in my knowledge vault. For each unfamiliar "
                 "topic, call cb_recall to check what I know. If uncertain whether something "
                 "is in the vault, check it — don't skip it. Summarize what you find and "
                 "integrate it into our conversation naturally."
             ),
-        }]
+        )]

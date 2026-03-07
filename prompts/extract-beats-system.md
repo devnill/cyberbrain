@@ -14,6 +14,13 @@ Do NOT extract:
 - Obvious or trivial facts
 - Process steps that are self-evident from the outcome
 - Abandoned approaches (unless the failure itself is informative)
+- Session-specific incidents with no lasting lesson: e.g. "we found 4 bugs today and fixed them" is not a beat unless the root cause, fix technique, or debugging method is reusable elsewhere
+
+For each beat, classify its **durability**:
+- `"durable"`: passes the six-month test — useful to someone with no memory of this session, six months from now. Stable knowledge worth long-term retention.
+- `"working-memory"`: current project state that matters *now* but is unlikely to matter long-term. Use for: open bugs being actively worked, in-flight refactors, temporary workarounds, decisions still being evaluated, active hypotheses not yet validated. This content is retained for near-term retrieval and reviewed periodically — do NOT skip it just because it's ephemeral.
+
+Do NOT extract content that fails both tests — conversational filler, trivial facts, dead-ends with no useful lesson, and incidents with no reusable pattern belong in neither tier and should be omitted entirely.
 
 For each beat, classify its scope:
 - "project": specific to this codebase/project (would only be useful in this project context)
@@ -29,7 +36,7 @@ For each beat, classify its scope:
 |---|---|
 | `decision` | A choice made between alternatives, with rationale. The choice itself forecloses alternatives. |
 | `insight` | A non-obvious understanding or pattern discovered — something that wasn't obvious before this session. |
-| `problem` | Something broken, blocked, or constrained — with or without resolution. Include both the problem and solution (if any) in the body. |
+| `problem` | Something broken, blocked, or constrained — with or without resolution. **Capture the pattern, not the incident.** A bug found and fixed in one session is not a problem beat unless the root cause, fix technique, or debugging approach is broadly reusable. Include both the problem and solution (if any) in the body. |
 | `reference` | A fact, command, snippet, configuration detail, or API behavior for future lookup. |
 
 Classify using this eliminative decision tree — answer in order, stop at first yes:
@@ -106,6 +113,7 @@ Each beat object must have exactly these fields:
   "title": "Brief, descriptive title (5-10 words). Do not use #, [, ], or ^ — these characters break Obsidian wikilinks when used in filenames. Write 'CSharp' not 'C#', 'Sharp' not '#'.",
   "type": "one of the valid types for this vault (see above)",
   "scope": "project or general",
+  "durability": "durable or working-memory",
   "summary": "Single information-dense sentence optimized for search/retrieval",
   "tags": ["array", "of", "2-6", "lowercase", "keywords"],
   "body": "Full markdown content. Self-contained — a future reader needs no other context. Use ## headers, bullet points as appropriate. Include the problem, solution, and key details.",

@@ -8,5 +8,12 @@
   "daily_journal": false,
   "journal_folder": "AI/Journal",
   "journal_name": "%Y-%m-%d",
-  "desktop_capture_mode": "suggest"
+  "desktop_capture_mode": "suggest",
+  "working_memory_ttl": {
+    "default": 28,
+    "decision": 56,
+    "problem": 14,
+    "insight": 28,
+    "reference": 21
+  }
 }

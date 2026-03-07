@@ -79,8 +79,8 @@ Obsidian vault. Those notes are then searchable and injectable into future sessi
 A **beat** is the atomic unit of knowledge in cyberbrain. When the LLM reads a session
 transcript, it identifies discrete knowledge units worth preserving — a decision about
 which library to use, a bug fix pattern that could recur, a configuration reference —
-and each one becomes a beat. Beats have a type, a scope, a summary, tags, and a body.
-They are written as Markdown files with YAML frontmatter.
+and each one becomes a beat. Beats have a type, a scope, a durability, a summary, tags,
+and a body. They are written as Markdown files with YAML frontmatter.
 
 Beat types come from the vault's `CLAUDE.md` file, which is the authoritative vocabulary
 for that vault. The default four types are:
@@ -91,6 +91,36 @@ for that vault. The default four types are:
 | `insight` | A non-obvious understanding or pattern discovered |
 | `problem` | Something broken, blocked, or constrained — with or without resolution |
 | `reference` | A fact, command, snippet, or configuration detail for future lookup |
+
+### Durability
+
+Every beat also carries a **durability** classification:
+
+- `"durable"` — passes the six-month test: useful to someone with no memory of this
+  session, six months from now. Written to the normal inbox or project folder.
+- `"working-memory"` — current project state that matters *now* but is unlikely to
+  matter long-term: open bugs, in-flight refactors, temporary workarounds, unvalidated
+  hypotheses. Written to the working memory folder (`AI/Working Memory/`) with
+  `cb_ephemeral: true` and `cb_review_after: <date>` frontmatter.
+
+Working memory beats are indexed and searchable like durable beats. The `cb_review`
+tool processes them when their review date arrives, deciding whether to promote them
+to durable notes, extend the review window, or delete them.
+
+### Provenance
+
+Every note written by cyberbrain carries provenance fields in its frontmatter:
+
+| Field | Description |
+|-------|-------------|
+| `cb_source` | How the note arrived: `hook-extraction`, `manual-filing`, `import-claude`, `import-chatgpt`, `cb-restructure`, `cb-review` |
+| `cb_created` | ISO timestamp when cyberbrain first wrote the file |
+| `cb_session` | Session ID of the extraction run that created it (if applicable) |
+| `cb_modified` | Last time cyberbrain modified this file (enrichment, extension) |
+| `cb_restructured_from` | On merged notes: list of source note titles |
+| `cb_lock` | If `true`: skip this note in consolidation and review |
+| `cb_ephemeral` | `true` on working memory notes |
+| `cb_review_after` | Date after which `cb_review` will surface this note |
 
 ### Scope
 
@@ -682,8 +712,40 @@ check to prevent arbitrary file reads.
 #### cb_status
 
 System status report: recent extraction runs (from `cb-runs.jsonl`), index health (note
-counts by type, stale path count, relation count), and config summary. Useful for
-diagnosing problems or understanding what the system has captured.
+counts by type, stale path count, relation count), working memory note count, and config
+summary. Also shows whether a preferences section is present in the vault CLAUDE.md.
+
+#### cb_configure
+
+View or change config values. Key parameters:
+- `vault_path`, `inbox`, `backend`, `model`, `autofile` — core config
+- `show_prefs=True` — display the current `## Cyberbrain Preferences` section
+- `set_prefs="..."` — replace the preferences section with new text
+- `reset_prefs=True` — restore default preferences
+
+#### cb_restructure
+
+Restructure the vault by merging related note clusters and splitting large notes:
+1. Collect notes from the target folder (respects `cb_lock: true`)
+2. Build an adjacency graph using the search backend; group into clusters above the similarity threshold
+3. Find split candidates: notes above `split_threshold` chars that are not already in a cluster
+4. In dry-run mode: list proposed merges and split candidates with sizes
+5. In execute mode: LLM decides for each cluster (merge / hub-spoke / keep-separate) and each large note (split / keep); writes output notes, deletes originals, appends audit entry to `AI/Cyberbrain-Log.md`
+
+**Merge strategy**: 2–5 notes → merge into one; 6+ → propose hub-and-spoke.
+**Split strategy**: LLM breaks the note into 2–4 focused sub-notes, each with its own frontmatter.
+
+#### cb_review
+
+Process working memory notes that are past their review date:
+1. Find all notes with `cb_ephemeral: true` and `cb_review_after <= today + days_ahead`
+2. Cluster related notes using the search backend
+3. In dry-run mode: list what's due
+4. In execute mode: LLM proposes `promote` / `extend` / `delete` for each note or cluster
+   - **promote**: write a new durable note (LLM generates content), delete the WM note(s)
+   - **extend**: bump `cb_review_after` forward by N weeks
+   - **delete**: remove the note
+5. Append audit entry to `AI/Cyberbrain-Log.md`
 
 ### ToolAnnotations
 
@@ -739,7 +801,11 @@ has multiple phases and asks the user questions before writing anything.
   "journal_name": "%Y-%m-%d",
   "search_backend": "auto",
   "embedding_model": "TaylorAI/bge-micro-v2",
-  "search_db_path": "~/.claude/cyberbrain/search-index.db"
+  "search_db_path": "~/.claude/cyberbrain/search-index.db",
+  "working_memory_folder": "AI/Working Memory",
+  "working_memory_review_days": 28,
+  "consolidation_log": "AI/Cyberbrain-Log.md",
+  "consolidation_log_enabled": true
 }
 ```
 
@@ -769,8 +835,13 @@ The vault's `CLAUDE.md` (at the vault root) is the single source of truth for:
 - Naming and linking conventions
 
 The extraction prompts include the vault's `CLAUDE.md` so the LLM can classify beats
-using the vault's actual vocabulary rather than hardcoded defaults. The `/cb-setup` skill
+using the vault's actual vocabulary rather than hardcoded defaults. The `cb_setup` tool
 generates and maintains this file.
+
+The vault CLAUDE.md may also contain a `## Cyberbrain Preferences` section — natural
+language guidance injected into extraction, consolidation, and review prompts. This lets
+the user tune behavior without editing prompt files. Managed via `cb_configure(show_prefs/
+set_prefs/reset_prefs)`.
 
 ---
 
@@ -796,13 +867,16 @@ generates and maintains this file.
    b. parse_jsonl_transcript() → formatted conversation text
    c. call_model(system_prompt, user_message, config)
       → LLM backend (claude-code / bedrock / ollama)
-      → returns JSON array of beats
+      → returns JSON array of beats (each with durability field)
    d. For each beat:
-      - autofile=false: write_beat() → vault/inbox/Note Title.md
-      - autofile=true:  autofile_beat()
+      - durability=working-memory: route to AI/Working Memory/<project>/
+          → write with cb_ephemeral, cb_review_after frontmatter
+      - durability=durable + autofile=false: write_beat() → vault/inbox/Note Title.md
+      - durability=durable + autofile=true:  autofile_beat()
           → search vault for related notes
           → call LLM: extend existing note or create new?
           → execute decision
+      - All writes include cb_source, cb_created, cb_session provenance fields
    e. update_search_index() → FTS5/Hybrid index updated
    f. write_extract_log_entry() → dedup log updated
    g. write_runs_log_entry()  → runs log updated
@@ -838,10 +912,23 @@ cyberbrain/
 │   ├── extract-beats-system.md  LLM instructions for beat extraction
 │   ├── extract-beats-user.md    User message template (transcript + context)
 │   ├── autofile-system.md       LLM instructions for routing decisions
-│   └── autofile-user.md         User message template (beat + related docs)
+│   ├── autofile-user.md         User message template (beat + related docs)
+│   ├── restructure-system.md    LLM instructions for split/merge/hub-spoke decisions
+│   ├── restructure-user.md      User message template (clusters, split candidates + vault prefs)
+│   ├── review-system.md         LLM instructions for promote/extend/delete decisions
+│   └── review-user.md           User message template (due notes + vault prefs)
 │
 ├── mcp/
-│   └── server.py              FastMCP server for Claude Desktop
+│   ├── server.py              FastMCP server for Claude Desktop
+│   └── tools/
+│       ├── extract.py         cb_extract tool
+│       ├── file.py            cb_file tool
+│       ├── recall.py          cb_recall + cb_read tools
+│       ├── setup.py           cb_setup tool
+│       ├── enrich.py          cb_enrich tool
+│       ├── manage.py          cb_configure + cb_status tools
+│       ├── restructure.py     cb_restructure tool
+│       └── review.py          cb_review tool
 │
 ├── skills/
 │   ├── cb-recall/SKILL.md     Vault search slash command

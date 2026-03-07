@@ -103,10 +103,31 @@ def _is_within_vault(vault: Path, target: Path) -> bool:
 
 def resolve_output_dir(beat: dict, config: dict) -> Path | None:
     """
-    Route a beat to the correct vault folder based on scope and project config.
+    Route a beat to the correct vault folder based on durability, scope, and project config.
     Returns the absolute directory path (created if needed), or None if inbox is not configured.
     """
     vault = Path(config["vault_path"])
+    durability = beat.get("durability", "durable")
+
+    if durability == "working-memory":
+        wm_root = config.get("working_memory_folder", "AI/Working Memory")
+        # Project-scoped WM beats get a project subfolder
+        project_name = config.get("project_name", "")
+        if beat.get("scope") == "project" and project_name:
+            folder = f"{wm_root}/{project_name}"
+        else:
+            folder = wm_root
+        output_dir = vault / folder
+        if not _is_within_vault(vault, output_dir):
+            print(
+                f"[extract_beats] Path traversal rejected for working-memory folder: {folder!r}",
+                file=sys.stderr,
+            )
+            output_dir = vault / wm_root
+        output_dir.mkdir(parents=True, exist_ok=True)
+        return output_dir
+
+    # Durable routing (existing logic)
     if beat.get("scope") == "project" and config.get("vault_folder"):
         folder = config["vault_folder"]
     elif config.get("inbox"):
@@ -235,8 +256,49 @@ def search_vault(beat: dict, vault_path: str, max_results: int = 5) -> list:
 # Beat writing
 # ---------------------------------------------------------------------------
 
+def inject_provenance(content: str, source: str, session_id: str | None, now: datetime,
+                      extra_fields: str | None = None) -> str:
+    """
+    Inject cb_ provenance fields into YAML frontmatter of a markdown content string.
+
+    Used for LLM-generated content (autofile create) where we can't control
+    what the model puts in frontmatter. Inserts fields before the closing ---.
+    If no frontmatter is present, prepends a minimal one.
+
+    extra_fields: optional additional YAML lines (e.g. WM fields) to append after provenance.
+    """
+    ts = now.strftime("%Y-%m-%dT%H:%M:%S")
+    lines = [f"cb_source: {source}", f"cb_created: {ts}"]
+    if session_id:
+        lines.append(f"cb_session: {session_id}")
+    if extra_fields:
+        lines.extend(extra_fields.splitlines())
+
+    if not content.startswith("---"):
+        header = "---\n" + "\n".join(lines) + "\n---\n\n"
+        return header + content
+
+    end = content.find("\n---", 3)
+    if end == -1:
+        return content
+
+    injection = "\n" + "\n".join(lines)
+    return content[:end] + injection + content[end:]
+
+
+def _wm_frontmatter_fields(beat: dict, config: dict, now: datetime) -> str:
+    """Return additional YAML frontmatter lines for working-memory beats."""
+    from datetime import timedelta
+    ttl_config = config.get("working_memory_ttl", {})
+    beat_type = beat.get("type", "")
+    default_days = ttl_config.get("default", config.get("working_memory_review_days", 28))
+    review_days = ttl_config.get(beat_type, default_days)
+    review_after = (now + timedelta(days=review_days)).strftime("%Y-%m-%d")
+    return f"cb_ephemeral: true\ncb_review_after: {review_after}"
+
+
 def write_beat(beat: dict, config: dict, session_id: str, cwd: str, now: datetime,
-               vault_titles: set | None = None) -> Path:
+               vault_titles: set | None = None, source: str = "hook-extraction") -> Path:
     """Write a single beat to a markdown file. Returns the file path."""
     valid_types = get_valid_types(config)
     beat_type = beat.get("type", "reference")
@@ -278,6 +340,11 @@ def write_beat(beat: dict, config: dict, session_id: str, cwd: str, now: datetim
         output_path = output_dir / f"{counter} {make_filename(title)}"
         counter += 1
 
+    durability = beat.get("durability", "durable")
+    wm_fields = ""
+    if durability == "working-memory":
+        wm_fields = "\n" + _wm_frontmatter_fields(beat, config, now)
+
     # Use json.dumps for string fields to safely handle quotes and special chars.
     # JSON string syntax is valid YAML scalar syntax.
     front_matter = f"""---
@@ -293,6 +360,8 @@ tags: {json.dumps(tags)}
 related: {json.dumps(related_wikilinks)}
 status: completed
 summary: {json.dumps(summary)}
+cb_source: {source}
+cb_created: {date_str}{wm_fields}
 ---"""
 
     relations_section = ""

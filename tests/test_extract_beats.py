@@ -365,7 +365,12 @@ class TestAutofileBeat:
                 )
         assert path is not None
         assert path.exists()
-        assert path.read_text(encoding="utf-8") == note_content
+        written = path.read_text(encoding="utf-8")
+        # Provenance fields are injected into frontmatter; verify core content preserved
+        assert "type: insight" in written
+        assert "## Test" in written
+        assert "cb_source: hook-extraction" in written
+        assert "cb_created:" in written
 
     def test_extend_action_appends_to_existing_file(self, global_config, temp_vault, fixed_now):
         """An 'extend' decision appends content to an existing vault note."""

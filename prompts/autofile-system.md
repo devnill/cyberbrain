@@ -17,7 +17,9 @@ Decide ONE of:
    or reference not covered by any existing note.
 
 Rules:
-- Prefer extending over creating. If an existing note covers the same concept, extend it.
+- **Default to extending.** When in doubt, extend. Only create a new note when the topic is clearly novel with no reasonable home in any related existing note.
+- A beat that touches the same general concept as an existing note — even if it covers a specific sub-aspect — should extend that note, not create a sibling.
+- Prefer one rich, well-organised note over several narrow ones on the same topic.
 - New notes must use human-readable filenames: spaces, Title Case, no date prefix.
   Example: "Subprocess Input Delivery.md", NOT "subprocess-input-delivery-2026-02-27.md"
 - Filenames must not contain #, [, ], or ^ — these characters break Obsidian wikilink resolution.

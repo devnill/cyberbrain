@@ -17,6 +17,26 @@ from shared import (
 
 _DEFAULT_DB_PATH = str(Path.home() / ".claude" / "cyberbrain" / "search-index.db")
 _DEFAULT_MANIFEST_PATH = str(Path.home() / ".claude" / "cyberbrain" / "search-index-manifest.json")
+_WM_RECALL_LOG = Path.home() / ".claude" / "cyberbrain" / "wm-recall.jsonl"
+
+
+def _log_wm_recall(query: str, wm_paths: list[str], total_results: int) -> None:
+    """Append a log entry when working-memory notes are surfaced in recall results."""
+    import json as _json
+    from datetime import datetime as _dt, timezone as _tz
+    entry = {
+        "timestamp": _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "query": query,
+        "wm_notes": wm_paths,
+        "wm_count": len(wm_paths),
+        "total_results": total_results,
+    }
+    try:
+        _WM_RECALL_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with open(_WM_RECALL_LOG, "a", encoding="utf-8") as f:
+            f.write(_json.dumps(entry) + "\n")
+    except OSError:
+        pass
 
 
 def _find_note_by_title(title: str, config: dict) -> "Path | None":
@@ -204,6 +224,15 @@ def register(mcp: FastMCP) -> None:
 
         if not entries:
             return f"No notes found matching: {query}"
+
+        # Log any working-memory notes that were surfaced (for later synthesis quality analysis)
+        wm_folder = config.get("working_memory_folder", "AI/Working Memory")
+        wm_paths = [
+            r.path for r in results
+            if wm_folder.lower() in r.path.lower()
+        ]
+        if wm_paths:
+            _log_wm_recall(query, wm_paths, len(results))
 
         header = f"Found {len(entries)} note(s) for '{query}' (backend: {backend_label})"
         content_block = header + "\n\n" + "\n---\n\n".join(entries)

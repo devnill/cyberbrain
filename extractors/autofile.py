@@ -15,12 +15,55 @@ from config import load_prompt
 from frontmatter import parse_frontmatter, read_frontmatter_tags
 from vault import (
     _is_within_vault,
+    _wm_frontmatter_fields,
     build_vault_titles_set,
+    inject_provenance,
     read_vault_claude_md,
     resolve_relations,
     search_vault,
     write_beat,
 )
+
+
+def _update_cb_modified(note_path: Path, now) -> None:
+    """Update or add cb_modified timestamp in a note's frontmatter using ruamel.yaml."""
+    try:
+        from ruamel.yaml import YAML
+    except ImportError:
+        return
+
+    try:
+        text = note_path.read_text(encoding="utf-8")
+    except OSError:
+        return
+
+    if not text.startswith("---"):
+        return
+    end = text.find("\n---", 3)
+    if end == -1:
+        return
+
+    fm_text = text[3:end]
+    body_text = text[end + 4:]
+
+    yaml = YAML()
+    yaml.preserve_quotes = True
+    try:
+        import io
+        fm = yaml.load(fm_text)
+    except Exception:
+        return
+
+    if not isinstance(fm, dict):
+        return
+
+    fm["cb_modified"] = now.strftime("%Y-%m-%dT%H:%M:%S")
+
+    import io
+    out = io.StringIO()
+    yaml.dump(fm, out)
+    new_fm = out.getvalue().rstrip("\n")
+    note_path.write_text(f"---\n{new_fm}\n---{body_text}", encoding="utf-8")
 
 
 def _merge_relations_into_note(note_path: Path, new_relations: list) -> None:
@@ -105,7 +148,7 @@ def _merge_relations_into_note(note_path: Path, new_relations: list) -> None:
 
 
 def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
-                  vault_context: str | None = None) -> Path | None:
+                  vault_context: str | None = None, source: str = "hook-extraction") -> Path | None:
     """File a beat intelligently into the vault using LLM judgment."""
     vault_path = config["vault_path"]
 
@@ -115,8 +158,23 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
         vault_context = vault_context_text if vault_context_text is not None else \
             "File notes using human-readable names with spaces. Use types: decision, insight, problem, reference."
 
-    # Search for related vault docs — ranked by keyword match count, up to 5 candidates
-    related_paths = search_vault(beat, vault_path, max_results=5)
+    # Working-memory beats search within the WM folder; durable beats search the whole vault
+    durability = beat.get("durability", "durable")
+    if durability == "working-memory":
+        wm_root = config.get("working_memory_folder", "AI/Working Memory")
+        project_name = config.get("project_name", "")
+        if beat.get("scope") == "project" and project_name:
+            search_root = str(Path(vault_path) / wm_root / project_name)
+        else:
+            search_root = str(Path(vault_path) / wm_root)
+        # Fall back to vault root if WM folder doesn't exist yet
+        if not Path(search_root).exists():
+            search_root = vault_path
+    else:
+        search_root = vault_path
+
+    # Search for related docs — ranked by keyword match count, up to 5 candidates
+    related_paths = search_vault(beat, search_root, max_results=5)
     related_docs = []
     for path in related_paths:
         try:
@@ -126,11 +184,12 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
         except OSError:
             pass
 
-    # Get top-level folder listing
+    # Folder listing: WM beats see the WM folder tree; durable beats see the vault root
     try:
+        folder_root = Path(search_root) if durability == "working-memory" else Path(vault_path)
         vault_folders = "\n".join(
             str(p.relative_to(vault_path))
-            for p in sorted(Path(vault_path).iterdir())
+            for p in sorted(folder_root.iterdir())
             if p.is_dir() and not p.name.startswith(".")
         )
     except OSError:
@@ -150,9 +209,9 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
         raw = call_model(system_prompt, user_message, config)
     except BackendError as e:
         print(f"[extract_beats] autofile: backend error, falling back to inbox: {e}", file=sys.stderr)
-        return write_beat(beat, config, session_id, cwd, now)
+        return write_beat(beat, config, session_id, cwd, now, source=source)
     if not raw:
-        return write_beat(beat, config, session_id, cwd, now)
+        return write_beat(beat, config, session_id, cwd, now, source=source)
 
     # Strip code fences
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
@@ -172,10 +231,10 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
         target = vault / target_rel
         if not _is_within_vault(vault, target):
             print(f"[extract_beats] autofile: path traversal rejected: {target_rel}", file=sys.stderr)
-            return write_beat(beat, config, session_id, cwd, now)
+            return write_beat(beat, config, session_id, cwd, now, source=source)
         insertion = decision.get("insertion", "")
         if not target.exists() or not insertion:
-            return write_beat(beat, config, session_id, cwd, now)
+            return write_beat(beat, config, session_id, cwd, now, source=source)
 
         vault_titles = build_vault_titles_set(vault_path)
         raw_relations = beat.get("relations", [])
@@ -185,6 +244,7 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
 
         with open(target, "a", encoding="utf-8") as f:
             f.write(f"\n\n{insertion.strip()}\n")
+        _update_cb_modified(target, now)
         print(f"[extract_beats] autofile: extended {target}", file=sys.stderr)
         return target
 
@@ -192,12 +252,18 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
         rel_path = decision.get("path", "")
         content = decision.get("content", "")
         if not rel_path or not content:
-            return write_beat(beat, config, session_id, cwd, now)
+            return write_beat(beat, config, session_id, cwd, now, source=source)
         output_path = vault / rel_path
         if not _is_within_vault(vault, output_path):
             print(f"[extract_beats] autofile: path traversal rejected: {rel_path}", file=sys.stderr)
-            return write_beat(beat, config, session_id, cwd, now)
+            return write_beat(beat, config, session_id, cwd, now, source=source)
         output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Inject provenance (and WM fields if applicable) into LLM-generated content
+        extra_fields = None
+        if beat.get("durability") == "working-memory":
+            extra_fields = _wm_frontmatter_fields(beat, config, now)
+        content = inject_provenance(content, source, session_id, now, extra_fields=extra_fields)
 
         # Collision handling: check if target already exists
         if output_path.exists():
@@ -208,6 +274,7 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
             if overlap >= 2:
                 with open(output_path, "a", encoding="utf-8") as f:
                     f.write(f"\n\n{content.strip()}\n")
+                _update_cb_modified(output_path, now)
                 print(f"[extract_beats] autofile: collision resolved as extend (tag overlap={overlap}): {output_path}", file=sys.stderr)
                 return output_path
             else:
@@ -240,4 +307,4 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
 
     else:
         print(f"[extract_beats] autofile: unknown action '{action}', falling back", file=sys.stderr)
-        return write_beat(beat, config, session_id, cwd, now)
+        return write_beat(beat, config, session_id, cwd, now, source=source)

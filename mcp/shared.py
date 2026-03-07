@@ -64,3 +64,31 @@ def _parse_frontmatter(content: str) -> dict:
         return fm if isinstance(fm, dict) else {}
     except Exception:
         return {}
+
+
+def _prune_index(config: dict) -> int:
+    """Remove index entries for notes no longer on disk. Returns count pruned."""
+    backend = _get_search_backend(config)
+    if backend is None or not hasattr(backend, "prune_stale_notes"):
+        return 0
+    try:
+        return backend.prune_stale_notes() or 0
+    except Exception:
+        return 0
+
+
+def _index_paths(paths: list, config: dict) -> int:
+    """Index a list of written note paths into the search index. Returns count indexed."""
+    backend = _get_search_backend(config)
+    if backend is None or not hasattr(backend, "index_note"):
+        return 0
+    count = 0
+    for path in paths:
+        try:
+            content = Path(path).read_text(encoding="utf-8")
+            fm = _parse_frontmatter(content)
+            backend.index_note(str(path), fm)
+            count += 1
+        except Exception:
+            pass
+    return count

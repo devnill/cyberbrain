@@ -118,6 +118,10 @@ Pass `--yes` to skip the confirmation prompt. The uninstaller removes all instal
 | `bedrock_region` | `"us-east-1"` | AWS region — only used when `backend` is `"bedrock"` |
 | `ollama_url` | `"http://localhost:11434"` | Ollama endpoint — only used when `backend` is `"ollama"` |
 | `claude_path` | `"claude"` | Full path to the `claude` binary — set this when using the MCP server from Claude Desktop, which runs without your shell PATH |
+| `working_memory_folder` | `"AI/Working Memory"` | Vault-relative folder for working memory beats (temporally relevant, not durable) |
+| `working_memory_review_days` | `28` | Days until a working memory note is flagged for review |
+| `consolidation_log` | `"AI/Cyberbrain-Log.md"` | Vault-relative path for the consolidation/review audit log |
+| `consolidation_log_enabled` | `true` | Set `false` to disable the audit log |
 
 ---
 
@@ -242,6 +246,19 @@ When the PreCompact hook fires, Claude (Haiku) reads the session transcript and 
 
 If your vault's `CLAUDE.md` defines a different type vocabulary, the extractor uses that instead. This keeps beat types consistent with how you organize the rest of your vault.
 
+### Beat durability
+
+Each beat is also classified by durability:
+
+| Durability | What it means |
+|---|---|
+| `durable` | Passes the six-month test — useful to someone with no memory of this session, six months from now |
+| `working-memory` | Current project state: open bugs, in-flight refactors, temporary workarounds, unvalidated hypotheses. Routed to a separate folder; reviewed periodically by `cb_review` |
+
+Working memory beats are indexed and searchable like durable beats but live in `AI/Working Memory/`. The `cb_review` tool processes them when they're due, deciding whether to promote them to durable notes, extend the review window, or delete them.
+
+### Beat frontmatter
+
 Each beat is written as a markdown file with YAML frontmatter:
 
 ```markdown
@@ -258,12 +275,63 @@ tags: ["json", "llm", "parsing", "robustness"]
 related: []
 status: completed
 summary: "json.JSONDecoder().raw_decode() tolerates trailing explanation text after the JSON blob."
+cb_source: hook-extraction
+cb_created: 2026-02-25T13:34:00
+cb_session: abc123
 ---
 
 ## Decision
 
 Use `json.JSONDecoder().raw_decode()` to parse LLM responses...
 ```
+
+Provenance fields (`cb_source`, `cb_created`, `cb_session`) are written automatically. Working memory beats also carry `cb_ephemeral: true` and `cb_review_after: <date>`. Set `cb_lock: true` manually to exclude a note from consolidation and review.
+
+---
+
+## Working memory
+
+Working memory beats are routed to a separate folder (`AI/Working Memory/`) rather than the inbox. They are indexed and searchable like durable beats but carry a review date (`cb_review_after`). Use `cb_review` to process them:
+
+```
+cb_review(dry_run=True)       # see what's due
+cb_review(dry_run=False)      # process — LLM proposes promote / extend / delete per note
+cb_review(days_ahead=7)       # also include notes due within 7 days
+```
+
+Promoted notes become durable vault notes. Deleted notes are logged to `AI/Cyberbrain-Log.md`.
+
+---
+
+## Vault preferences
+
+Add a `## Cyberbrain Preferences` section to your vault's `CLAUDE.md` to guide extraction and consolidation behavior in natural language — no prompt editing required.
+
+Manage it through `cb_configure`:
+
+```
+cb_configure(show_prefs=True)               # view current preferences
+cb_configure(set_prefs="Only capture...")   # replace the entire section
+cb_configure(reset_prefs=True)             # restore defaults
+```
+
+---
+
+## Restructure
+
+`cb_restructure` keeps the vault clean by doing two things in a single pass:
+
+- **Merge**: clusters of related notes (many small notes on the same topic) are merged into one richer note or organized under a hub page
+- **Split**: large notes covering multiple unrelated topics are broken into focused sub-notes
+
+```
+cb_restructure(dry_run=True)                    # preview proposed changes (always start here)
+cb_restructure(folder="Projects/myapp")         # target a specific folder
+cb_restructure(similarity_threshold=0.7)        # lower threshold = more aggressive clustering
+cb_restructure(split_threshold=3000)            # min note size (chars) to be a split candidate
+```
+
+The tool uses semantic similarity to find clusters, then asks the LLM to decide how to restructure each cluster and each large note. Set `cb_lock: true` in a note's frontmatter to protect it from restructuring.
 
 ---
 
@@ -363,13 +431,20 @@ Requires Ollama running locally with a model pulled (`ollama pull llama3.2`). Qu
 
 ## MCP server (Claude Desktop)
 
-The installer registers a FastMCP server in Claude Desktop, exposing three tools:
+The installer registers a FastMCP server in Claude Desktop, exposing ten tools:
 
 | Tool | Description |
 |---|---|
 | `cb_extract(transcript_path)` | Extract beats from a transcript file |
 | `cb_file(content, instructions?)` | File a piece of text into the vault |
 | `cb_recall(query, max_results?)` | Search the vault |
+| `cb_read(identifier)` | Read a specific note by path or title |
+| `cb_enrich(folder?, since?, dry_run?)` | Backfill missing metadata on existing notes |
+| `cb_setup(vault_path?, dry_run?)` | Analyze vault and generate/update its CLAUDE.md |
+| `cb_configure(...)` | View or change config, vault path, and preferences |
+| `cb_status()` | Show vault health, index stats, and recent extraction runs |
+| `cb_restructure(folder?, dry_run?, similarity_threshold?, split_threshold?)` | Merge related note clusters and split large notes to keep the vault clean |
+| `cb_review(days_ahead?, dry_run?, folder?)` | Review working memory notes that are due — promote, extend, or delete |
 
 ### Automatic setup (macOS)
 
@@ -479,7 +554,9 @@ Skills load at session start. Open a new Claude Code session after running `bash
 | `prompts/extract-beats-system.md` | System prompt for beat extraction |
 | `prompts/extract-beats-user.md` | User message template for beat extraction |
 | `prompts/autofile-system.md` | System prompt for autofile filing decisions |
-| `prompts/enrich-system.md` | System prompt for `/cb-enrich` |
+| `prompts/enrich-system.md` | System prompt for `cb_enrich` |
+| `prompts/restructure-system.md` | System prompt for `cb_restructure` split/merge decisions |
+| `prompts/review-system.md` | System prompt for `cb_review` promote/extend/delete decisions |
 | `prompts/claude-desktop-project.md` | Recommended Claude Desktop Project system prompt |
 | `mcp/server.py` | FastMCP server for Claude Desktop |
 | `scripts/import.py` | Import Claude or ChatGPT export into the vault |

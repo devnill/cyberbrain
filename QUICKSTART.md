@@ -59,6 +59,15 @@ Requires AWS credentials configured (`~/.aws/credentials` or env vars).
 ```
 Requires Ollama running locally with a model pulled.
 
+**Recommended model sizes for local inference:**
+
+| Tool | Minimum | Recommended |
+|---|---|---|
+| `cb_extract`, `cb_enrich`, `cb_recall` | 7B | 14B+ |
+| `cb_restructure` | 14B | 32B+ |
+
+`cb_restructure` requires the strongest reasoning — it must classify clusters, decide between merge/hub-spoke/subfolder, and generate full note content in a single call. Models below 14B frequently return malformed JSON or omit required frontmatter fields. 32B+ models (e.g. Qwen2.5-32B, Mistral-Small) produce reliably usable output.
+
 ---
 
 ## Verify
@@ -176,8 +185,10 @@ For a new vault, skip this until you have a few dozen notes.
 | `cb_file` | Manually save any piece of information to the vault |
 | `cb_enrich` | Backfill metadata on notes that are missing tags/summaries |
 | `cb_setup` | Analyze vault and generate/update its `CLAUDE.md` (two-phase) |
-| `cb_configure` | View or change vault path, inbox, and capture mode |
-| `cb_status` | Show recent extraction runs and index health |
+| `cb_configure` | View or change config, vault path, capture mode, and preferences |
+| `cb_status` | Show vault health, index stats, and recent extraction runs |
+| `cb_restructure` | Find and merge over-fragmented notes using semantic clustering |
+| `cb_review` | Review working memory notes that are due — promote, extend, or delete |
 
 ---
 

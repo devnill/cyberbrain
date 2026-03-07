@@ -32,6 +32,76 @@ def _read_index_stats(config: dict) -> dict:
         return {}
 
 
+_DEFAULT_PREFS = """\
+## Cyberbrain Preferences
+
+### Extraction
+- Only capture `problem` beats if they encode a reusable pattern, not just that a bug was fixed
+- Prefer fewer, richer beats over many specific ones
+- Avoid session-specific operational details that won't be meaningful in 6 months
+
+### Consolidation
+- Merge notes that cover the same concept or closely related sub-topics
+- Use hub-and-spoke structure (index page + subpages) when a merged note would exceed ~800 words
+- Do not consolidate notes in: AI/Journal, Templates
+"""
+
+_PREFS_HEADING = "## Cyberbrain Preferences"
+
+
+def _read_prefs_section(vault_path: str) -> str | None:
+    """Return the Cyberbrain Preferences section from vault CLAUDE.md, or None if absent."""
+    claude_md = Path(vault_path) / "CLAUDE.md"
+    if not claude_md.exists():
+        return None
+    text = claude_md.read_text(encoding="utf-8")
+    idx = text.find(_PREFS_HEADING)
+    if idx == -1:
+        return None
+    # Find the end: next ## heading at the same level or EOF
+    rest = text[idx:]
+    end_match = None
+    for m in __import__("re").finditer(r"^## ", rest, __import__("re").MULTILINE):
+        if m.start() > 0:
+            end_match = m.start()
+            break
+    return rest[:end_match].strip() if end_match else rest.strip()
+
+
+def _write_prefs_section(vault_path: str, prefs_text: str) -> None:
+    """Write or replace the Cyberbrain Preferences section in vault CLAUDE.md."""
+    claude_md = Path(vault_path) / "CLAUDE.md"
+    if claude_md.exists():
+        text = claude_md.read_text(encoding="utf-8")
+    else:
+        text = ""
+
+    new_section = prefs_text.strip()
+    if not new_section.startswith(_PREFS_HEADING):
+        new_section = _PREFS_HEADING + "\n\n" + new_section
+
+    idx = text.find(_PREFS_HEADING)
+    if idx == -1:
+        # Append
+        separator = "\n\n" if text and not text.endswith("\n\n") else ""
+        text = text + separator + new_section + "\n"
+    else:
+        # Replace existing section
+        import re as _re
+        rest = text[idx:]
+        end_match = None
+        for m in _re.finditer(r"^## ", rest, _re.MULTILINE):
+            if m.start() > 0:
+                end_match = m.start()
+                break
+        if end_match:
+            text = text[:idx] + new_section + "\n\n" + rest[end_match:]
+        else:
+            text = text[:idx] + new_section + "\n"
+
+    claude_md.write_text(text, encoding="utf-8")
+
+
 def register(mcp: FastMCP) -> None:
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, idempotentHint=True))
     def cb_configure(
@@ -47,6 +117,23 @@ def register(mcp: FastMCP) -> None:
         discover: Annotated[bool, Field(
             description="Search this Mac for existing Obsidian vaults and return candidates."
         )] = False,
+        show_prefs: Annotated[bool, Field(
+            description="Display the current Cyberbrain Preferences section from the vault CLAUDE.md."
+        )] = False,
+        set_prefs: Annotated[str | None, Field(
+            description="Replace the Cyberbrain Preferences section in vault CLAUDE.md with this text. Use natural language to describe extraction and consolidation preferences."
+        )] = None,
+        reset_prefs: Annotated[bool, Field(
+            description="Restore the Cyberbrain Preferences section in vault CLAUDE.md to the built-in defaults."
+        )] = False,
+        working_memory_ttl: Annotated[dict | None, Field(
+            description=(
+                "Set per-type working memory TTL (days before review). Pass a dict with type names as keys "
+                "and day counts as values, plus an optional 'default' key. "
+                "Example: {\"default\": 28, \"decision\": 56, \"problem\": 14}. "
+                "Only affects newly written working-memory notes."
+            )
+        )] = None,
     ) -> str:
         """
         Configure cyberbrain or show current configuration.
@@ -55,6 +142,10 @@ def register(mcp: FastMCP) -> None:
         Call with discover=True to find Obsidian vaults on this Mac.
         Call with vault_path=... to set where notes are stored.
         Call with capture_mode='suggest'|'auto'|'manual' to set filing behavior.
+        Call with show_prefs=True to see current extraction/consolidation preferences.
+        Call with set_prefs='...' to update preferences (written to vault CLAUDE.md).
+        Call with reset_prefs=True to restore default preferences.
+        Call with working_memory_ttl={...} to set per-type review TTL in days.
 
         Use this to set up cyberbrain through conversation instead of editing config files.
         """
@@ -62,6 +153,32 @@ def register(mcp: FastMCP) -> None:
         import threading
 
         cfg_path = Path.home() / ".claude" / "cyberbrain" / "config.json"
+
+        # --- preferences operations ---
+        if show_prefs or set_prefs is not None or reset_prefs:
+            cfg = _load_config()
+            vp = cfg.get("vault_path", "")
+            if not vp or not Path(vp).exists():
+                return (
+                    "No vault configured or vault path does not exist. "
+                    "Run cb_configure(vault_path=...) first."
+                )
+            if reset_prefs:
+                _write_prefs_section(vp, _DEFAULT_PREFS)
+                return "Cyberbrain Preferences reset to defaults in vault CLAUDE.md."
+            if set_prefs is not None:
+                _write_prefs_section(vp, set_prefs)
+                line_count = len(set_prefs.strip().splitlines())
+                return f"Cyberbrain Preferences updated in vault CLAUDE.md ({line_count} lines)."
+            # show_prefs
+            current = _read_prefs_section(vp)
+            if current is None:
+                return (
+                    "No Cyberbrain Preferences section found in vault CLAUDE.md.\n\n"
+                    "To add defaults: cb_configure(reset_prefs=True)\n"
+                    "To set custom:   cb_configure(set_prefs='...')"
+                )
+            return current
 
         def _load_raw() -> dict:
             if cfg_path.exists():
@@ -115,7 +232,7 @@ def register(mcp: FastMCP) -> None:
 
         # --- writes ---
         changed = []
-        if vault_path is not None or inbox is not None or capture_mode is not None:
+        if vault_path is not None or inbox is not None or capture_mode is not None or working_memory_ttl is not None:
             cfg = _load_raw()
 
             if vault_path is not None:
@@ -153,6 +270,17 @@ def register(mcp: FastMCP) -> None:
                     )
                 cfg["desktop_capture_mode"] = capture_mode
                 changed.append(f"desktop_capture_mode → {capture_mode}")
+
+            if working_memory_ttl is not None:
+                if not isinstance(working_memory_ttl, dict):
+                    raise ToolError("working_memory_ttl must be a dict, e.g. {\"default\": 28, \"decision\": 56}.")
+                for k, v in working_memory_ttl.items():
+                    if not isinstance(v, int) or v < 1:
+                        raise ToolError(f"working_memory_ttl values must be positive integers. Got {k!r}: {v!r}")
+                existing = cfg.get("working_memory_ttl", {})
+                existing.update(working_memory_ttl)
+                cfg["working_memory_ttl"] = existing
+                changed.append(f"working_memory_ttl → {existing}")
 
             _save_raw(cfg)
             result = "Configuration updated:\n" + "\n".join(f"  - {c}" for c in changed)
@@ -310,5 +438,55 @@ def register(mcp: FastMCP) -> None:
         backend = config.get("backend", "claude-code")
         model = config.get("model", "claude-haiku-4-5")
         lines.append(f"- Backend: {backend} ({model})")
+
+        # Preferences and provenance coverage
+        vp = config.get("vault_path", "")
+        if vp and Path(vp).exists():
+            prefs = _read_prefs_section(vp)
+            if prefs:
+                prefs_lines = len(prefs.strip().splitlines())
+                lines.append(f"- Preferences: set ({prefs_lines} lines) — cb_configure(show_prefs=True) to view")
+            else:
+                lines.append("- Preferences: not set — cb_configure(reset_prefs=True) to add defaults")
+
+            # Provenance coverage: count notes missing cb_source
+            try:
+                import sqlite3 as _sqlite3
+                from tools.recall import _DEFAULT_DB_PATH
+                db_path = config.get("search_db_path", _DEFAULT_DB_PATH)
+                conn = _sqlite3.connect(db_path)
+                total_notes = conn.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
+                # cb_lock count — scan frontmatter files (can't store in SQLite easily, skip for now)
+                conn.close()
+                lines.append(f"- Provenance coverage: run cb_enrich to backfill missing cb_source fields")
+            except Exception:
+                pass
+
+            # Working memory stats
+            wm_folder = config.get("working_memory_folder", "AI/Working Memory")
+            wm_path = Path(vp) / wm_folder
+            if wm_path.exists():
+                wm_notes = list(wm_path.rglob("*.md"))
+                from datetime import date as _date
+                today = _date.today()
+                due_count = 0
+                for p in wm_notes:
+                    try:
+                        import yaml as _yaml
+                        text = p.read_text(encoding="utf-8", errors="replace")
+                        if not text.startswith("---"):
+                            continue
+                        end = text.find("\n---", 3)
+                        if end == -1:
+                            continue
+                        fm = _yaml.safe_load(text[3:end]) or {}
+                        raw = fm.get("cb_review_after", "")
+                        if raw and _date.fromisoformat(str(raw)) <= today:
+                            due_count += 1
+                    except Exception:
+                        pass
+                lines.append(f"- Working memory: {len(wm_notes)} notes in {wm_folder}")
+                if due_count:
+                    lines.append(f"  ⚠ {due_count} note(s) due for review — run cb_review()")
 
         return "\n".join(lines)

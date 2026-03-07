@@ -31,7 +31,7 @@ LLMs have no memory across sessions. Humans have imprecise memory across time. N
 - An LLM starting a new session on a familiar project has no idea what was decided last week.
 - A human returning to a project after three months may remember that a decision was made but not why, or not at all.
 
-The knowledge graph sits between these two memory models. It provides precise, queryable recall of past context that neither party can reliably hold on their own. A single `/cb-recall` call at session start can inject months of relevant history.
+The knowledge graph sits between these two memory models. It provides precise, queryable recall of past context that neither party can reliably hold on their own. Recalling relevant context at session start can inject months of relevant history.
 
 **Success looks like:** Resuming work on a project feels like continuing it, not restarting it. The LLM has access to the relevant history and can reason from it immediately.
 
@@ -41,7 +41,7 @@ The knowledge graph sits between these two memory models. It provides precise, q
 
 LLM chat sessions are a rich source, but not the only one. Useful knowledge surfaces in many places: a Stack Overflow answer, a decision made in a Slack thread, notes from a meeting, a pattern discovered while reading documentation. All of these have the same shelf life problem: read once, lost.
 
-The project should provide low-friction paths to file knowledge from any source. The vault should be source-agnostic. A snippet filed via `/cb-file` should be as useful and retrievable as one extracted automatically from a session.
+The project should provide low-friction paths to file knowledge from any source. The vault should be source-agnostic. A snippet filed manually should be as useful and retrievable as one extracted automatically from a session.
 
 **Success looks like:** Filing a piece of knowledge takes less than 10 seconds and doesn't require the user to think about where it goes. The system handles classification and routing.
 
@@ -83,7 +83,7 @@ A vault full of noise is worse than a small vault with high-quality signal. Retr
 
 The system should do the work. Classification, tagging, routing, and filing decisions should default to automatic. The user's job is to work — the knowledge graph should capture the byproduct of that work without demanding additional attention.
 
-Manual filing (via `/cb-file`) exists for cases where the user has something specific to capture immediately. But the dominant flow — extract on compaction, autofile to the right place — should require zero deliberate action.
+Manual filing exists for cases where the user has something specific to capture immediately. But the dominant flow — extract on compaction, autofile to the right place — should require zero deliberate action.
 
 **Success looks like:** After initial setup, the vault grows without the user actively managing it.
 
@@ -190,3 +190,19 @@ The system already has a backend abstraction (`claude-cli`, `anthropic`, `bedroc
 Speed is not a primary concern for extraction — it happens in the background, and a few extra seconds of latency per session is acceptable.
 
 **Success looks like:** A user can point the system at a locally-running model and have extraction, autofile, and enrichment work without any cloud API calls. Sensitive content never leaves the machine.
+
+---
+
+## G18: The system should be unopinionated about vault structure
+
+Initial setup may offer an opinionated scaffold — a para-style folder layout, a suggested type vocabulary, a CLAUDE.md template — for users who are starting fresh. But the runtime behavior of the system must be adaptive. It observes and works with the structure that already exists rather than imposing its own.
+
+This means:
+- **Knowledge retrieval** finds relevant notes regardless of where they live in the vault
+- **Vault maintenance** (merging, splitting, creating hub notes) respects the organizational conventions of the vault — hub notes may live inside a folder, one level above it, in a dedicated index directory, or anywhere the user prefers
+- **Metadata enrichment** infers valid note types and conventions from the vault itself, not from a hardcoded list
+- **Filing and routing** uses the vault's own CLAUDE.md to determine where notes belong, not assumptions baked into the system
+
+The system should work well whether the vault uses PARA, Zettelkasten, Johnny Decimal, flat filing, or something entirely idiosyncratic. Setup scaffolding is optional and non-destructive; runtime behavior adapts.
+
+**Success looks like:** A user with an existing Obsidian vault can point the system at it and have all features work sensibly without reorganizing their vault to match a prescribed layout.
