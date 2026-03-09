@@ -112,10 +112,26 @@ cp "$REPO_DIR/prompts/enrich-system.md" "$CB_DIR/prompts/enrich-system.md"
 cp "$REPO_DIR/prompts/enrich-user.md"   "$CB_DIR/prompts/enrich-user.md"
 echo "  [OK] cyberbrain/prompts/enrich-system.md"
 echo "  [OK] cyberbrain/prompts/enrich-user.md"
-cp "$REPO_DIR/prompts/restructure-system.md" "$CB_DIR/prompts/restructure-system.md"
-cp "$REPO_DIR/prompts/restructure-user.md"   "$CB_DIR/prompts/restructure-user.md"
+cp "$REPO_DIR/prompts/restructure-system.md"          "$CB_DIR/prompts/restructure-system.md"
+cp "$REPO_DIR/prompts/restructure-user.md"            "$CB_DIR/prompts/restructure-user.md"
+cp "$REPO_DIR/prompts/restructure-decide-system.md"   "$CB_DIR/prompts/restructure-decide-system.md"
+cp "$REPO_DIR/prompts/restructure-decide-user.md"     "$CB_DIR/prompts/restructure-decide-user.md"
+cp "$REPO_DIR/prompts/restructure-generate-system.md" "$CB_DIR/prompts/restructure-generate-system.md"
+cp "$REPO_DIR/prompts/restructure-generate-user.md"   "$CB_DIR/prompts/restructure-generate-user.md"
+cp "$REPO_DIR/prompts/restructure-audit-system.md"    "$CB_DIR/prompts/restructure-audit-system.md"
+cp "$REPO_DIR/prompts/restructure-audit-user.md"      "$CB_DIR/prompts/restructure-audit-user.md"
+cp "$REPO_DIR/prompts/restructure-group-system.md"    "$CB_DIR/prompts/restructure-group-system.md"
+cp "$REPO_DIR/prompts/restructure-group-user.md"      "$CB_DIR/prompts/restructure-group-user.md"
 echo "  [OK] cyberbrain/prompts/restructure-system.md"
 echo "  [OK] cyberbrain/prompts/restructure-user.md"
+echo "  [OK] cyberbrain/prompts/restructure-decide-system.md"
+echo "  [OK] cyberbrain/prompts/restructure-decide-user.md"
+echo "  [OK] cyberbrain/prompts/restructure-generate-system.md"
+echo "  [OK] cyberbrain/prompts/restructure-generate-user.md"
+echo "  [OK] cyberbrain/prompts/restructure-audit-system.md"
+echo "  [OK] cyberbrain/prompts/restructure-audit-user.md"
+echo "  [OK] cyberbrain/prompts/restructure-group-system.md"
+echo "  [OK] cyberbrain/prompts/restructure-group-user.md"
 cp "$REPO_DIR/prompts/review-system.md" "$CB_DIR/prompts/review-system.md"
 cp "$REPO_DIR/prompts/review-user.md"   "$CB_DIR/prompts/review-user.md"
 echo "  [OK] cyberbrain/prompts/review-system.md"
@@ -183,12 +199,14 @@ from pathlib import Path
 path = Path(sys.argv[1])
 
 DESIRED = {
-    'hooks': [{
-        'type': 'command',
-        'command': '~/.claude/hooks/pre-compact-extract.sh',
-        'timeout': 120,
-        'statusMessage': 'Extracting knowledge before compaction...'
-    }]
+    'hooks': [
+        {
+            'type': 'command',
+            'command': '~/.claude/hooks/pre-compact-extract.sh',
+            'timeout': 120,
+            'statusMessage': 'Extracting knowledge before compaction...'
+        }
+    ]
 }
 
 # Load existing config or start fresh
@@ -204,11 +222,13 @@ else:
     d = {}
 
 DESIRED_SESSION_END = {
-    'hooks': [{
-        'type': 'command',
-        'command': '~/.claude/hooks/session-end-extract.sh',
-        'timeout': 120,
-    }]
+    'hooks': [
+        {
+            'type': 'command',
+            'command': '~/.claude/hooks/session-end-extract.sh',
+            'timeout': 120,
+        }
+    ]
 }
 
 existing_precompact = d.get('hooks', {}).get('PreCompact')

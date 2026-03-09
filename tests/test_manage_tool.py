@@ -875,3 +875,204 @@ class TestCbStatusProvenanceCoverage:
                 with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
                     result = _cb_status()()
         assert "Cyberbrain Status" in result
+
+    def test_vault_with_no_notes_table_db(self, tmp_path):
+        """Covers provenance exception branch when db exists but has no 'notes' table."""
+        import sqlite3
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        _write_claude_md(vault, "# Vault\n")
+
+        db_path = tmp_path / "empty.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.commit()
+        conn.close()
+
+        cfg = {
+            **BASE_CONFIG,
+            "vault_path": str(vault),
+            "search_db_path": str(db_path),
+        }
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            with patch.object(manage_mod, "_read_index_stats", return_value={}):
+                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                    # Should not raise — exception is caught silently
+                    result = _cb_status()()
+        assert "Cyberbrain Status" in result
+
+    def test_invalid_json_in_runs_log_skipped(self, tmp_path):
+        """Covers JSONDecodeError branch in cb_status runs log parsing."""
+        cfg = {**BASE_CONFIG, "vault_path": ""}
+        log_file = tmp_path / "runs.log"
+        log_file.write_text("not-valid-json\nalso-bad\n", encoding="utf-8")
+
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            with patch.object(manage_mod, "_read_index_stats", return_value={}):
+                with patch.object(manage_mod, "RUNS_LOG_PATH", str(log_file)):
+                    result = _cb_status()()
+        assert "No runs recorded" in result
+
+    def test_oserror_reading_runs_log_in_status(self, tmp_path):
+        """Covers OSError branch in cb_status runs log reading."""
+        cfg = {**BASE_CONFIG, "vault_path": ""}
+        log_dir = tmp_path / "runs_dir"
+        log_dir.mkdir()
+
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            with patch.object(manage_mod, "_read_index_stats", return_value={}):
+                with patch.object(manage_mod, "RUNS_LOG_PATH", str(log_dir)):
+                    result = _cb_status()()
+        assert "No runs recorded" in result
+
+    def test_manifest_read_exception_handled(self, tmp_path):
+        """Covers manifest exception branch when manifest file is invalid JSON."""
+        cfg = {**BASE_CONFIG, "vault_path": ""}
+        manifest_path = tmp_path / "bad_manifest.json"
+        manifest_path.write_text("not-json!", encoding="utf-8")
+
+        with patch.object(manage_mod, "_load_config", return_value={
+            **cfg,
+            "search_manifest_path": str(manifest_path),
+        }):
+            with patch.object(manage_mod, "_read_index_stats", return_value={}):
+                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                    result = _cb_status()()
+        assert "Cyberbrain Status" in result
+
+    def test_working_memory_note_without_frontmatter_delimiter(self, tmp_path):
+        """Covers the 'not text.startswith(---) → continue' branch in working memory scan."""
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        wm_folder = vault / "AI" / "Working Memory"
+        wm_folder.mkdir(parents=True)
+
+        # Note without YAML frontmatter
+        note = wm_folder / "no-frontmatter.md"
+        note.write_text("## Just a note\n\nNo frontmatter here.\n", encoding="utf-8")
+
+        cfg = {**BASE_CONFIG, "vault_path": str(vault)}
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            with patch.object(manage_mod, "_read_index_stats", return_value={}):
+                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                    result = _cb_status()()
+        assert "Working memory" in result
+
+    def test_working_memory_note_with_unclosed_frontmatter(self, tmp_path):
+        """Covers the 'end == -1 → continue' branch (no closing ---)."""
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        wm_folder = vault / "AI" / "Working Memory"
+        wm_folder.mkdir(parents=True)
+
+        # Note with opening --- but no closing ---
+        note = wm_folder / "unclosed.md"
+        note.write_text("---\ncb_review_after: '2026-01-01'\n## No closing delimiter\n", encoding="utf-8")
+
+        cfg = {**BASE_CONFIG, "vault_path": str(vault)}
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            with patch.object(manage_mod, "_read_index_stats", return_value={}):
+                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                    result = _cb_status()()
+        assert "Working memory" in result
+
+    def test_working_memory_yaml_parse_exception_handled(self, tmp_path):
+        """Covers the except Exception branch when yaml.safe_load raises."""
+        import yaml
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        wm_folder = vault / "AI" / "Working Memory"
+        wm_folder.mkdir(parents=True)
+
+        # Valid-looking frontmatter to pass the startswith/end checks
+        note = wm_folder / "valid-looking.md"
+        note.write_text("---\ncb_review_after: '2026-01-01'\n---\n\n## Note\n", encoding="utf-8")
+
+        cfg = {**BASE_CONFIG, "vault_path": str(vault)}
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            with patch.object(manage_mod, "_read_index_stats", return_value={}):
+                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                    with patch("yaml.safe_load", side_effect=yaml.YAMLError("bad yaml")):
+                        result = _cb_status()()
+        # Should not crash — exception is caught
+        assert "Working memory" in result
+
+
+# ===========================================================================
+# cb_configure — additional edge cases
+# ===========================================================================
+
+class TestCbConfigureEdgeCases:
+    def test_load_raw_bad_json_returns_empty(self, tmp_path, monkeypatch):
+        """Covers the exception branch in _load_raw when config file has bad JSON."""
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+        cfg_dir = home / ".claude" / "cyberbrain"
+        cfg_dir.mkdir(parents=True)
+        # Write invalid JSON to config file
+        (cfg_dir / "config.json").write_text("not valid json!!!", encoding="utf-8")
+
+        with patch.object(manage_mod, "_load_config", return_value={}):
+            result = _cb_configure()(inbox="AI/Test")
+        # Should succeed, treating bad JSON as empty config
+        assert "inbox" in result
+
+    def test_discover_permission_error_continues(self, tmp_path, monkeypatch):
+        """Covers the PermissionError/OSError exception branch in discover mode."""
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+        # Create Documents dir so it enters the loop, then mock rglob to raise PermissionError
+        docs = home / "Documents"
+        docs.mkdir()
+
+        original_rglob = Path.rglob
+
+        def mock_rglob(self, pattern):
+            if self == docs:
+                raise PermissionError("Permission denied")
+            return original_rglob(self, pattern)
+
+        with patch.object(Path, "rglob", mock_rglob):
+            with patch.object(manage_mod, "_load_config", return_value={}):
+                result = _cb_configure()(discover=True)
+        # With no vaults found (PermissionError skipped), should return "No Obsidian vaults found"
+        assert "No Obsidian vaults found" in result
+
+    def test_no_args_general_exception_in_log_reading(self, tmp_path):
+        """Covers the outer except Exception branch when reading the runs log raises non-OSError."""
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        cfg = {**BASE_CONFIG, "vault_path": str(vault)}
+
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            with patch.object(manage_mod, "_read_index_stats", return_value={"total": 0, "by_type": {}}):
+                # Use a non-existent path that will pass Path.exists() check but fail read
+                # We achieve this by creating a directory at the log path (IsADirectoryError)
+                log_dir = tmp_path / "log_as_dir"
+                log_dir.mkdir()
+                with patch.object(manage_mod, "RUNS_LOG_PATH", str(log_dir)):
+                    result = _cb_configure()()
+        assert "Cyberbrain Configuration" in result
+
+    def test_discover_stops_at_10_vaults(self, tmp_path, monkeypatch):
+        """Covers the 'len(found) >= 10 → break' branch in discover mode."""
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+        docs = home / "Documents"
+        docs.mkdir()
+
+        # Create 11 fake Obsidian vaults
+        for i in range(11):
+            vault_dir = docs / f"Vault{i}"
+            (vault_dir / ".obsidian").mkdir(parents=True)
+
+        with patch.object(manage_mod, "_load_config", return_value={}):
+            result = _cb_configure()(discover=True)
+        assert "Found Obsidian vaults" in result
+        # Should cap at 10
+        count = result.count("\n  ")
+        assert count <= 11  # At most 10 vaults + trailing message line

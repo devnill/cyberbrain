@@ -163,3 +163,37 @@ Two directions to explore:
 **Why deferred:** The prompt system currently uses a single file per prompt. Multi-variant or parameterized prompts require a selection/injection layer that doesn't exist yet. The preferences system (already implemented via vault CLAUDE.md) is a lightweight version of this — users can already express methodology preferences in natural language. Full model-variant prompts are worth building once there's evidence that the gap between model tiers is causing consistent quality problems.
 
 **Trigger to revisit:** When local model users report that the default prompts produce wrong action choices (e.g. always hub-spoke instead of subfolder), or when multiple users with different PKMS methodologies report that the prompts fight their organizational style. The preferences system is the first line of defense — check whether it solves the issue before building prompt variants.
+
+---
+
+## D13: Vault health audit against CLAUDE.md and reference materials
+
+**What:** A tool (or `cb_review` extension) that critically evaluates whether the vault's actual contents conform to the organizational principles, type vocabulary, and folder conventions defined in the vault's CLAUDE.md and any reference materials linked from it. When deviations are found, the tool should determine whether to fix the vault (restructure/retype notes that violate conventions) or fix the CLAUDE.md (the convention itself evolved and the documentation is stale).
+
+Two classes of deviation to detect:
+
+1. **Vault violates CLAUDE.md** — notes using types not in the vocabulary, notes in folders that contradict stated organization rules, notes with missing required frontmatter fields, hub notes that don't link to everything they should. Resolution: fix the notes.
+
+2. **CLAUDE.md is stale** — the vault has evolved organically in a way that consistently contradicts the documentation (e.g. a folder convention that nobody follows because it doesn't fit usage patterns). Resolution: update the CLAUDE.md to reflect reality, or make a deliberate choice to re-enforce the old convention.
+
+The tool should produce a structured audit report: deviations found, severity, and recommended action (fix vault vs. fix docs) with rationale.
+
+**Why deferred:** Requires reading and parsing vault CLAUDE.md conventions programmatically (not just the preferences section), then comparing against actual vault state. Non-trivial to implement well, especially the "is this a vault problem or a docs problem?" judgment. The restructure and enrich tools are the current proxies for vault health.
+
+**Trigger to revisit:** Once the preferences system and restructure tooling are mature enough that the vault is reasonably well-organized. The audit tool is most valuable when the vault has stabilized and you want systematic assurance it matches its own documentation.
+
+---
+
+## D14: Interactive restructure actions (move-misplaced, delete-low-quality)
+
+**What:** `cb_restructure`'s audit phase correctly identifies misplaced notes (with suggested destinations) and low-quality stubs, but currently only prints flags for manual review. Two actions need user confirmation before executing:
+
+1. **Move misplaced notes** — the audit provides `flag-misplaced` with a `suggested_destination`. The tool should present the proposed move and execute it after user confirmation. False positives are possible (e.g., a note about radiant barriers in a Solar Power folder is topically adjacent but not really solar-specific), so automatic moves without confirmation are risky.
+
+2. **Delete or enrich low-quality notes** — stubs with no real content beyond a wikilink reference should be deletable. Borderline notes could be enriched via `cb_enrich`. Both actions are destructive and need user approval.
+
+The implementation likely requires either a multi-turn confirmation flow within the MCP tool (not currently supported cleanly), or a separate `cb_triage` tool that presents flagged items one at a time for accept/reject/skip decisions.
+
+**Why deferred:** The audit flags are accurate and useful as-is for manual cleanup. Building the interactive confirmation UX is a separate concern from the audit logic itself. The current workaround (audit flags + manual file moves) works.
+
+**Trigger to revisit:** When the volume of flagged notes per restructure run makes manual cleanup tedious, or when an MCP pattern for multi-turn user confirmation becomes available.

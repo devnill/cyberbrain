@@ -106,8 +106,8 @@ def main():
         if transcript_stem:
             session_id = transcript_stem
 
-    # Deduplication check
-    if is_session_already_extracted(session_id):
+    # Deduplication check (skip in dry-run mode — no writes happen)
+    if not args.dry_run and is_session_already_extracted(session_id):
         print(f"[extract_beats] Session '{session_id}' already extracted. Skipping.", file=sys.stderr)
         sys.exit(0)
 

@@ -94,7 +94,11 @@ Beat routing:
 | `mcp/tools/manage.py` | `cb_configure` + `cb_status` tools |
 | `mcp/tools/restructure.py` | `cb_restructure` tool — split large notes, merge related clusters, create hub pages, and move clusters into subfolders |
 | `mcp/tools/review.py` | `cb_review` tool — working memory review (promote/extend/delete) |
-| `prompts/restructure-system.md` / `restructure-user.md` | Restructure LLM prompts (split + merge) |\
+| `prompts/restructure-system.md` / `restructure-user.md` | Restructure LLM prompts (split + merge) |
+| `prompts/restructure-decide-system.md` / `restructure-decide-user.md` | Restructure decision prompts — action selection for clusters and large notes |
+| `prompts/restructure-generate-system.md` / `restructure-generate-user.md` | Restructure content generation prompts |
+| `prompts/restructure-audit-system.md` / `restructure-audit-user.md` | Restructure audit prompts — topical fit and quality checks |
+| `prompts/restructure-group-system.md` / `restructure-group-user.md` | Restructure grouping prompts — LLM-driven semantic clustering |
 | `mcp/tools/reindex.py` | `cb_reindex` tool — prune stale index entries or full rebuild |
 | `prompts/review-system.md` / `review-user.md` | Working memory review LLM prompts |
 | `scripts/import.py` | Unified import for Claude Desktop and ChatGPT data exports |
@@ -133,7 +137,8 @@ Global config at `~/.claude/cyberbrain/config.json`:
   "working_memory_folder": "AI/Working Memory",
   "working_memory_review_days": 28,
   "consolidation_log": "AI/Cyberbrain-Log.md",
-  "consolidation_log_enabled": true
+  "consolidation_log_enabled": true,
+  "trash_folder": ".trash"
 }
 ```
 
@@ -171,6 +176,18 @@ The `claude-code` backend strips all four unconditionally and uses `start_new_se
 **Architectural constraint:** All vault writes go through `extract_beats.py` or `import.py`. This ensures path validation, logging, and error fallback are consistently enforced in Python. MCP tools never write vault files directly.
 
 **Filename character constraint:** Beat titles (used as vault filenames) must not contain `#`, `[`, `]`, or `^`. These characters are valid on the filesystem but break Obsidian wikilink resolution — Obsidian uses `#` as a heading anchor separator and `^` as a block reference marker inside link syntax. The `make_filename()` function in `extract_beats.py` strips them, and the extraction and autofile prompts instruct the LLM not to generate them. When writing prompts or testing, verify titles avoid these characters (e.g. use "CSharp" not "C#").
+
+**Soft delete (trash):** All vault note deletions go through `_move_to_trash()` in `mcp/shared.py`. Notes are moved to the `trash_folder` (default `.trash`, relative to vault root) instead of being permanently deleted. The vault-relative folder structure is preserved inside the trash folder. If a file already exists at the destination, a numeric suffix (`_1`, `_2`, ...) is appended to avoid clobbering. Obsidian ignores dotfolders by default, so `.trash` is invisible in the vault UI.
+
+**Restructure grouping strategies:** `cb_restructure` in `folder_hub` mode supports pluggable clustering via the `grouping` parameter:
+- `auto` (default) — embedding hierarchical clustering with LLM fallback if no embeddings available
+- `embedding` — deterministic agglomerative clustering from usearch embeddings (cosine distance, average linkage, threshold 0.25)
+- `llm` — LLM-driven semantic grouping using the `restructure-group-system.md` prompt
+- `hybrid` — embedding pre-clustering then LLM validation/refinement using the full group prompt
+
+Grouping results are cached at `~/.claude/cyberbrain/.restructure-groups-cache.json` so that dry_run → preview → execute use the same clusters. The cache is keyed by folder path, note count, and strategy.
+
+**Restructure execution order:** Audit runs before structural decisions. Notes flagged as `flag-misplaced` or `flag-low-quality` are removed from clusters before the decide/generate/execute phases, preventing merges of notes that should be moved or deleted.
 
 ### MCP Interface
 

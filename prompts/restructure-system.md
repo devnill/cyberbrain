@@ -67,10 +67,11 @@ Prefer **hub-spoke** when:
 - Subfolders are inappropriate AND merging would produce an unwieldy document
 - You are NOT running as a pre-pass inside folder_hub mode
 
-Prefer **keep-separate** when:
-- Notes share a term but cover genuinely different contexts or use cases
-- The notes serve different lookup needs and splitting them aids navigation
-- Consolidating would remove useful granularity
+Prefer **keep-separate** sparingly — only when:
+- The notes were a false cluster: they share a keyword but belong to genuinely different sub-domains
+- Keeping them together would actively mislead a reader (e.g. a note about "hooks" in fishing and a note about "hooks" in software)
+
+**Do NOT use keep-separate just because notes cover different topics within the same sub-domain.** Notes about LLM JSON parsing and LLM model selection are distinct topics — but they both belong in an `LLM Engineering/` subfolder. Notes about Claude API pricing and Claude usage limits are distinct — but they both belong in a `Claude and Anthropic/` subfolder. The cluster phase is about grouping by sub-domain, not by exact topic. Within a sub-domain, notes can and should coexist in a subfolder even if each one covers a different aspect.
 
 ---
 

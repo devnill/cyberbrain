@@ -66,6 +66,38 @@ def _parse_frontmatter(content: str) -> dict:
         return {}
 
 
+def _move_to_trash(file_path: Path, vault: Path, config: dict) -> Path:
+    """Move a file to the configured trash folder instead of deleting it.
+
+    Preserves vault-relative folder structure inside the trash folder.
+    Appends a numeric suffix to avoid clobbering existing files.
+    Returns the destination path.
+    """
+    trash_rel = config.get("trash_folder", ".trash")
+    trash_root = vault / trash_rel
+
+    # Preserve folder structure relative to vault
+    try:
+        rel = file_path.resolve().relative_to(vault.resolve())
+    except ValueError:
+        rel = Path(file_path.name)
+
+    dest = trash_root / rel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+
+    # Avoid clobbering: append numeric suffix if dest exists
+    if dest.exists():
+        stem = dest.stem
+        suffix = dest.suffix
+        counter = 1
+        while dest.exists():
+            dest = dest.parent / f"{stem}_{counter}{suffix}"
+            counter += 1
+
+    file_path.rename(dest)
+    return dest
+
+
 def _prune_index(config: dict) -> int:
     """Remove index entries for notes no longer on disk. Returns count pruned."""
     backend = _get_search_backend(config)

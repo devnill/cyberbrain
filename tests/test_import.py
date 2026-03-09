@@ -149,6 +149,25 @@ class TestParseClaudeConversation:
         assert "Human: Fallback text question" in result
         assert "Assistant: Fallback text answer" in result
 
+    def test_transcript_truncated_when_too_long(self):
+        """Line 197: truncation when rendered output exceeds MAX_TRANSCRIPT_CHARS."""
+        long_text = "x" * (kg_import.MAX_TRANSCRIPT_CHARS + 5000)
+        conv = {
+            "uuid": "long-001",
+            "name": "Long conversation",
+            "updated_at": "2026-02-10T10:00:00Z",
+            "chat_messages": [
+                {
+                    "sender": "human",
+                    "text": long_text,
+                    "content": [{"type": "text", "text": long_text}],
+                },
+            ],
+        }
+        result = kg_import.parse_claude_conversation(conv)
+        assert "truncated" in result
+        assert len(result) <= kg_import.MAX_TRANSCRIPT_CHARS + len("...[earlier content truncated]...\n\n")
+
     def test_skips_empty_messages(self):
         conv = {
             "uuid": "test-006",
@@ -589,6 +608,26 @@ class TestConversationRendering:
 # ---------------------------------------------------------------------------
 # _extract_chatgpt_thread tests (lines 47-58)
 # ---------------------------------------------------------------------------
+
+class TestRenderClaudeMessageText:
+    """Tests for _render_claude_message_text() — line 147 branch."""
+
+    def test_non_human_assistant_sender_returns_empty(self):
+        """Line 147: non-human/assistant sender returns empty string."""
+        msg = {"sender": "system", "text": "You are helpful.", "content": []}
+        result = kg_import._render_claude_message_text(msg)
+        assert result == ""
+
+    def test_tool_sender_returns_empty(self):
+        msg = {"sender": "tool", "text": "tool output", "content": []}
+        result = kg_import._render_claude_message_text(msg)
+        assert result == ""
+
+    def test_human_sender_returns_content(self):
+        msg = {"sender": "human", "text": "hello", "content": [{"type": "text", "text": "hello"}]}
+        result = kg_import._render_claude_message_text(msg)
+        assert result == "hello"
+
 
 class TestExtractChatGPTThread:
     """Tests for _extract_chatgpt_thread() — tree-walking from current_node."""
@@ -1051,7 +1090,9 @@ class TestProcessConversation:
 
     def test_empty_transcript_returns_zero(self, tmp_path):
         eb = MagicMock()
-        # Conversation with no messages renders to near-empty
+        # Use a chatgpt conv whose mapping is empty and current_node is missing,
+        # so render produces just the header (title + no messages).
+        # We patch render_conversation to return "" to hit the empty-transcript branch.
         conv = {
             "uuid": "empty-123",
             "name": "Empty",
@@ -1059,7 +1100,8 @@ class TestProcessConversation:
             "chat_messages": [],
         }
         config = self._make_config(tmp_path)
-        count, paths = kg_import.process_conversation(conv, "claude", config, eb, "/tmp")
+        with patch.object(kg_import, "render_conversation", return_value="   "):
+            count, paths = kg_import.process_conversation(conv, "claude", config, eb, "/tmp")
 
         assert count == 0
         assert paths == []
@@ -1523,6 +1565,13 @@ class TestMain:
             kg_import.main()
 
         mock_eb.write_journal_entry.assert_called_once()
+
+    def test_main_extractor_not_found_exits(self, tmp_path):
+        """_import_extract_beats exits with sys.exit(1) when extractor is missing."""
+        with patch.object(kg_import, "EXTRACTORS_DIR", tmp_path / "nonexistent"), \
+             patch("sys.argv", ["import.py", "--export", "/dev/null", "--format", "claude"]):
+            with pytest.raises(SystemExit):
+                kg_import._import_extract_beats()
 
     def test_main_summary_printed(self, tmp_path, capsys):
         """Import complete summary is printed after non-dry-run."""

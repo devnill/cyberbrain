@@ -10,7 +10,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
-from shared import _load_config, _get_search_backend, _parse_frontmatter, _prune_index, _index_paths
+from shared import _load_config, _get_search_backend, _parse_frontmatter, _prune_index, _index_paths, _move_to_trash
 
 _PROMPTS_DIR = Path.home() / ".claude" / "cyberbrain" / "prompts"
 _WM_RECALL_LOG = Path.home() / ".claude" / "cyberbrain" / "wm-recall.jsonl"
@@ -364,10 +364,10 @@ def register(mcp: FastMCP) -> None:
 
                 for note in affected_notes:
                     try:
-                        note["path"].unlink()
+                        _move_to_trash(note["path"], vault, config)
                         deleted += 1
                     except OSError as e:
-                        result_lines.append(f"  Warning: could not delete {note['path'].name}: {e}")
+                        result_lines.append(f"  Warning: could not trash {note['path'].name}: {e}")
 
                 result_lines.append(
                     f"Promoted: {', '.join(repr(t) for t in titles)} → **{promoted_title}** ({promoted_path_rel})"
@@ -389,12 +389,12 @@ def register(mcp: FastMCP) -> None:
             elif action == "delete":
                 for note in affected_notes:
                     try:
-                        note["path"].unlink()
+                        _move_to_trash(note["path"], vault, config)
                         deleted += 1
-                        result_lines.append(f"Deleted: {note['title']} — {rationale}")
-                        errata.append(f"**Deleted:** {note['title']}")
+                        result_lines.append(f"Trashed: {note['title']} — {rationale}")
+                        errata.append(f"**Trashed:** {note['title']}")
                     except OSError as e:
-                        result_lines.append(f"  Warning: could not delete {note['path'].name}: {e}")
+                        result_lines.append(f"  Warning: could not trash {note['path'].name}: {e}")
 
             else:
                 result_lines.append(f"Unknown action '{action}' for {titles} — skipped")

@@ -10,9 +10,10 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
-from shared import _load_config, _get_search_backend, _parse_frontmatter, _prune_index, _index_paths
+from shared import _load_config, _get_search_backend, _parse_frontmatter, _prune_index, _index_paths, _move_to_trash
 
 _PROMPTS_DIR = Path.home() / ".claude" / "cyberbrain" / "prompts"
+_GROUPS_CACHE = Path.home() / ".claude" / "cyberbrain" / ".restructure-groups-cache.json"
 _PREFS_HEADING = "## Cyberbrain Preferences"
 _LOCK_FIELD = "cb_lock"
 
@@ -283,6 +284,325 @@ def _title_concept_clusters(notes: list[dict], min_cluster_size: int) -> list[li
             clusters.append([notes[i] for i in indices])
 
     return sorted(clusters, key=len, reverse=True)
+
+
+def _save_groups_cache(folder_path: str, clusters: list[list[dict]], strategy: str = "") -> None:
+    """Save grouping result to cache so dry_run → preview → execute stay consistent."""
+    cache_data = {
+        "folder": folder_path,
+        "strategy": strategy,
+        "groups": [[n["rel_path"] for n in cluster] for cluster in clusters],
+    }
+    try:
+        _GROUPS_CACHE.write_text(json.dumps(cache_data), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _load_groups_cache(folder_path: str, notes: list[dict], strategy: str = "") -> list[list[dict]] | None:
+    """Load cached grouping if it exists and matches the folder and strategy. Returns None on miss."""
+    try:
+        data = json.loads(_GROUPS_CACHE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if data.get("folder") != folder_path:
+        return None
+    if strategy and data.get("strategy", "") != strategy:
+        return None
+    path_to_note = {n["rel_path"]: n for n in notes}
+    clusters: list[list[dict]] = []
+    for group_paths in data.get("groups", []):
+        cluster_notes = [path_to_note[p] for p in group_paths if p in path_to_note]
+        if len(cluster_notes) >= 2:
+            clusters.append(cluster_notes)
+    return clusters if clusters else None
+
+
+def _clear_groups_cache() -> None:
+    """Remove the groups cache file."""
+    try:
+        _GROUPS_CACHE.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _call_group_notes(
+    notes: list[dict],
+    folder_path: str,
+    prefs_section: str,
+    config: dict,
+) -> list[list[dict]]:
+    """Ask the LLM to propose semantic topic groups from a flat list of notes.
+
+    Used in folder_hub mode instead of title-concept clustering, which only
+    matches notes sharing a key title word. Returns a list of clusters
+    (each cluster is a list of note dicts). Notes not assigned to any group
+    are left for the standalone path.
+
+    Results are cached so that dry_run → preview → execute use the same grouping.
+    """
+    if not notes:
+        return []
+
+    # Check cache first
+    cached = _load_groups_cache(folder_path, notes, strategy="llm")
+    if cached is not None:
+        return cached
+
+    from backends import call_model, BackendError
+    group_system = _load_prompt("restructure-group-system.md")
+    notes_block = _build_audit_notes_block(notes)
+    user_msg = (
+        _load_prompt("restructure-group-user.md")
+        .replace("{folder_path}", folder_path)
+        .replace("{note_count}", str(len(notes)))
+        .replace("{vault_prefs_section}", prefs_section)
+        .replace("{notes_block}", notes_block)
+    )
+    try:
+        raw = call_model(group_system, user_msg, config)
+    except BackendError:
+        return []
+    raw = re.sub(r"^```(?:json)?\s*", "", raw.strip())
+    raw = re.sub(r"\s*```$", "", raw).strip()
+    try:
+        groups = _repair_json(raw)
+        if not isinstance(groups, list):
+            return []
+    except json.JSONDecodeError:
+        return []
+
+    # Map rel_path → note dict for quick lookup
+    path_to_note = {n["rel_path"]: n for n in notes}
+    clusters: list[list[dict]] = []
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        note_paths = group.get("note_paths", [])
+        cluster_notes = [path_to_note[p] for p in note_paths if p in path_to_note]
+        if len(cluster_notes) >= 2:
+            clusters.append(cluster_notes)
+
+    # Cache for subsequent calls (preview, execute)
+    _save_groups_cache(folder_path, clusters, strategy="llm")
+    return clusters
+
+
+def _embedding_hierarchical_clusters(
+    notes: list[dict],
+    config: dict,
+    distance_threshold: float = 0.25,
+    min_cluster_size: int = 2,
+) -> list[list[dict]]:
+    """Deterministic clustering using search index embeddings + agglomerative clustering.
+
+    Uses average-linkage hierarchical clustering on cosine distances.
+    Deterministic: same embeddings always produce the same clusters.
+    No LLM call needed.
+
+    Loads embeddings from the usearch index (search-index.usearch) using the
+    manifest (search-index-manifest.json) id_map for path-to-key mapping.
+    """
+    if len(notes) < min_cluster_size:
+        return []
+    import numpy as np
+
+    # Load manifest for id_map and embedding_dim
+    manifest_path = Path.home() / ".claude" / "cyberbrain" / "search-index-manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+
+    id_map = manifest.get("id_map", [])
+    embedding_dim = manifest.get("embedding_dim", 0)
+    if not embedding_dim or not id_map:
+        return []
+
+    # Load the usearch index
+    index_path = manifest_path.parent / "search-index.usearch"
+    try:
+        from usearch.index import Index
+        idx = Index(ndim=embedding_dim, metric="cos", dtype="f32")
+        idx.load(str(index_path))
+    except Exception:
+        return []
+
+    # Map note paths to usearch key positions via id_map
+    path_to_emb_idx = {p: i for i, p in enumerate(id_map)}
+    note_keys = []
+    valid_notes = []
+    for note in notes:
+        abs_path = str(note["path"])
+        if abs_path in path_to_emb_idx:
+            note_keys.append(path_to_emb_idx[abs_path])
+            valid_notes.append(note)
+
+    if len(valid_notes) < min_cluster_size:
+        return []
+
+    # Extract embeddings from usearch index
+    keys_array = np.array(note_keys, dtype=np.int64)
+    emb_matrix = idx.get(keys_array)  # shape: (n, dim)
+
+    # Normalize for cosine distance
+    norms = np.linalg.norm(emb_matrix, axis=1, keepdims=True)
+    norms[norms == 0] = 1
+    emb_normed = emb_matrix / norms
+
+    # Cosine distance matrix: 1 - cosine_similarity
+    sim_matrix = emb_normed @ emb_normed.T
+    dist_matrix = 1.0 - sim_matrix
+
+    # Average-linkage agglomerative clustering (no scipy needed)
+    n = len(valid_notes)
+    # Start: each note is its own cluster
+    cluster_members: dict[int, list[int]] = {i: [i] for i in range(n)}
+    active = set(range(n))
+
+    while len(active) > 1:
+        # Find closest pair of active clusters (average linkage)
+        best_dist = float("inf")
+        best_pair = (-1, -1)
+        active_list = sorted(active)
+        for ii in range(len(active_list)):
+            for jj in range(ii + 1, len(active_list)):
+                ci, cj = active_list[ii], active_list[jj]
+                # Average distance between all pairs across the two clusters
+                total_dist = 0.0
+                count = 0
+                for mi in cluster_members[ci]:
+                    for mj in cluster_members[cj]:
+                        total_dist += dist_matrix[mi, mj]
+                        count += 1
+                avg_dist = total_dist / count if count else float("inf")
+                if avg_dist < best_dist:
+                    best_dist = avg_dist
+                    best_pair = (ci, cj)
+
+        if best_dist > distance_threshold:
+            break  # No more clusters close enough
+
+        # Merge best pair
+        ci, cj = best_pair
+        cluster_members[ci] = cluster_members[ci] + cluster_members[cj]
+        del cluster_members[cj]
+        active.discard(cj)
+
+    # Collect clusters with enough members
+    clusters = []
+    for members in cluster_members.values():
+        if len(members) >= min_cluster_size:
+            clusters.append([valid_notes[i] for i in members])
+
+    return sorted(clusters, key=len, reverse=True)
+
+
+def _llm_validate_clusters(
+    clusters: list[list[dict]],
+    all_notes: list[dict],
+    folder_path: str,
+    prefs_section: str,
+    config: dict,
+) -> list[list[dict]]:
+    """Ask LLM to validate and refine algorithmically-produced clusters.
+
+    Reuses the group-system prompt for consistent quality criteria, with an
+    added section showing the algorithm's proposed clusters as a starting point.
+    """
+    from backends import call_model, BackendError
+
+    # Format embedding clusters as a hint section
+    hint_lines = ["## Algorithm-proposed clusters (starting point — revise freely)\n"]
+    for i, cluster in enumerate(clusters):
+        titles = [n["title"] for n in cluster]
+        hint_lines.append(f"- Group {i}: {', '.join(titles)}")
+    hint_lines.append(
+        "\nThese groups were produced by embedding similarity. "
+        "Use them as a starting point: split weak groups, merge standalone notes "
+        "into groups where they clearly fit, or discard groups entirely."
+    )
+    hint_section = "\n".join(hint_lines)
+
+    # Use the standard grouping prompt for quality criteria
+    group_system = _load_prompt("restructure-group-system.md")
+    notes_block = _build_audit_notes_block(all_notes)
+    user_msg = (
+        _load_prompt("restructure-group-user.md")
+        .replace("{folder_path}", folder_path)
+        .replace("{note_count}", str(len(all_notes)))
+        .replace("{vault_prefs_section}", prefs_section)
+        .replace("{notes_block}", notes_block)
+        + "\n\n" + hint_section
+    )
+
+    try:
+        raw = call_model(group_system, user_msg, config)
+    except BackendError:
+        return clusters  # Fall back to algorithmic result
+
+    raw = re.sub(r"^```(?:json)?\s*", "", raw.strip())
+    raw = re.sub(r"\s*```$", "", raw).strip()
+    try:
+        groups = _repair_json(raw)
+        if not isinstance(groups, list):
+            return clusters
+    except json.JSONDecodeError:
+        return clusters
+
+    path_to_note = {n["rel_path"]: n for n in all_notes}
+    refined: list[list[dict]] = []
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        note_paths = group.get("note_paths", [])
+        cluster_notes = [path_to_note[p] for p in note_paths if p in path_to_note]
+        if len(cluster_notes) >= 2:
+            refined.append(cluster_notes)
+
+    return refined if refined else clusters
+
+
+def _dispatch_grouping(
+    strategy: str,
+    notes: list[dict],
+    folder_path: str,
+    prefs_section: str,
+    config: dict,
+) -> list[list[dict]]:
+    """Dispatch to the selected clustering strategy. All strategies return list[list[dict]].
+
+    Strategies:
+      'llm'       — LLM-driven semantic grouping (always uses LLM)
+      'embedding' — deterministic embedding hierarchical clustering, LLM fallback
+      'hybrid'    — embedding clustering then LLM validation/refinement
+      'auto'      — embedding clustering with LLM fallback (default)
+    """
+    # Check cache first (all strategies share the same cache keyed by strategy)
+    cached = _load_groups_cache(folder_path, notes, strategy=strategy)
+    if cached is not None:
+        return cached
+
+    if strategy == "llm":
+        result = _call_group_notes(notes, folder_path, prefs_section, config)
+    elif strategy == "embedding":
+        clusters = _embedding_hierarchical_clusters(notes, config)
+        result = clusters if clusters else _call_group_notes(notes, folder_path, prefs_section, config)
+    elif strategy == "hybrid":
+        # Algorithmic pre-group, then LLM validates/refines
+        clusters = _embedding_hierarchical_clusters(notes, config)
+        if not clusters:
+            result = _call_group_notes(notes, folder_path, prefs_section, config)
+        else:
+            result = _llm_validate_clusters(clusters, notes, folder_path, prefs_section, config)
+    else:  # "auto"
+        clusters = _embedding_hierarchical_clusters(notes, config)
+        result = clusters if clusters else _call_group_notes(notes, folder_path, prefs_section, config)
+
+    # Cache for subsequent calls (preview, execute)
+    _save_groups_cache(folder_path, result, strategy=strategy)
+    return result
+
 
 def _build_clusters(notes: list[dict], backend, similarity_threshold: float, min_cluster_size: int) -> list[list[dict]]:
     """
@@ -580,6 +900,384 @@ def _build_folder_context(scan_root: Path, vault: Path, notes: list[dict],
 
     return "\n".join(lines)
 
+def _build_cluster_summary_block(clusters: list[list[dict]]) -> str:
+    """Compact cluster block for the decision call — titles and summaries only, no content."""
+    parts = []
+    for idx, cluster in enumerate(clusters):
+        lines = [f"### Cluster {idx} ({len(cluster)} notes)"]
+        for note in cluster:
+            summary = note["summary"][:200] if note["summary"] else "(no summary)"
+            lines.append(f"- **{note['title']}**: {summary}")
+        parts.append("\n".join(lines))
+    return "\n\n".join(parts) if parts else "_No clusters._"
+
+
+def _build_split_summary_block(splits: list[dict]) -> str:
+    """Compact split candidates block for the decision call — titles and sizes only."""
+    if not splits:
+        return "_No split candidates._"
+    lines = []
+    for idx, note in enumerate(splits):
+        size_kb = len(note["content"]) / 1000
+        summary = note["summary"][:200] if note["summary"] else "(no summary)"
+        lines.append(f"### Note {idx}: {note['title']} ({size_kb:.1f}KB)")
+        lines.append(summary)
+    return "\n\n".join(lines)
+
+
+
+
+def _build_vault_structure(vault: Path) -> str:
+    """Build a two-level folder listing of the vault for LLM context."""
+    lines = []
+    try:
+        for top in sorted(vault.iterdir()):
+            if not top.is_dir() or top.name.startswith("."):
+                continue
+            lines.append(f"- {top.name}/")
+            try:
+                for sub in sorted(top.iterdir()):
+                    if sub.is_dir() and not sub.name.startswith("."):
+                        lines.append(f"  - {sub.name}/")
+            except PermissionError:
+                pass
+    except PermissionError:
+        pass
+    return "\n".join(lines) if lines else "(vault structure unavailable)"
+
+
+def _build_standalone_notes_block(standalone: list[dict]) -> str:
+    """Summary block for notes not in any cluster and not split candidates."""
+    if not standalone:
+        return "_No standalone notes._"
+    lines = []
+    for note in standalone:
+        summary = note["summary"][:200] if note["summary"] else "(no summary)"
+        lines.append(f"- **{note['title']}** (`{note['rel_path']}`): {summary}")
+    return "\n".join(lines)
+
+def _format_action_description(decision: dict) -> str:
+    """Format a decision dict into a human-readable action description for the generation prompt."""
+    action = decision.get("action", "")
+    rationale = decision.get("rationale", "")
+    if action == "merge":
+        return (
+            f"**merge** — Combine all source notes into a single, richer note.\n"
+            f"Title: {decision.get('merged_title', '')}\n"
+            f"Path: {decision.get('merged_path', '')}\n"
+            f"Rationale: {rationale}"
+        )
+    elif action == "hub-spoke":
+        return (
+            f"**hub-spoke** — Create an index/hub note in the current folder linking the source notes.\n"
+            f"Hub title: {decision.get('hub_title', '')}\n"
+            f"Hub path: {decision.get('hub_path', '')}\n"
+            f"Rationale: {rationale}"
+        )
+    elif action == "subfolder":
+        return (
+            f"**subfolder** — Move source notes into a new subdirectory and create a hub note inside it.\n"
+            f"Subfolder: {decision.get('subfolder_path', '')}\n"
+            f"Hub title: {decision.get('hub_title', '')}\n"
+            f"Hub path: {decision.get('hub_path', '')}\n"
+            f"Rationale: {rationale}"
+        )
+    elif action == "split":
+        notes_desc = "\n".join(
+            f"  - {n.get('title', '')} → {n.get('path', '')}"
+            for n in decision.get("output_notes", [])
+        )
+        return (
+            f"**split** — Break the source note into multiple focused notes.\n"
+            f"Rationale: {rationale}\n"
+            f"Output notes:\n{notes_desc}"
+        )
+    elif action == "split-subfolder":
+        notes_desc = "\n".join(
+            f"  - {n.get('title', '')} → {n.get('path', '')}"
+            for n in decision.get("output_notes", [])
+        )
+        return (
+            f"**split-subfolder** — Break the source note into multiple focused notes inside a new subfolder, plus a hub note.\n"
+            f"Subfolder: {decision.get('subfolder_path', '')}\n"
+            f"Hub title: {decision.get('hub_title', '')}\n"
+            f"Hub path: {decision.get('hub_path', '')}\n"
+            f"Rationale: {rationale}\n"
+            f"Output notes:\n{notes_desc}"
+        )
+    elif action == "move-cluster":
+        return (
+            f"**move-cluster** — Move all notes in this cluster to a different folder.\n"
+            f"Destination: {decision.get('destination', '')}\n"
+            f"Rationale: {rationale}"
+        )
+    return f"**{action}**\nRationale: {rationale}"
+
+
+
+def _format_flag_output(flag_decisions: list[dict]) -> str:
+    """Format flag-misplaced and flag-low-quality decisions for display."""
+    if not flag_decisions:
+        return ""
+    lines = ["### Flagged Notes (no files changed — review manually)\n"]
+    for d in flag_decisions:
+        action = d.get("action", "")
+        note_path = d.get("note_path", "(unknown)")
+        rationale = d.get("rationale", "")
+        if action == "flag-misplaced":
+            dest = d.get("suggested_destination", "(no suggestion)")
+            lines.append(f"  🔀 **Misplaced**: `{note_path}`")
+            lines.append(f"     Suggested destination: {dest}")
+            lines.append(f"     Reason: {rationale}")
+        elif action == "flag-low-quality":
+            lines.append(f"  ⚠️  **Low quality**: `{note_path}`")
+            lines.append(f"     Reason: {rationale}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _build_audit_notes_block(notes: list[dict]) -> str:
+    """Format all notes for the audit call — title, path, tags, summary."""
+    if not notes:
+        return "_No notes._"
+    lines = []
+    for note in notes:
+        summary = note["summary"][:300] if note["summary"] else "(no summary)"
+        tags = note.get("tags", [])
+        tags_str = f" [tags: {', '.join(tags)}]" if tags else ""
+        lines.append(f"- **{note['title']}** (`{note['rel_path']}`){tags_str}: {summary}")
+    return "\n".join(lines)
+
+
+_AUDIT_BATCH_SIZE = 20
+_AUDIT_MAX_WORKERS = 4
+
+
+def _call_audit_notes_batch(
+    notes: list[dict],
+    folder_path: str,
+    vault_structure: str,
+    prefs_section: str,
+    config: dict,
+    audit_system: str,
+    audit_user_tmpl: str,
+) -> list[dict]:
+    """Audit a single batch of notes. Returns flag decisions only."""
+    from backends import call_model, BackendError
+    notes_block = _build_audit_notes_block(notes)
+    user_msg = (
+        audit_user_tmpl
+        .replace("{folder_path}", folder_path)
+        .replace("{note_count}", str(len(notes)))
+        .replace("{vault_prefs_section}", prefs_section)
+        .replace("{vault_structure}", vault_structure)
+        .replace("{notes_block}", notes_block)
+    )
+    try:
+        raw = call_model(audit_system, user_msg, config)
+    except BackendError:
+        return []
+    raw = re.sub(r"^```(?:json)?\s*", "", raw.strip())
+    raw = re.sub(r"\s*```$", "", raw).strip()
+    try:
+        result = _repair_json(raw)
+        return [d for d in result if isinstance(d, dict) and d.get("action") in ("flag-misplaced", "flag-low-quality")]
+    except json.JSONDecodeError:
+        return []
+
+
+def _call_audit_notes(
+    notes: list[dict],
+    folder_path: str,
+    vault_structure: str,
+    prefs_section: str,
+    config: dict,
+) -> list[dict]:
+    """Audit all notes for quality and topical fit, in parallel batches.
+
+    Notes are split into batches of _AUDIT_BATCH_SIZE and processed concurrently
+    so audit quality stays high regardless of folder size.
+    """
+    if not notes:
+        return []
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    audit_system = _load_prompt("restructure-audit-system.md")
+    audit_user_tmpl = _load_prompt("restructure-audit-user.md")
+    batches = [notes[i:i + _AUDIT_BATCH_SIZE] for i in range(0, len(notes), _AUDIT_BATCH_SIZE)]
+    if len(batches) == 1:
+        return _call_audit_notes_batch(batches[0], folder_path, vault_structure, prefs_section, config, audit_system, audit_user_tmpl)
+    flags: list[dict] = []
+    with ThreadPoolExecutor(max_workers=min(len(batches), _AUDIT_MAX_WORKERS)) as executor:
+        futures = {
+            executor.submit(
+                _call_audit_notes_batch, batch, folder_path, vault_structure, prefs_section, config, audit_system, audit_user_tmpl
+            ): i
+            for i, batch in enumerate(batches)
+        }
+        for future in as_completed(futures):
+            try:
+                flags.extend(future.result())
+            except Exception:
+                pass
+    return flags
+
+def _call_decisions(
+    clusters: list[list[dict]],
+    splits: list[dict],
+    prefs_section: str,
+    folder_context: str,
+    config: dict,
+    standalone: list[dict] | None = None,
+    vault_structure: str = "",
+    folder_note_count: int = 0,
+) -> list[dict]:
+    """Phase 1 LLM call: decide actions for all clusters and splits (no content generation)."""
+    from backends import call_model, BackendError
+    _standalone = standalone or []
+    decide_system = _load_prompt("restructure-decide-system.md")
+    clusters_block = _build_cluster_summary_block(clusters)
+    splits_block = _build_split_summary_block(splits)
+    standalone_block = _build_standalone_notes_block(_standalone)
+    user_msg = (
+        _load_prompt("restructure-decide-user.md")
+        .replace("{cluster_count}", str(len(clusters)))
+        .replace("{split_count}", str(len(splits)))
+        .replace("{standalone_count}", str(len(_standalone)))
+        .replace("{vault_prefs_section}", prefs_section)
+        .replace("{vault_structure}", vault_structure)
+        .replace("{folder_context}", folder_context)
+        .replace("{standalone_notes_block}", standalone_block)
+        .replace("{clusters_summary_block}", clusters_block)
+        .replace("{split_candidates_summary_block}", splits_block)
+        .replace("{folder_note_count}", str(folder_note_count))
+    )
+    try:
+        raw = call_model(decide_system, user_msg, config)
+    except BackendError as e:
+        raise ToolError(f"Backend error during decision phase: {e}")
+    raw = re.sub(r"^```(?:json)?\s*", "", raw.strip())
+    raw = re.sub(r"\s*```$", "", raw).strip()
+    try:
+        return _repair_json(raw)
+    except json.JSONDecodeError as e:
+        raise ToolError(f"LLM returned invalid JSON in decision phase: {e}\n\nRaw: {raw[:500]}")
+
+
+def _call_generate_cluster(
+    decision: dict,
+    cluster_notes: list[dict],
+    prefs_section: str,
+    vault: Path,
+    config: dict,
+) -> dict:
+    """Phase 2 LLM call: generate content for a single cluster decision."""
+    from backends import call_model, BackendError
+    generate_system = _load_prompt("restructure-generate-system.md")
+    action_desc = _format_action_description(decision)
+    source_block = _format_cluster_block([cluster_notes], vault)
+    user_msg = (
+        _load_prompt("restructure-generate-user.md")
+        .replace("{vault_prefs_section}", prefs_section)
+        .replace("{action_description}", action_desc)
+        .replace("{source_notes_block}", source_block)
+    )
+    try:
+        raw = call_model(generate_system, user_msg, config)
+    except BackendError as e:
+        raise ToolError(
+            f"Backend error during generation for cluster {decision.get('cluster_index', '?')}: {e}"
+        )
+    raw = re.sub(r"^```(?:json)?\s*", "", raw.strip())
+    raw = re.sub(r"\s*```$", "", raw).strip()
+    try:
+        result = json.loads(raw)
+        if not isinstance(result, dict):
+            raise json.JSONDecodeError("expected object", raw, 0)
+        return result
+    except json.JSONDecodeError as e:
+        raise ToolError(
+            f"LLM returned invalid JSON in generation phase (cluster {decision.get('cluster_index', '?')}): "
+            f"{e}\n\nRaw: {raw[:500]}"
+        )
+
+
+def _call_generate_split(
+    decision: dict,
+    split_note: dict,
+    prefs_section: str,
+    vault: Path,
+    config: dict,
+) -> dict:
+    """Phase 2 LLM call: generate content for a single split decision."""
+    from backends import call_model, BackendError
+    generate_system = _load_prompt("restructure-generate-system.md")
+    action_desc = _format_action_description(decision)
+    source_block = _format_cluster_block([[split_note]], vault)
+    user_msg = (
+        _load_prompt("restructure-generate-user.md")
+        .replace("{vault_prefs_section}", prefs_section)
+        .replace("{action_description}", action_desc)
+        .replace("{source_notes_block}", source_block)
+    )
+    try:
+        raw = call_model(generate_system, user_msg, config)
+    except BackendError as e:
+        raise ToolError(
+            f"Backend error during generation for split note {decision.get('note_index', '?')}: {e}"
+        )
+    raw = re.sub(r"^```(?:json)?\s*", "", raw.strip())
+    raw = re.sub(r"\s*```$", "", raw).strip()
+    try:
+        result = json.loads(raw)
+        if not isinstance(result, dict):
+            raise json.JSONDecodeError("expected object", raw, 0)
+        return result
+    except json.JSONDecodeError as e:
+        raise ToolError(
+            f"LLM returned invalid JSON in generation phase (split note {decision.get('note_index', '?')}): "
+            f"{e}\n\nRaw: {raw[:500]}"
+        )
+
+
+def _generate_all_parallel(
+    decisions: list[dict],
+    clusters: list[list[dict]],
+    split_candidates: list[dict],
+    prefs_section: str,
+    vault: Path,
+    config: dict,
+) -> None:
+    """Run all Phase 2 generation calls in parallel. Modifies decisions in-place."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    def _gen_one(decision: dict) -> None:
+        action = decision.get("action", "")
+        if "cluster_index" in decision and action in ("merge", "hub-spoke", "subfolder"):
+            cidx = decision.get("cluster_index", -1)
+            if 0 <= cidx < len(clusters):
+                content = _call_generate_cluster(decision, clusters[cidx], prefs_section, vault, config)
+                decision.update(content)
+        elif "note_index" in decision and action in ("split", "split-subfolder"):
+            nidx = decision.get("note_index", -1)
+            if 0 <= nidx < len(split_candidates):
+                content = _call_generate_split(decision, split_candidates[nidx], prefs_section, vault, config)
+                decision.update(content)
+
+    actionable = [
+        d for d in decisions
+        if d.get("action") not in ("keep", "keep-separate", "move-cluster", "flag-misplaced", "flag-low-quality")
+    ]
+    if not actionable:
+        return
+    with ThreadPoolExecutor(max_workers=min(len(actionable), 6)) as executor:
+        futures = {executor.submit(_gen_one, d): d for d in actionable}
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception:
+                pass
+
+
 def _is_within_vault(vault: Path, target: Path) -> bool:
     try:
         target.resolve().relative_to(vault.resolve())
@@ -596,8 +1294,11 @@ def _execute_cluster_decisions(
     result_lines: list[str],
     errata_entries: list[str],
     written_paths: list[Path],
+    config: dict | None = None,
 ) -> tuple[int, int]:
     """Process cluster decisions (merge/hub-spoke/keep-separate). Returns (notes_created, notes_deleted)."""
+    if config is None:
+        config = {}
     notes_created = 0
     notes_deleted = 0
 
@@ -617,6 +1318,32 @@ def _execute_cluster_decisions(
 
         if action == "keep-separate":
             result_lines.append(f"  Cluster {cluster_idx}: kept separate — {rationale}")
+
+        elif action == "move-cluster":
+            destination_rel = decision.get("destination", "")
+            if not destination_rel:
+                result_lines.append(f"  Cluster {cluster_idx}: move-cluster skipped — no destination")
+                continue
+            dest_dir = vault / destination_rel
+            if not _is_within_vault(vault, dest_dir):
+                result_lines.append(f"  Cluster {cluster_idx}: move-cluster skipped — path traversal rejected")
+                continue
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            moved_count = 0
+            for src_path in source_paths:
+                dest_path = dest_dir / src_path.name
+                try:
+                    src_path.rename(dest_path)
+                    written_paths.append(dest_path)
+                    moved_count += 1
+                except OSError as e:
+                    result_lines.append(f"    Warning: could not move {src_path.name}: {e}")
+            result_lines.append(
+                f"  Cluster {cluster_idx}: moved {moved_count} notes to '{destination_rel}' — {rationale}"
+            )
+            errata_entries.append(
+                f"**Moved cluster:** {', '.join(repr(t) for t in source_titles)} → {destination_rel}/"
+            )
 
         elif action == "merge":
             merged_title = decision.get("merged_title", "Merged Note")
@@ -652,10 +1379,10 @@ def _execute_cluster_decisions(
                 if src_path.resolve() == output_path.resolve():
                     continue
                 try:
-                    src_path.unlink()
+                    _move_to_trash(src_path, vault, config)
                     notes_deleted += 1
                 except OSError as e:
-                    result_lines.append(f"    Warning: could not delete {src_path.name}: {e}")
+                    result_lines.append(f"    Warning: could not trash {src_path.name}: {e}")
 
             merged_rel = str(output_path.relative_to(vault))
             result_lines.append(
@@ -777,6 +1504,12 @@ def _format_preview_output(decisions: list, clusters: list[list[dict]], split_ca
                 lines.append(f"### Cluster {cluster_idx}: Keep Separate")
                 lines.append(f"Notes: {titles}")
                 lines.append(f"Rationale: {rationale}\n")
+            elif action == "move-cluster":
+                destination = decision.get("destination", "")
+                lines.append(f"### Cluster {cluster_idx}: Move Cluster")
+                lines.append(f"Notes: {titles}")
+                lines.append(f"Destination: `{destination}`")
+                lines.append(f"Rationale: {rationale}\n")
             elif action == "merge":
                 merged_title = decision.get("merged_title", "")
                 merged_path = decision.get("merged_path", "")
@@ -857,24 +1590,24 @@ def register(mcp: FastMCP) -> None:
         )] = "",
         similarity_threshold: Annotated[float, Field(
             ge=0.1, le=1.0,
-            description="Similarity threshold for clustering (0.1–1.0). Lower = more aggressive grouping. Default: 0.5"
-        )] = 0.5,
+            description="Similarity threshold for clustering (0.1–1.0). Lower = more aggressive grouping. Default: 0.3"
+        )] = 0.3,
         min_cluster_size: Annotated[int, Field(
             ge=2, le=20,
             description="Minimum number of notes to form a cluster. Default: 2."
         )] = 2,
         max_clusters: Annotated[int, Field(
-            ge=1, le=50,
-            description="Maximum number of clusters to process in one run. Default: 10."
-        )] = 10,
+            ge=1, le=200,
+            description="Maximum number of clusters to process in one run. Default: 100."
+        )] = 100,
         split_threshold: Annotated[int, Field(
             ge=500,
             description="Minimum note size in characters to be considered a split candidate. Default: 3000."
         )] = 3000,
         max_splits: Annotated[int, Field(
-            ge=1, le=20,
-            description="Maximum number of large notes to evaluate for splitting in one run. Default: 5."
-        )] = 5,
+            ge=1, le=100,
+            description="Maximum number of large notes to evaluate for splitting in one run. Default: 50."
+        )] = 50,
         preview: Annotated[bool, Field(
             description=(
                 "Run the LLM and show the full proposed note content without writing any files. "
@@ -882,6 +1615,16 @@ def register(mcp: FastMCP) -> None:
                 "Mutually exclusive with dry_run=True. Set dry_run=False, preview=True to activate."
             )
         )] = False,
+        grouping: Annotated[str, Field(
+            description=(
+                "Clustering strategy for folder_hub mode. "
+                "'auto' uses embedding clustering with LLM fallback. "
+                "'llm' uses LLM-driven semantic grouping. "
+                "'embedding' uses deterministic embedding hierarchical clustering. "
+                "'hybrid' uses embedding clustering then LLM validation. "
+                "Default: 'auto'"
+            )
+        )] = "auto",
     ) -> str:
         """
         Restructure the vault by merging related notes and splitting bloated ones.
@@ -941,6 +1684,7 @@ def register(mcp: FastMCP) -> None:
         excluded_folders = ["AI/Journal", "Templates", "_templates", ".obsidian"]
         vault_prefs = _read_vault_prefs(vault_path_str)
         prefs_section = f"Vault preferences:\n\n{vault_prefs}" if vault_prefs else ""
+        vault_structure = _build_vault_structure(vault)
         system_prompt = _load_prompt("restructure-system.md")
 
         # Exclude existing hub from notes so it isn't clustered or overwritten by a merge
@@ -954,13 +1698,17 @@ def register(mcp: FastMCP) -> None:
         backend = _get_search_backend(config)
         _index_paths([n["path"] for n in notes], config)
 
+        # Validate grouping strategy
+        valid_strategies = ("auto", "llm", "embedding", "hybrid")
+        if grouping not in valid_strategies:
+            raise ToolError(f"Invalid grouping strategy: {grouping!r}. Must be one of: {', '.join(valid_strategies)}")
+
         # ── FOLDER HUB MODE ────────────────────────────────────────────────────────
         if folder_hub:
-            # Use title-concept clustering for folder_hub: group by primary sub-topic
-            # word rather than content similarity. Content similarity is noisy within
-            # a folder (all notes mention the same concepts), while title words are
-            # the clearest signal about what each note is primarily about.
-            clusters = _title_concept_clusters(notes, min_cluster_size)
+            # Dispatch to the selected clustering strategy. Default 'auto' tries
+            # embedding clustering first and falls back to LLM-driven grouping.
+            folder_rel_for_group = str(scan_root.relative_to(vault))
+            clusters = _dispatch_grouping(grouping, notes, folder_rel_for_group, prefs_section, config)
             clusters = clusters[:max_clusters]
 
             existing_hub = hub_abs.read_text(encoding="utf-8") if hub_abs and hub_abs.exists() else ""
@@ -975,8 +1723,7 @@ def register(mcp: FastMCP) -> None:
                 ]
                 if clusters:
                     for idx, cluster in enumerate(clusters):
-                        density = len(cluster) / len(notes) if notes else 0
-                        proposed = "subfolder" if density >= 0.25 and len(cluster) >= 5 else ("hub-and-spoke" if len(cluster) >= 6 else "merge")
+                        proposed = "subfolder" if len(cluster) >= 4 else "merge"
                         lines.append(f"  Cluster {idx + 1} ({len(cluster)} notes) → proposed {proposed}:")
                         for note in cluster:
                             lines.append(f"    - {note['title']}")
@@ -997,35 +1744,46 @@ def register(mcp: FastMCP) -> None:
             errata_entries: list[str] = []
             written_paths: list[Path] = []
 
-            if clusters:
-                clusters_block = _format_cluster_block(clusters, vault)
-                folder_context = _build_folder_context(scan_root, vault, notes, clusters)
-                user_msg_phase1 = (
-                    _load_prompt("restructure-user.md")
-                    .replace("{cluster_count}", str(len(clusters)))
-                    .replace("{split_count}", "0")
-                    .replace("{vault_prefs_section}", prefs_section)
-                    .replace("{folder_context}", folder_context)
-                    .replace("{clusters_block}", clusters_block)
-                    .replace("{split_candidates_block}", "_No split candidates in folder hub mode._")
-                )
-                try:
-                    raw1 = call_model(system_prompt, user_msg_phase1, config)
-                except BackendError as e:
-                    raise ToolError(f"Backend error during cluster phase: {e}")
+            # Audit all notes for quality and fit before structural decisions
+            folder_rel_hub = str(scan_root.relative_to(vault))
+            flag_decisions_hub: list[dict] = _call_audit_notes(notes, folder_rel_hub, vault_structure, prefs_section, config)
 
-                raw1 = re.sub(r"^```(?:json)?\s*", "", raw1.strip())
-                raw1 = re.sub(r"\s*```$", "", raw1).strip()
-                try:
-                    decisions1 = _repair_json(raw1)
-                except json.JSONDecodeError as e:
-                    raise ToolError(f"LLM returned invalid JSON in cluster phase: {e}\n\nRaw: {raw1[:500]}")
+            # Remove flagged notes from clusters so they aren't merged/moved
+            flagged_paths = {
+                str(vault / d["note_path"])
+                for d in flag_decisions_hub
+                if d.get("action") in ("flag-misplaced", "flag-low-quality") and d.get("note_path")
+            }
+            if flagged_paths:
+                filtered_clusters = []
+                for cluster in clusters:
+                    filtered = [n for n in cluster if str(n["path"]) not in flagged_paths]
+                    if len(filtered) >= 2:
+                        filtered_clusters.append(filtered)
+                clusters = filtered_clusters
+
+            if clusters:
+                folder_context = _build_folder_context(scan_root, vault, notes, clusters)
+                clustered_paths_hub = {str(n["path"]) for cl in clusters for n in cl}
+                standalone_hub = [n for n in notes if str(n["path"]) not in clustered_paths_hub]
+
+                # Phase 1a: decisions (summaries only — fast even for large folders)
+                decisions1 = _call_decisions(
+                    clusters, [], prefs_section, folder_context, config,
+                    standalone=standalone_hub, vault_structure=vault_structure,
+                    folder_note_count=len(notes),
+                )
+
+                # Phase 1b: generate content for non-flag decisions
+                decisions1 = [d for d in decisions1 if d.get("action") not in ("flag-misplaced", "flag-low-quality")]
+
+                _generate_all_parallel(decisions1, clusters, [], prefs_section, vault, config)
 
                 now = datetime.now(timezone.utc)
                 ts = now.strftime("%Y-%m-%dT%H:%M:%S")
                 if not preview:
                     nc, nd = _execute_cluster_decisions(
-                        decisions1, clusters, vault, ts, result_lines, errata_entries, written_paths
+                        decisions1, clusters, vault, ts, result_lines, errata_entries, written_paths, config
                     )
                     notes_created = nc
                     notes_deleted = nd
@@ -1039,6 +1797,10 @@ def register(mcp: FastMCP) -> None:
                 result_lines.append("  No clusters found — skipping merge phase.")
                 notes_created = 0
                 notes_deleted = 0
+
+            # Surface any flag decisions from Phase 1
+            if "flag_decisions_hub" in dir() and flag_decisions_hub:
+                result_lines.append("\n" + _format_flag_output(flag_decisions_hub))
 
             # Execute Phase 2: re-collect and create/update hub
             result_lines.append("\n### Phase 2: Hub Note\n")
@@ -1083,6 +1845,8 @@ def register(mcp: FastMCP) -> None:
                     titles = ", ".join(f"'{n['title']}'" for n in cluster)
                     if action == "keep-separate":
                         preview_lines.append(f"Cluster {cidx}: Keep separate — {titles}")
+                    elif action == "move-cluster":
+                        preview_lines.append(f"Cluster {cidx}: Move cluster → `{d.get('destination', '')}` — {titles}")
                     elif action == "merge":
                         content = d.get("merged_content", "")
                         if len(content) > 3000:
@@ -1107,6 +1871,8 @@ def register(mcp: FastMCP) -> None:
                     preview_lines.append(f"Hub: **{hub_title}** → `{final_hub_path}`")
                     preview_lines.append(f"\n```markdown\n{content}\n```\n")
                     break
+                if flag_decisions_hub:
+                    preview_lines.append("\n" + _format_flag_output(flag_decisions_hub))
                 preview_lines.append("To execute, call cb_restructure with the same parameters and preview=False.")
                 return "\n".join(preview_lines)
 
@@ -1161,6 +1927,7 @@ def register(mcp: FastMCP) -> None:
             result_lines += ["", f"Notes created: {notes_created}", f"Notes deleted: {notes_deleted}"]
             if log_enabled and errata_entries:
                 result_lines.append(f"Changes logged to: {log_rel}")
+            _clear_groups_cache()
             return "\n".join(result_lines)
 
         # ── NORMAL MODE (cluster + split) ──────────────────────────────────────────
@@ -1204,38 +1971,52 @@ def register(mcp: FastMCP) -> None:
             )
             return "\n".join(lines)
 
-        # Execute
-        clusters_block = _format_cluster_block(clusters, vault)
-        split_candidates_block = _format_split_candidates_block(split_candidates, vault)
+        # Audit pass: quality and fit for every note (runs before structural decisions)
+        folder_rel = str(scan_root.relative_to(vault))
+        audit_flags = _call_audit_notes(notes, folder_rel, vault_structure, prefs_section, config)
+
+        # Remove flagged notes from clusters so they aren't merged/moved
+        flagged_paths_normal = {
+            str(vault / d["note_path"])
+            for d in audit_flags
+            if d.get("action") in ("flag-misplaced", "flag-low-quality") and d.get("note_path")
+        }
+        if flagged_paths_normal:
+            clusters = [
+                [n for n in cluster if str(n["path"]) not in flagged_paths_normal]
+                for cluster in clusters
+            ]
+            clusters = [c for c in clusters if len(c) >= 2]
+            split_candidates = [n for n in split_candidates if str(n["path"]) not in flagged_paths_normal]
+
+        # Phase 1: decisions (fast — summaries only, no content)
         folder_context = _build_folder_context(scan_root, vault, notes, clusters)
-        user_message = (
-            _load_prompt("restructure-user.md")
-            .replace("{cluster_count}", str(len(clusters)))
-            .replace("{split_count}", str(len(split_candidates)))
-            .replace("{vault_prefs_section}", prefs_section)
-            .replace("{folder_context}", folder_context)
-            .replace("{clusters_block}", clusters_block)
-            .replace("{split_candidates_block}", split_candidates_block)
+        clustered_note_paths = {str(n["path"]) for cluster in clusters for n in cluster}
+        split_candidate_paths = {str(n["path"]) for n in split_candidates}
+        standalone = [
+            n for n in notes
+            if str(n["path"]) not in clustered_note_paths
+            and str(n["path"]) not in split_candidate_paths
+        ]
+        decisions = _call_decisions(
+            clusters, split_candidates, prefs_section, folder_context, config,
+            standalone=standalone, vault_structure=vault_structure,
+            folder_note_count=len(notes),
         )
-
-        try:
-            raw = call_model(system_prompt, user_message, config)
-        except BackendError as e:
-            raise ToolError(f"Backend error during restructure: {e}")
-
-        raw = re.sub(r"^```(?:json)?\s*", "", raw.strip())
-        raw = re.sub(r"\s*```$", "", raw).strip()
-
-        try:
-            decisions = _repair_json(raw)
-        except json.JSONDecodeError as e:
-            raise ToolError(f"LLM returned invalid JSON: {e}\n\nRaw response:\n{raw[:500]}")
-
         if not isinstance(decisions, list):
             raise ToolError("LLM response was not a JSON array.")
+        # Merge audit flags into decisions so they surface in output
+        flag_decisions = audit_flags + [d for d in decisions if d.get("action") in ("flag-misplaced", "flag-low-quality")]
+        decisions = [d for d in decisions if d.get("action") not in ("flag-misplaced", "flag-low-quality")]
+
+        # Phase 2: generate content for each decision that needs it (parallel)
+        _generate_all_parallel(decisions, clusters, split_candidates, prefs_section, vault, config)
 
         if preview:
-            return _format_preview_output(decisions, clusters, split_candidates)
+            out = _format_preview_output(decisions, clusters, split_candidates)
+            if flag_decisions:
+                out += "\n\n" + _format_flag_output(flag_decisions)
+            return out
 
 
         now = datetime.now(timezone.utc)
@@ -1244,7 +2025,7 @@ def register(mcp: FastMCP) -> None:
         result_lines: list[str] = []
         written_paths: list[Path] = []
 
-        nc, nd = _execute_cluster_decisions(decisions, clusters, vault, ts, result_lines, errata_entries, written_paths)
+        nc, nd = _execute_cluster_decisions(decisions, clusters, vault, ts, result_lines, errata_entries, written_paths, config)
         notes_created = nc
         notes_deleted = nd
 
@@ -1302,10 +2083,10 @@ def register(mcp: FastMCP) -> None:
 
                 if split_written and split_ok:
                     try:
-                        source_path.unlink()
+                        _move_to_trash(source_path, vault, config)
                         notes_deleted += 1
                     except OSError as e:
-                        result_lines.append(f"  Warning: could not delete {source_path.name}: {e}")
+                        result_lines.append(f"  Warning: could not trash {source_path.name}: {e}")
 
                 written_paths.extend(split_written)
                 out_titles = [n.get("title", p.stem) for n, p in zip(output_notes, split_written)]
@@ -1317,6 +2098,56 @@ def register(mcp: FastMCP) -> None:
                     f"**Split:** **{source_note['title']}** → {', '.join(repr(t) for t in out_titles)}"
                 )
 
+            elif action == "split-subfolder":
+                hub_content = decision.get("hub_content", "")
+                hub_path_rel = decision.get("hub_path", "")
+                output_notes = decision.get("output_notes", [])
+                if not hub_path_rel or not hub_content or not output_notes:
+                    result_lines.append(f"Large note {note_idx}: split-subfolder skipped — LLM did not return hub or notes")
+                    continue
+                hub_abs = vault / hub_path_rel
+                if not _is_within_vault(vault, hub_abs):
+                    result_lines.append(f"Large note {note_idx}: path traversal rejected for hub {hub_path_rel}")
+                    continue
+                hub_abs.parent.mkdir(parents=True, exist_ok=True)
+                hub_abs.write_text(hub_content, encoding="utf-8")
+                written_paths.append(hub_abs)
+                notes_created += 1
+                split_written_sf: list[Path] = []
+                split_ok_sf = True
+                for note_spec in output_notes:
+                    note_path_rel = note_spec.get("path", "")
+                    note_content = note_spec.get("content", "")
+                    if not note_path_rel or not note_content:
+                        result_lines.append(f"  Warning: skipping output note with missing path or content")
+                        continue
+                    out_path = vault / note_path_rel
+                    if not _is_within_vault(vault, out_path):
+                        result_lines.append(f"  Warning: path traversal rejected for {note_path_rel}")
+                        split_ok_sf = False
+                        continue
+                    out_path.parent.mkdir(parents=True, exist_ok=True)
+                    out_path.write_text(note_content, encoding="utf-8")
+                    split_written_sf.append(out_path)
+                    notes_created += 1
+                if split_written_sf and split_ok_sf:
+                    try:
+                        _move_to_trash(source_path, vault, config)
+                        notes_deleted += 1
+                    except OSError as e:
+                        result_lines.append(f"  Warning: could not trash {source_path.name}: {e}")
+                written_paths.extend(split_written_sf)
+                subfolder_name = decision.get("subfolder_path", hub_path_rel)
+                out_titles_sf = [n.get("title", "") for n in output_notes]
+                result_lines.append(
+                    f"Large note {note_idx} ({source_note['title']}): split into subfolder '{subfolder_name}' — "
+                    f"{len(split_written_sf) + 1} notes created"
+                )
+                errata_entries.append(
+                    f"**Split-subfolder:** **{source_note['title']}** → {subfolder_name}/ "
+                    f"({', '.join(repr(t) for t in out_titles_sf)})"
+                )
+
         _index_paths(written_paths, config)
         _prune_index(config)
 
@@ -1326,6 +2157,9 @@ def register(mcp: FastMCP) -> None:
             errata_entries.append(f"Notes deleted: {notes_deleted} | Notes created: {notes_created}")
             _append_errata_log(vault, log_rel, errata_entries)
 
+        if flag_decisions:
+            result_lines.append("")
+            result_lines.append(_format_flag_output(flag_decisions))
         lines = ["## Restructure Complete\n"] + result_lines + [
             "",
             f"Notes created: {notes_created}",
