@@ -57,17 +57,14 @@ Obsidian vault. Those notes are then searchable and injectable into future sessi
                     │    search-index-manifest.json     │
                     └──────────────────────────────────┘
 
-  ┌────────────────────┐         ┌──────────────────────┐
-  │    Claude Code     │         │    Claude Desktop     │
-  │    Slash Skills    │         │     MCP Server        │
-  │                    │         │                       │
-  │  /cb-recall        │         │  cb_recall tool       │
-  │  /cb-file          │         │  cb_file tool         │
-  │  /cb-extract       │         │  cb_extract tool      │
-  │  /cb-setup         │         │  cb_status tool       │
-  │  /cb-enrich        │         │                       │
-  │  /cb-status        │         │                       │
-  └────────────────────┘         └──────────────────────┘
+  ┌──────────────────────────────────────────────────────┐
+  │    MCP Server (Claude Code + Claude Desktop)         │
+  │                                                      │
+  │  cb_recall    cb_file       cb_extract               │
+  │  cb_read      cb_setup      cb_enrich                │
+  │  cb_configure cb_status     cb_restructure           │
+  │  cb_review    cb_reindex                             │
+  └──────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -183,16 +180,16 @@ Both hooks:
 
 ---
 
-## Extraction Engine: extract_beats.py
+## Extraction Engine
 
-The core engine. Handles everything from raw transcript to vault files.
+The core engine lives in `extractors/` as a set of Python modules. `extract_beats.py` is the entry point that re-exports all submodules for backward compatibility. The modules are: `extractor.py` (LLM extraction), `backends.py` (LLM backends), `config.py` (configuration), `transcript.py` (transcript parsing), `vault.py` (note writing/routing), `autofile.py` (LLM-driven filing), `frontmatter.py` (YAML parsing), `run_log.py` (dedup/logging), `search_backends.py` (search), `search_index.py` (index coordination), and `analyze_vault.py` (vault analysis).
 
 ### Configuration Loading
 
 Config is resolved in two steps, then merged:
 
 ```
-~/.claude/cyberbrain.json          (global — vault path, backend, inbox, etc.)
+~/.claude/cyberbrain/config.json          (global — vault path, backend, inbox, etc.)
   +
 .claude/cyberbrain.local.json      (per-project — searched up the directory tree
                                     from the session's cwd; optional)
@@ -256,7 +253,7 @@ The LLM returns an array of beat objects:
 
 ### Deduplication
 
-Before running extraction, the engine checks `~/.claude/logs/cb-extract.log` — a
+Before running extraction, the engine checks `~/.claude/cyberbrain/logs/cb-extract.log` — a
 tab-separated log of every session that has been processed:
 
 ```
@@ -328,8 +325,8 @@ We debated MD5 vs SHA-256...
 
 After writing, the engine appends to two logs:
 
-- `~/.claude/logs/cb-extract.log` — deduplication log (TSV: timestamp, session\_id, beat count)
-- `~/.claude/logs/cb-runs.jsonl` — rich structured log (one JSON object per run):
+- `~/.claude/cyberbrain/logs/cb-extract.log` — deduplication log (TSV: timestamp, session\_id, beat count)
+- `~/.claude/cyberbrain/logs/cb-runs.jsonl` — rich structured log (one JSON object per run):
 
 ```json
 {
@@ -663,17 +660,21 @@ tools and data sources. The server runs as a persistent subprocess registered in
 Claude Desktop's config.
 
 The server is built with **FastMCP**, a Python framework that turns decorated functions
-into MCP tools. It imports and reuses the same functions from `extract_beats.py` — the
-extraction, filing, and search logic is not duplicated.
+into MCP tools. It uses `mcp/shared.py` as a bridge to import and reuse the same functions
+from the extractor layer — the extraction, filing, and search logic is not duplicated.
 
 ```
-Claude Desktop
+Claude Desktop / Claude Code
     │  MCP protocol (stdio transport)
     ▼
-mcp/server.py (FastMCP)
+mcp/server.py (FastMCP entry point)
     │
-    ├─ imports extract_beats.py functions
-    └─ imports search_backends.py
+    ├─ mcp/shared.py (bridge to extractor layer)
+    ├─ mcp/resources.py (guide resource + orient/recall prompts)
+    └─ mcp/tools/ (10 tool implementations)
+        ├─ extract.py, file.py, recall.py, manage.py
+        ├─ setup.py, enrich.py, restructure.py
+        └─ review.py, reindex.py
 ```
 
 ### Tools
@@ -700,7 +701,7 @@ from being misinterpreted as instructions to the current session.
 #### cb_file
 
 Send any piece of text and it gets classified, titled, tagged, and filed as a beat.
-Equivalent to `/cb-file` in Claude Code. Supports `type_override` (force a specific type),
+Supports `type_override` (force a specific type),
 `folder` (route to a specific vault folder), and `cwd` (for project-scoped routing).
 
 #### cb_extract
@@ -747,12 +748,25 @@ Process working memory notes that are past their review date:
    - **delete**: remove the note
 5. Append audit entry to `AI/Cyberbrain-Log.md`
 
+#### cb_reindex
+
+Maintain the search index:
+- `rebuild=True`: full rebuild — walk all vault notes, re-index everything
+- `prune=True`: remove entries for notes that no longer exist on disk
+
+#### MCP Resources and Prompts
+
+`mcp/resources.py` registers:
+- **Resource `cyberbrain://guide`** — behavioral guidance for AI assistants (when to call each tool)
+- **Prompt `orient`** — session-start orientation (loads guide + recent activity)
+- **Prompt `recall`** — explicit search workflow with synthesis
+
 ### ToolAnnotations
 
 MCP tools can advertise hints about their behavior to the client:
 
 ```python
-ToolAnnotations(readOnlyHint=True, idempotentHint=True)   # cb_recall, cb_status
+ToolAnnotations(readOnlyHint=True, idempotentHint=True)   # cb_recall, cb_status, cb_read
 ToolAnnotations(destructiveHint=False)                     # cb_extract
 ```
 
@@ -761,32 +775,9 @@ tool can be called speculatively without risk; a tool without it gets more cauti
 
 ---
 
-## Skills (Slash Commands)
-
-Skills are slash commands for **Claude Code CLI** — `/cb-recall`, `/cb-file`, etc.
-They're defined as `SKILL.md` files and installed to `~/.claude/skills/`. When a user
-types `/cb-recall auth tokens`, Claude loads the skill's instructions and executes them.
-
-**Key difference from MCP tools:** Skills run *inside* the active Claude Code session.
-They use Claude's native in-context tools (Grep, Read, Bash, Edit, Write) to do their
-work, rather than subprocess calls. They cannot spawn `claude -p` — they're already
-inside a session. They're also more stateful and conversational — a skill like `/cb-setup`
-has multiple phases and asks the user questions before writing anything.
-
-| Skill | What it does |
-|-------|-------------|
-| `/cb-recall` | Searches the vault using the search backend; reads frontmatter of results; scores by relevance; includes full body for top matches; offers synthesis |
-| `/cb-file` | Classifies the provided content as beats using the LLM; routes to vault via `extract_beats.py` subprocess; supports dry-run |
-| `/cb-extract` | Finds the current session's transcript; invokes `extract_beats.py` on it; supports dry-run for preview |
-| `/cb-setup` | Multi-phase vault analyzer and `CLAUDE.md` generator — reads vault structure, evaluates ontology quality, asks clarifying questions, generates or updates the vault's `CLAUDE.md` |
-| `/cb-enrich` | Scans vault notes for missing or invalid metadata; classifies type, summary, and tags in-context; updates frontmatter; supports `--since`, `--folder`, `--dry-run`, `--overwrite` |
-| `/cb-status` | Reads the runs log, queries the SQLite index, and formats a system health report |
-
----
-
 ## Configuration
 
-### Global Config — `~/.claude/cyberbrain.json`
+### Global Config — `~/.claude/cyberbrain/config.json`
 
 ```json
 {
@@ -881,9 +872,9 @@ set_prefs/reset_prefs)`.
    f. write_extract_log_entry() → dedup log updated
    g. write_runs_log_entry()  → runs log updated
 
-6. User later queries:
-   /cb-recall "session token security"
-   or (Claude Desktop) → cb_recall tool
+6. User later queries via MCP:
+   cb_recall("session token security")
+   (works in Claude Code, Claude Desktop, or any MCP client)
 
 7. search backend:
    - FTS5: SQLite BM25 query → ranked results
@@ -900,62 +891,73 @@ set_prefs/reset_prefs)`.
 ```
 cyberbrain/
 ├── extractors/
-│   ├── extract_beats.py       Core engine — transcript → beats → vault
+│   ├── extract_beats.py       Entry point — re-exports all modules
+│   ├── extractor.py           LLM-based beat extraction
+│   ├── backends.py            LLM backends (claude-code, bedrock, ollama)
+│   ├── config.py              Config loading, prompt loading
+│   ├── transcript.py          JSONL transcript parsing
+│   ├── vault.py               Note writing, routing, relations, filename gen
+│   ├── autofile.py            LLM-driven filing decisions
+│   ├── frontmatter.py         YAML frontmatter parsing
+│   ├── run_log.py             Dedup log, runs log, daily journal
 │   ├── search_backends.py     GrepBackend, FTS5Backend, HybridBackend
-│   └── search_index.py        Coordination layer — caching, build_full_index
+│   ├── search_index.py        Index coordination — caching, incremental updates
+│   └── analyze_vault.py       Vault structure analyzer (for cb_setup)
 │
 ├── hooks/
 │   ├── pre-compact-extract.sh PreCompact hook (synchronous)
 │   └── session-end-extract.sh SessionEnd hook (detached)
 │
-├── prompts/
-│   ├── extract-beats-system.md  LLM instructions for beat extraction
-│   ├── extract-beats-user.md    User message template (transcript + context)
-│   ├── autofile-system.md       LLM instructions for routing decisions
-│   ├── autofile-user.md         User message template (beat + related docs)
-│   ├── restructure-system.md    LLM instructions for split/merge/hub-spoke decisions
-│   ├── restructure-user.md      User message template (clusters, split candidates + vault prefs)
-│   ├── review-system.md         LLM instructions for promote/extend/delete decisions
-│   └── review-user.md           User message template (due notes + vault prefs)
+├── prompts/                   19 LLM prompt templates
+│   ├── extract-beats-{system,user}.md     Beat extraction
+│   ├── autofile-{system,user}.md          Filing decisions
+│   ├── enrich-{system,user}.md            Metadata enrichment
+│   ├── restructure-{system,user}.md       Split/merge decisions (legacy)
+│   ├── restructure-{decide,generate,audit,group}-{system,user}.md  Multi-phase
+│   ├── review-{system,user}.md            Working memory review
+│   └── claude-desktop-project.md          Desktop system prompt
 │
 ├── mcp/
-│   ├── server.py              FastMCP server for Claude Desktop
+│   ├── server.py              FastMCP entry point
+│   ├── shared.py              Bridge to extractor layer
+│   ├── resources.py           MCP resources and prompts
 │   └── tools/
-│       ├── extract.py         cb_extract tool
-│       ├── file.py            cb_file tool
-│       ├── recall.py          cb_recall + cb_read tools
-│       ├── setup.py           cb_setup tool
-│       ├── enrich.py          cb_enrich tool
-│       ├── manage.py          cb_configure + cb_status tools
-│       ├── restructure.py     cb_restructure tool
-│       └── review.py          cb_review tool
-│
-├── skills/
-│   ├── cb-recall/SKILL.md     Vault search slash command
-│   ├── cb-file/SKILL.md       Vault write slash command
-│   ├── cb-extract/SKILL.md    Manual extraction slash command
-│   ├── cb-setup/SKILL.md      Vault CLAUDE.md generator
-│   ├── cb-enrich/SKILL.md     Metadata enrichment slash command
-│   └── cb-status/SKILL.md     System health slash command
+│       ├── extract.py         cb_extract
+│       ├── file.py            cb_file
+│       ├── recall.py          cb_recall + cb_read
+│       ├── setup.py           cb_setup
+│       ├── enrich.py          cb_enrich
+│       ├── manage.py          cb_configure + cb_status
+│       ├── restructure.py     cb_restructure
+│       ├── review.py          cb_review
+│       └── reindex.py         cb_reindex
 │
 ├── scripts/
 │   └── import.py              Bulk import from Claude Desktop / ChatGPT exports
 │
-├── install.sh                 Installs to ~/.claude/
-├── build.sh                   Packages skills into .skill archives
+├── tests/                     Test suite (~17,600 LOC, 16 modules)
+│
+├── specs/                     Planning artifacts (ideate structure)
+│   ├── legacy/                Original specs (v1_spec, GOALS, deferred, etc.)
+│   ├── steering/              Guiding principles, constraints, interview
+│   └── plan/                  Architecture, modules, work items
+│
+├── install.sh                 Installs to ~/.claude/cyberbrain/
+├── build.sh                   Builds release tarball
 └── uninstall.sh               Removes installation
 
-Installed locations (~/.claude/):
-├── extractors/                extract_beats.py, search_backends.py, search_index.py
-├── hooks/                     pre-compact-extract.sh, session-end-extract.sh
-├── prompts/                   all prompt files
-├── skills/                    installed skill directories
-├── cyberbrain/mcp/server.py   MCP server
-├── cyberbrain.json            global config
-├── cyberbrain/search-index.db     SQLite FTS5 index
-├── cyberbrain/search-index.usearch  HNSW vector index (if hybrid)
-├── cyberbrain/search-index-manifest.json
+Installed locations (~/.claude/cyberbrain/):
+├── extractors/                All extractor modules
+├── hooks/                     pre-compact-extract.sh, session-end-extract.sh (symlinked to ~/.claude/hooks/)
+├── prompts/                   All prompt files
+├── mcp/                       MCP server package
+├── scripts/                   Import script
+├── venv/                      Python virtual environment (MCP deps)
+├── config.json                Global config
+├── search-index.db            SQLite FTS5 index
+├── search-index.usearch       HNSW vector index (if hybrid)
+├── search-index-manifest.json Vector index manifest
 └── logs/
-    ├── cb-extract.log         dedup log (TSV)
-    └── cb-runs.jsonl          structured runs log (JSONL)
+    ├── cb-extract.log         Dedup log (TSV)
+    └── cb-runs.jsonl          Structured runs log (JSONL)
 ```

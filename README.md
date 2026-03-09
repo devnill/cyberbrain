@@ -29,7 +29,7 @@ PreCompact hook fires
 ~/.claude/hooks/pre-compact-extract.sh
        │  reads transcript path from hook stdin
        ▼
-~/.claude/extractors/extract_beats.py
+~/.claude/cyberbrain/extractors/extract_beats.py
        │  parses transcript JSONL
        │  calls Claude (Haiku) to extract "beats"
        │  routes beats by scope (project vs. general)
@@ -39,8 +39,8 @@ Obsidian vault/
   AI/Claude-Sessions/                 ← general beats (inbox)
        │
        ▼  (next session)
-/cb-recall <query>
-       │  grep-based search across vault
+cb_recall(query)  via MCP
+       │  hybrid FTS5 + semantic search across vault
        ▼
 Relevant beats injected into context
 ```
@@ -67,12 +67,13 @@ bash install.sh
 ```
 
 The installer:
-1. Builds and installs all skills, hooks, prompts, and the extractor into `~/.claude/`
+1. Installs hooks, prompts, extractors, and the MCP server into `~/.claude/cyberbrain/`
 2. Registers the `PreCompact` and `SessionEnd` hooks in `~/.claude/settings.json`
-3. Creates `~/.claude/cyberbrain.json` with a placeholder vault path (if not already present)
-4. Installs the MCP server into `~/.claude/cyberbrain/` and registers it in Claude Desktop (macOS)
+3. Creates `~/.claude/cyberbrain/config.json` with a placeholder vault path (if not already present)
+4. Registers the MCP server in Claude Desktop (macOS)
+5. Creates a Python venv at `~/.claude/cyberbrain/venv/` and installs MCP dependencies
 
-After installation, set `vault_path` in `~/.claude/cyberbrain.json` before the system will run.
+After installation, set `vault_path` in `~/.claude/cyberbrain/config.json` before the system will run.
 
 ---
 
@@ -88,7 +89,7 @@ Pass `--yes` to skip the confirmation prompt. The uninstaller removes all instal
 
 ## Configuration
 
-### Global config — `~/.claude/cyberbrain.json`
+### Global config — `~/.claude/cyberbrain/config.json`
 
 ```json
 {
@@ -100,7 +101,13 @@ Pass `--yes` to skip the confirmation prompt. The uninstaller removes all instal
   "autofile": false,
   "daily_journal": false,
   "journal_folder": "AI/Journal",
-  "journal_name": "%Y-%m-%d"
+  "journal_name": "%Y-%m-%d",
+  "proactive_recall": true,
+  "working_memory_folder": "AI/Working Memory",
+  "working_memory_review_days": 28,
+  "consolidation_log": "AI/Cyberbrain-Log.md",
+  "consolidation_log_enabled": true,
+  "trash_folder": ".trash"
 }
 ```
 
@@ -115,6 +122,7 @@ Pass `--yes` to skip the confirmation prompt. The uninstaller removes all instal
 | `daily_journal` | `false` | Append a session entry to a daily journal note after each extraction |
 | `journal_folder` | `"AI/Journal"` | Vault-relative folder for journal notes |
 | `journal_name` | `"%Y-%m-%d"` | Journal filename pattern (strftime format) |
+| `proactive_recall` | `true` | Trigger cb_recall at session start when working in a known project domain |
 | `bedrock_region` | `"us-east-1"` | AWS region — only used when `backend` is `"bedrock"` |
 | `ollama_url` | `"http://localhost:11434"` | Ollama endpoint — only used when `backend` is `"ollama"` |
 | `claude_path` | `"claude"` | Full path to the `claude` binary — set this when using the MCP server from Claude Desktop, which runs without your shell PATH |
@@ -122,6 +130,7 @@ Pass `--yes` to skip the confirmation prompt. The uninstaller removes all instal
 | `working_memory_review_days` | `28` | Days until a working memory note is flagged for review |
 | `consolidation_log` | `"AI/Cyberbrain-Log.md"` | Vault-relative path for the consolidation/review audit log |
 | `consolidation_log_enabled` | `true` | Set `false` to disable the audit log |
+| `trash_folder` | `".trash"` | Vault-relative folder for soft-deleted notes |
 
 ---
 
@@ -143,93 +152,17 @@ Copy `cyberbrain.local.example.json` from this repo as a starting point. Add `cy
 
 ## Setting up with an existing Obsidian vault
 
-1. Set `vault_path` in `~/.claude/cyberbrain.json`
-3. Run `/cb-setup` in a Claude Code session to analyze your vault's existing structure and generate a `CLAUDE.md` at the vault root. This document teaches Claude your vault's conventions so that future beats and `/cb-file` notes stay consistent with what you already have
+1. Set `vault_path` in `~/.claude/cyberbrain/config.json`
+2. Use `cb_setup` (via Claude Desktop or Claude Code MCP) to analyze your vault's existing structure and generate a `CLAUDE.md` at the vault root. This document teaches the system your vault's conventions so that future beats stay consistent with what you already have
 
 ---
 
 ## Setting up with a new Obsidian vault
 
 1. Create a new vault in Obsidian (an empty vault is fine)
-2. Set `vault_path` in `~/.claude/cyberbrain.json`
+2. Set `vault_path` in `~/.claude/cyberbrain/config.json`
 3. The default folder structure works well to start — beats will appear in `AI/Claude-Sessions/`
-4. Run `/cb-setup` after a few sessions to generate a `CLAUDE.md` once there's enough content to analyze
-
----
-
-## Skills
-
-Six slash commands are installed into Claude Code. Invoke them in any Claude Code session.
-
-### `/cb-extract [path] [--dry-run]`
-
-Extract knowledge beats from a session and save them to the vault.
-
-```
-/cb-extract                        # current session
-/cb-extract --dry-run              # preview without writing
-/cb-extract ~/.claude/projects/-Users-me-code-myapp/abc123.jsonl
-/cb-extract ~/Downloads/export.jsonl --cwd ~/code/my-app
-```
-
-With no arguments, the skill finds the active session's transcript automatically (most recently modified JSONL in the current project's folder). With a path, use it to backfill from sessions that predate the automatic hook, or from logs exported from Claude Desktop or other sources.
-
-`--dry-run` runs the full extraction pipeline — parses transcript, calls LLM, computes routing — but writes nothing. Shows the complete beat content so you can evaluate quality before committing.
-
----
-
-### `/cb-recall <query>`
-
-Search the vault and inject relevant context from previous sessions.
-
-```
-/cb-recall redis cache expiry
-/cb-recall auth token decisions
-```
-
-Searches vault notes by keyword across titles, summaries, tags, and body content. Returns summary cards for all matches, with full body content for the top 1–2 most relevant results. Results are wrapped in a security demarcation block so Claude treats them as reference data, not instructions.
-
-Call this when returning to a topic you've worked on before, or when you hit a problem and want to know if you've solved something similar.
-
----
-
-### `/cb-file [--dry-run] [--type TYPE] [--folder PATH]`
-
-Manually file any piece of information into your vault.
-
-Trigger phrases: "save this", "file this", "add to my notes", "capture this".
-
-The skill reads your vault's `CLAUDE.md` for type vocabulary and filing conventions, classifies the input, generates YAML frontmatter and a structured body, and writes the note. Use `--dry-run` to preview without writing.
-
----
-
-### `/cb-enrich [--since DATE] [--dry-run]`
-
-Backfill metadata on vault notes that are missing `type`, `summary`, or `tags`.
-
-```
-/cb-enrich
-/cb-enrich --since 2026-01-01
-/cb-enrich --dry-run
-```
-
-Scans notes in the vault and enriches those with incomplete frontmatter so they surface correctly in `/cb-recall` queries. Reads vault `CLAUDE.md` for type vocabulary. `--since` filters by file modification time.
-
----
-
-### `/cb-setup [--types TYPE1,TYPE2,...] [--dry-run]`
-
-Analyze your vault and generate or update a `CLAUDE.md` at the vault root.
-
-```
-/cb-setup
-/cb-setup --dry-run
-/cb-setup --types decision,insight,problem,reference
-```
-
-Runs `scripts/analyze_vault.py` against the vault, deep-reads a sample of notes, and generates a `CLAUDE.md` that documents your vault's entity types, naming conventions, tag taxonomy, and filing rules. The `CLAUDE.md` is read by the extractor and `/cb-file` before every write, keeping all future notes consistent with your existing structure.
-
-Use `--types` to specify the type vocabulary directly instead of inferring it from existing notes.
+4. Use `cb_setup` after a few sessions to generate a `CLAUDE.md` once there's enough content to analyze
 
 ---
 
@@ -337,7 +270,7 @@ The tool uses semantic similarity to find clusters, then asks the LLM to decide 
 
 ## Autofile
 
-When `"autofile": true` is set in `~/.claude/cyberbrain.json`, beats are routed into existing vault folders using an LLM filing decision rather than dropped flat into the inbox.
+When `"autofile": true` is set in `~/.claude/cyberbrain/config.json`, beats are routed into existing vault folders using an LLM filing decision rather than dropped flat into the inbox.
 
 The autofile process:
 1. Searches the vault for existing notes that thematically match the beat (by keyword)
@@ -431,7 +364,7 @@ Requires Ollama running locally with a model pulled (`ollama pull llama3.2`). Qu
 
 ## MCP server (Claude Desktop)
 
-The installer registers a FastMCP server in Claude Desktop, exposing ten tools:
+The installer registers a FastMCP server in Claude Desktop, exposing eleven tools:
 
 | Tool | Description |
 |---|---|
@@ -445,6 +378,7 @@ The installer registers a FastMCP server in Claude Desktop, exposing ten tools:
 | `cb_status()` | Show vault health, index stats, and recent extraction runs |
 | `cb_restructure(folder?, dry_run?, similarity_threshold?, split_threshold?)` | Merge related note clusters and split large notes to keep the vault clean |
 | `cb_review(days_ahead?, dry_run?, folder?)` | Review working memory notes that are due — promote, extend, or delete |
+| `cb_reindex(rebuild?, prune?)` | Rebuild or prune the search index |
 
 ### Automatic setup (macOS)
 
@@ -498,7 +432,7 @@ The MCP tools are available in any Claude Desktop conversation once connected, b
 
 **No beats appear after /compact**
 
-- Confirm `vault_path` in `~/.claude/cyberbrain.json` points to a real directory
+- Confirm `vault_path` in `~/.claude/cyberbrain/config.json` points to a real directory
 - Confirm the hook is registered: `cat ~/.claude/settings.json | python3 -m json.tool | grep -A5 PreCompact`
 - For `claude-code` backend: confirm `claude` is in PATH: `which claude`
 - For `bedrock`: confirm AWS credentials work: `aws sts get-caller-identity`
@@ -506,7 +440,7 @@ The MCP tools are available in any Claude Desktop conversation once connected, b
 
 **"Reached max turns" or backend error**
 
-The session transcript may be very long. Add or increase `claude_timeout` in `~/.claude/cyberbrain.json`:
+The session transcript may be very long. Add or increase `claude_timeout` in `~/.claude/cyberbrain/config.json`:
 
 ```json
 { "claude_timeout": 180 }
@@ -530,11 +464,7 @@ Find your path by running `which claude` in a terminal. Apple Silicon Macs typic
 
 **"Prompt file not found" error**
 
-The extractor looks for prompts at `~/.claude/prompts/`. Reinstall to ensure they were copied: `bash install.sh`
-
-**Skills not found after install**
-
-Skills load at session start. Open a new Claude Code session after running `bash install.sh`.
+The extractor looks for prompts at `~/.claude/cyberbrain/prompts/`. Reinstall to ensure they were copied: `bash install.sh`
 
 ---
 
@@ -545,25 +475,29 @@ Skills load at session start. Open a new Claude Code session after running `bash
 | `install.sh` | Installer |
 | `uninstall.sh` | Uninstaller |
 | `QUICKSTART.md` | Fast-path setup guide |
-| `cyberbrain.example.json` | Template for `~/.claude/cyberbrain.json` |
+| `ARCHITECTURE.md` | Detailed architecture documentation |
+| `cyberbrain.example.json` | Template for `~/.claude/cyberbrain/config.json` |
 | `cyberbrain.local.example.json` | Template for per-project `.claude/cyberbrain.local.json` |
 | `hooks/pre-compact-extract.sh` | PreCompact hook entry point |
 | `hooks/session-end-extract.sh` | SessionEnd hook entry point |
-| `extractors/extract_beats.py` | Transcript parser, LLM caller, and vault writer |
-| `extractors/requirements.txt` | Python dependencies |
+| `extractors/extract_beats.py` | Core engine entry point (re-exports all modules) |
+| `extractors/extractor.py` | LLM-based beat extraction from transcripts |
+| `extractors/backends.py` | LLM backend implementations (claude-code, bedrock, ollama) |
+| `extractors/config.py` | Configuration loading and prompt file loading |
+| `extractors/transcript.py` | JSONL transcript parsing |
+| `extractors/vault.py` | Note writing, routing, filename generation, relations |
+| `extractors/autofile.py` | LLM-driven filing decisions |
+| `extractors/search_backends.py` | Search backends (grep, FTS5, hybrid) |
+| `extractors/search_index.py` | Search index coordination and lifecycle |
+| `extractors/analyze_vault.py` | Vault structure analyzer for cb_setup |
 | `prompts/extract-beats-system.md` | System prompt for beat extraction |
-| `prompts/extract-beats-user.md` | User message template for beat extraction |
 | `prompts/autofile-system.md` | System prompt for autofile filing decisions |
 | `prompts/enrich-system.md` | System prompt for `cb_enrich` |
-| `prompts/restructure-system.md` | System prompt for `cb_restructure` split/merge decisions |
-| `prompts/review-system.md` | System prompt for `cb_review` promote/extend/delete decisions |
+| `prompts/restructure-*.md` | Prompts for `cb_restructure` (decide, generate, audit, group) |
+| `prompts/review-system.md` | System prompt for `cb_review` |
 | `prompts/claude-desktop-project.md` | Recommended Claude Desktop Project system prompt |
-| `mcp/server.py` | FastMCP server for Claude Desktop |
+| `mcp/server.py` | FastMCP server entry point |
+| `mcp/shared.py` | Bridge between MCP tools and extractor layer |
+| `mcp/resources.py` | MCP resources and prompts |
+| `mcp/tools/*.py` | MCP tool implementations (extract, file, recall, manage, setup, enrich, restructure, review, reindex) |
 | `scripts/import.py` | Import Claude or ChatGPT export into the vault |
-| `skills/cb-extract/SKILL.md` | `/cb-extract` skill |
-| `skills/cb-recall/SKILL.md` | `/cb-recall` skill |
-| `skills/cb-file/SKILL.md` | `/cb-file` skill |
-| `skills/cb-enrich/SKILL.md` | `/cb-enrich` skill |
-| `skills/cb-setup/SKILL.md` | `/cb-setup` skill |
-| `skills/cb-setup/scripts/analyze_vault.py` | Vault structure analyzer |
-| `skills/cb-setup/references/` | Output structure spec and `CLAUDE.md` template |
