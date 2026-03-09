@@ -4,13 +4,16 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## Specification
 
-The authoritative requirements document for this project is:
+The authoritative documents for this project are:
 
 | Document | Purpose |
 |---|---|
-| [`.specs/v1_spec.md`](.specs/v1_spec.md) | V1 specification — UX requirements, feature scope, architecture decisions, success criteria |
+| [`specs/legacy/v1_spec.md`](specs/legacy/v1_spec.md) | V1 specification — UX requirements, feature scope, architecture decisions, success criteria |
+| [`specs/plan/overview.md`](specs/plan/overview.md) | Current plan overview — active workstreams and project scope |
+| [`specs/plan/architecture.md`](specs/plan/architecture.md) | Architecture — component map, data flow, module specs, design tensions |
+| [`specs/steering/guiding-principles.md`](specs/steering/guiding-principles.md) | Guiding principles — decision framework for the project |
 
-Read `.specs/v1_spec.md` before making any significant changes. It supersedes all prior steering documents and phase specs.
+Read `specs/plan/overview.md` for current focus. The `specs/` directory uses the ideate artifact structure for planning and refinement.
 
 ---
 
