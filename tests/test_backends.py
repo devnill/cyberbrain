@@ -819,3 +819,53 @@ class TestClaudeCodeSubprocessHardening:
             assert var not in captured_env, (
                 f"{var} must always be stripped — it was present in the subprocess env"
             )
+
+
+# ===========================================================================
+# get_model_for_tool
+# ===========================================================================
+
+class TestGetModelForTool:
+    """get_model_for_tool resolves per-tool model overrides."""
+
+    def test_returns_tool_specific_model_when_set(self):
+        """When restructure_model is set, it overrides the global model."""
+        config = {"model": "claude-haiku-4-5", "restructure_model": "claude-sonnet-4-5-20250514"}
+        result = _backends_module.get_model_for_tool(config, "restructure")
+        assert result == "claude-sonnet-4-5-20250514"
+
+    def test_falls_back_to_global_model(self):
+        """When no tool-specific model is set, the global model is returned."""
+        config = {"model": "claude-haiku-4-5"}
+        result = _backends_module.get_model_for_tool(config, "restructure")
+        assert result == "claude-haiku-4-5"
+
+    def test_falls_back_to_default_when_no_model_set(self):
+        """When neither tool-specific nor global model is set, the CLI default is returned."""
+        config = {}
+        result = _backends_module.get_model_for_tool(config, "enrich")
+        assert result == "claude-haiku-4-5"
+
+    def test_each_tool_has_independent_override(self):
+        """Different tools can have different model overrides."""
+        config = {
+            "model": "claude-haiku-4-5",
+            "restructure_model": "claude-sonnet-4-5-20250514",
+            "judge_model": "claude-opus-4-5",
+            "enrich_model": "claude-haiku-4-5",
+        }
+        assert _backends_module.get_model_for_tool(config, "restructure") == "claude-sonnet-4-5-20250514"
+        assert _backends_module.get_model_for_tool(config, "judge") == "claude-opus-4-5"
+        assert _backends_module.get_model_for_tool(config, "enrich") == "claude-haiku-4-5"
+        assert _backends_module.get_model_for_tool(config, "recall") == "claude-haiku-4-5"  # falls back to global
+        assert _backends_module.get_model_for_tool(config, "review") == "claude-haiku-4-5"  # falls back to global
+
+    def test_get_judge_model_delegates_to_get_model_for_tool(self):
+        """get_judge_model returns the same result as get_model_for_tool(config, 'judge')."""
+        config = {"model": "claude-haiku-4-5", "judge_model": "claude-sonnet-4-5-20250514"}
+        assert _backends_module.get_judge_model(config) == _backends_module.get_model_for_tool(config, "judge")
+
+    def test_get_judge_model_falls_back_to_global(self):
+        """get_judge_model falls back to global model when judge_model is not set."""
+        config = {"model": "claude-haiku-4-5"}
+        assert _backends_module.get_judge_model(config) == "claude-haiku-4-5"

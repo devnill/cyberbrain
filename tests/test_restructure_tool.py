@@ -7,13 +7,11 @@ Covers:
 - _read_vault_prefs: no CLAUDE.md, no heading, has prefs, with next section
 - _is_locked: locked vs unlocked notes
 - _collect_notes: basic collection, skips hidden dirs, excluded folders, locked notes
-- _title_concept_clusters: grouping by primary concept word, singleton reassignment
 - _tag_based_clusters: grouping by shared tags, min_cluster_size filter
 - _find_split_candidates: size threshold, excludes clustered paths
 - _format_cluster_block / _format_split_candidates_block: empty and non-empty
 - _format_folder_hub_block: new hub vs existing hub
 - _append_errata_log: writes, skips when empty
-- _is_within_vault: inside/outside
 - _build_folder_context: output structure
 - _execute_cluster_decisions: keep-separate, merge, hub-spoke, subfolder,
                                path traversal, missing content, out-of-range cluster
@@ -263,51 +261,6 @@ class TestCollectNotes:
 
 
 # ===========================================================================
-# _title_concept_clusters
-# ===========================================================================
-
-class TestTitleConceptClusters:
-    def _note(self, title, tags=None):
-        return {"title": title, "tags": tags or [], "summary": ""}
-
-    def test_groups_notes_by_primary_word(self):
-        notes = [
-            self._note("Hook Installation"),
-            self._note("Hook Configuration"),
-            self._note("Plugin Setup"),
-        ]
-        result = rst_mod._title_concept_clusters(notes, min_cluster_size=2)
-        # "hook" group should have 2 notes
-        assert any(len(c) == 2 for c in result)
-
-    def test_singleton_reassigned_via_secondary_word(self):
-        notes = [
-            self._note("Hook Installation"),
-            self._note("Hook Configuration"),
-            self._note("Session Hook"),  # "session" is singleton primary, "hook" is secondary
-        ]
-        result = rst_mod._title_concept_clusters(notes, min_cluster_size=2)
-        flat = [n["title"] for cluster in result for n in cluster]
-        # Session Hook should get reassigned to the hook group
-        assert "Session Hook" in flat
-
-    def test_min_cluster_size_filters(self):
-        notes = [self._note("Alpha Thing"), self._note("Beta Thing")]
-        result = rst_mod._title_concept_clusters(notes, min_cluster_size=3)
-        assert result == []
-
-    def test_empty_notes_returns_empty(self):
-        result = rst_mod._title_concept_clusters([], min_cluster_size=2)
-        assert result == []
-
-    def test_all_stop_words_note_skipped(self):
-        notes = [self._note("The And For"), self._note("Python Testing")]
-        result = rst_mod._title_concept_clusters(notes, min_cluster_size=2)
-        # Only notes with non-stop words should be clustered
-        assert isinstance(result, list)
-
-
-# ===========================================================================
 # _tag_based_clusters
 # ===========================================================================
 
@@ -453,10 +406,10 @@ class TestAppendErrataLog:
 
 class TestIsWithinVault:
     def test_inside(self, tmp_path):
-        assert rst_mod._is_within_vault(tmp_path, tmp_path / "sub") is True
+        assert _shared._is_within_vault(tmp_path, tmp_path / "sub") is True
 
     def test_outside(self, tmp_path):
-        assert rst_mod._is_within_vault(tmp_path, Path("/other/path")) is False
+        assert _shared._is_within_vault(tmp_path, Path("/other/path")) is False
 
 
 # ===========================================================================
@@ -1265,7 +1218,7 @@ class TestBuildClustersWithBackend:
             self._make_note_dict("/v/a.md", "Alpha", ["python", "testing"]),
             self._make_note_dict("/v/b.md", "Beta", ["python", "testing"]),
         ]
-        clusters = rst_mod._build_clusters(notes, None, 0.5, 2)
+        clusters = rst_mod._build_clusters(notes, None, 2)
         assert len(clusters) == 1
         assert len(clusters[0]) == 2
 
@@ -1297,7 +1250,7 @@ class TestBuildClustersWithBackend:
 
         backend.search.side_effect = search_side_effect
 
-        clusters = rst_mod._build_clusters(notes, backend, 0.5, 2)
+        clusters = rst_mod._build_clusters(notes, backend, 2)
         # With multiple word hits, the two notes should cluster together
         assert len(clusters) >= 1
         all_in_clusters = [n for c in clusters for n in c]
@@ -1318,7 +1271,7 @@ class TestBuildClustersWithBackend:
         backend.search.side_effect = Exception("search failed")
 
         # Should not raise; returns singleton components (no clusters of size >= 2)
-        clusters = rst_mod._build_clusters(notes, backend, 0.5, 2)
+        clusters = rst_mod._build_clusters(notes, backend, 2)
         assert isinstance(clusters, list)
 
     def test_backend_self_match_ignored(self, tmp_path):
@@ -1333,7 +1286,7 @@ class TestBuildClustersWithBackend:
         result.score = 1.0
         backend.search.return_value = [result]
 
-        clusters = rst_mod._build_clusters(notes, backend, 0.5, 1)
+        clusters = rst_mod._build_clusters(notes, backend, 1)
         # min_cluster_size=1, single note in its own component
         assert len(clusters) == 1
 
@@ -1368,7 +1321,7 @@ class TestBuildClustersWithBackend:
 
         backend.search.side_effect = search_side_effect
 
-        clusters = rst_mod._build_clusters(notes, backend, 0.5, 2)
+        clusters = rst_mod._build_clusters(notes, backend, 2)
         assert len(clusters) == 1
         assert len(clusters[0]) == 3
 
@@ -1398,7 +1351,7 @@ class TestBuildClustersWithBackend:
 
         backend.search.side_effect = search_side_effect
 
-        clusters = rst_mod._build_clusters(notes, backend, 0.5, 2)
+        clusters = rst_mod._build_clusters(notes, backend, 2)
         # Edge weight is 1, which is < 2 required for adjacency
         assert len(clusters) == 0
 
@@ -1419,7 +1372,7 @@ class TestBuildClustersWithBackend:
         result.score = 0  # Zero score should be ignored
         backend.search.return_value = [result]
 
-        clusters = rst_mod._build_clusters(notes, backend, 0.5, 2)
+        clusters = rst_mod._build_clusters(notes, backend, 2)
         # Zero-score results don't form edges; no cluster of size >= 2
         assert len(clusters) == 0
 
@@ -2608,3 +2561,555 @@ class TestCbRestructureNormalExecuteExtra:
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=False)
         log_path = tmp_path / "AI" / "Log.md"
         assert not log_path.exists()
+
+
+# ===========================================================================
+# Quality Gate Integration
+# ===========================================================================
+
+# Install a mock quality_gate module in sys.modules so that
+# `from quality_gate import ...` inside restructure.py resolves without
+# needing the real backends.get_judge_model (which may not be installed).
+import types as _types
+_mock_qg_module = _types.ModuleType("quality_gate")
+
+
+class _MockVerdict:
+    PASS = type("V", (), {"value": "pass"})()
+    FAIL = type("V", (), {"value": "fail"})()
+    UNCERTAIN = type("V", (), {"value": "uncertain"})()
+
+
+_mock_qg_module.Verdict = _MockVerdict
+
+# Default quality_gate function returns a passing verdict
+_default_gate_verdict = _types.SimpleNamespace(
+    verdict=type("V", (), {"value": "pass"})(),
+    passed=True,
+    confidence=0.95,
+    rationale="Looks good",
+    issues=[],
+    suggest_retry=False,
+    suggested_model="",
+)
+_mock_qg_module.quality_gate = MagicMock(return_value=_default_gate_verdict)
+_mock_qg_module.GateVerdict = MagicMock()
+sys.modules["quality_gate"] = _mock_qg_module
+
+
+class _FakeGateVerdict:
+    """Minimal stand-in for quality_gate.GateVerdict."""
+    def __init__(self, verdict, passed, confidence, rationale, issues=None,
+                 suggest_retry=False, suggested_model=""):
+        self.verdict = type("V", (), {"value": verdict})()
+        self.passed = passed
+        self.confidence = confidence
+        self.rationale = rationale
+        self.issues = issues or []
+        self.suggest_retry = suggest_retry
+        self.suggested_model = suggested_model
+
+
+class TestGateHelpers:
+    """Tests for _is_gate_enabled."""
+
+    def test_gate_enabled_default(self):
+        assert rst_mod._is_gate_enabled({}) is True
+
+    def test_gate_disabled_via_config(self):
+        assert rst_mod._is_gate_enabled({"quality_gate_enabled": False}) is False
+
+
+
+class TestGateDecisions:
+    """Tests for _gate_decisions."""
+
+    def test_skipped_when_disabled(self):
+        config = {"quality_gate_enabled": False}
+        result = rst_mod._gate_decisions([], [], [], config)
+        assert result == []
+
+    def test_skips_simple_actions(self):
+        """keep, keep-separate, flag actions skip the gate."""
+        decisions = [
+            {"action": "keep", "note_index": 0},
+            {"action": "keep-separate", "cluster_index": 0},
+            {"action": "flag-misplaced", "cluster_index": 1},
+        ]
+        config = {"quality_gate_enabled": True}
+        # Even with gate enabled, these actions are never gated
+        # (quality_gate import may fail but these skip before import)
+        result = rst_mod._gate_decisions(decisions, [[]], [], config)
+        assert result == []
+
+    def test_pass_verdict_leaves_decision_unchanged(self):
+        passing = _FakeGateVerdict("pass", True, 0.9, "Looks good")
+
+        decisions = [
+            {"action": "merge", "cluster_index": 0, "rationale": "related"},
+        ]
+        clusters = [[
+            {"title": "A", "summary": "sum a", "path": "/a.md"},
+            {"title": "B", "summary": "sum b", "path": "/b.md"},
+        ]]
+
+        with patch("quality_gate.quality_gate", return_value=passing):
+            result = rst_mod._gate_decisions(decisions, clusters, [], {"quality_gate_enabled": True})
+
+        assert len(result) == 1
+        assert result[0]["passed"] is True
+        # Decision not modified
+        assert decisions[0]["action"] == "merge"
+        assert "_gate_verdict" not in decisions[0]
+
+    def test_fail_verdict_downgrades_cluster_to_keep_separate(self):
+        fail_v = _FakeGateVerdict("fail", False, 0.3, "Unrelated notes")
+
+        decisions = [
+            {"action": "merge", "cluster_index": 0, "rationale": "related"},
+        ]
+        clusters = [[
+            {"title": "A", "summary": "sum a", "path": "/a.md"},
+            {"title": "B", "summary": "sum b", "path": "/b.md"},
+        ]]
+
+        with patch("quality_gate.quality_gate", return_value=fail_v):
+            result = rst_mod._gate_decisions(decisions, clusters, [], {"quality_gate_enabled": True})
+
+        assert len(result) == 1
+        assert result[0]["verdict"] == "fail"
+        # Decision should be downgraded
+        assert decisions[0]["action"] == "keep-separate"
+        assert decisions[0]["_gate_original_action"] == "merge"
+        assert "Quality gate failed" in decisions[0]["rationale"]
+
+    def test_fail_verdict_downgrades_split_to_keep(self):
+        fail_v = _FakeGateVerdict("fail", False, 0.3, "Split not needed")
+
+        decisions = [
+            {"action": "split", "note_index": 0, "rationale": "too big"},
+        ]
+        splits = [{"title": "Big Note", "summary": "long", "content": "x" * 5000, "path": "/big.md"}]
+
+        with patch("quality_gate.quality_gate", return_value=fail_v):
+            result = rst_mod._gate_decisions(decisions, [], splits, {"quality_gate_enabled": True})
+
+        assert decisions[0]["action"] == "keep"
+        assert decisions[0]["_gate_original_action"] == "split"
+
+    def test_uncertain_verdict_marks_needs_confirmation(self):
+        uncertain_v = _FakeGateVerdict("uncertain", False, 0.55, "Marginal grouping")
+
+        decisions = [
+            {"action": "merge", "cluster_index": 0, "rationale": "related"},
+        ]
+        clusters = [[
+            {"title": "A", "summary": "sum a", "path": "/a.md"},
+            {"title": "B", "summary": "sum b", "path": "/b.md"},
+        ]]
+
+        with patch("quality_gate.quality_gate", return_value=uncertain_v):
+            result = rst_mod._gate_decisions(decisions, clusters, [], {"quality_gate_enabled": True})
+
+        assert result[0]["verdict"] == "uncertain"
+        # Uncertain does NOT downgrade — just marks for confirmation
+        assert decisions[0]["action"] == "merge"
+        assert decisions[0].get("_gate_needs_confirmation") is True
+
+    def test_out_of_range_cluster_skipped(self):
+        decisions = [{"action": "merge", "cluster_index": 99}]
+        with patch("quality_gate.quality_gate") as mock_gate:
+            result = rst_mod._gate_decisions(decisions, [], [], {"quality_gate_enabled": True})
+        mock_gate.assert_not_called()
+        assert result == []
+
+    def test_merge_dispatches_restructure_merge_operation(self):
+        passing = _FakeGateVerdict("pass", True, 0.9, "Good")
+        decisions = [{"action": "merge", "cluster_index": 0, "rationale": "related"}]
+        clusters = [[{"title": "A", "summary": "a", "path": "/a.md"}, {"title": "B", "summary": "b", "path": "/b.md"}]]
+
+        with patch("quality_gate.quality_gate", return_value=passing) as mock_gate:
+            rst_mod._gate_decisions(decisions, clusters, [], {"quality_gate_enabled": True})
+
+        assert mock_gate.call_args[0][0] == "restructure_merge"
+
+    def test_split_dispatches_restructure_split_operation(self):
+        passing = _FakeGateVerdict("pass", True, 0.9, "Good")
+        decisions = [{"action": "split", "note_index": 0, "rationale": "too big"}]
+        splits = [{"title": "Big", "summary": "long", "content": "x" * 5000, "path": "/big.md"}]
+
+        with patch("quality_gate.quality_gate", return_value=passing) as mock_gate:
+            rst_mod._gate_decisions(decisions, [], splits, {"quality_gate_enabled": True})
+
+        assert mock_gate.call_args[0][0] == "restructure_split"
+
+    def test_hub_spoke_dispatches_restructure_hub_operation(self):
+        passing = _FakeGateVerdict("pass", True, 0.9, "Good")
+        decisions = [{"action": "hub-spoke", "cluster_index": 0, "rationale": "thematic group"}]
+        clusters = [[{"title": "A", "summary": "a", "path": "/a.md"}, {"title": "B", "summary": "b", "path": "/b.md"}]]
+
+        with patch("quality_gate.quality_gate", return_value=passing) as mock_gate:
+            rst_mod._gate_decisions(decisions, clusters, [], {"quality_gate_enabled": True})
+
+        assert mock_gate.call_args[0][0] == "restructure_hub"
+
+    def test_subfolder_dispatches_restructure_hub_operation(self):
+        passing = _FakeGateVerdict("pass", True, 0.9, "Good")
+        decisions = [{"action": "subfolder", "cluster_index": 0, "rationale": "organize"}]
+        clusters = [[{"title": "A", "summary": "a", "path": "/a.md"}, {"title": "B", "summary": "b", "path": "/b.md"}]]
+
+        with patch("quality_gate.quality_gate", return_value=passing) as mock_gate:
+            rst_mod._gate_decisions(decisions, clusters, [], {"quality_gate_enabled": True})
+
+        assert mock_gate.call_args[0][0] == "restructure_hub"
+
+
+class TestGateGeneratedContent:
+    """Tests for _gate_generated_content."""
+
+    def test_skipped_when_disabled(self):
+        result = rst_mod._gate_generated_content(
+            {"action": "merge", "merged_content": "stuff"},
+            {"quality_gate_enabled": False}
+        )
+        assert result is None
+
+    def test_skipped_for_keep_action(self):
+        result = rst_mod._gate_generated_content(
+            {"action": "keep"},
+            {"quality_gate_enabled": True}
+        )
+        assert result is None
+
+    def test_merge_content_evaluated(self):
+        passing = _FakeGateVerdict("pass", True, 0.9, "Good merge")
+        decision = {"action": "merge", "cluster_index": 0, "merged_content": "merged body"}
+
+        with patch("quality_gate.quality_gate", return_value=passing):
+            result = rst_mod._gate_generated_content(decision, {"quality_gate_enabled": True})
+
+        assert result is not None
+        assert result["passed"] is True
+        assert result["confidence"] == 0.9
+
+    def test_split_content_evaluated(self):
+        passing = _FakeGateVerdict("pass", True, 0.85, "Clean split")
+        decision = {
+            "action": "split", "note_index": 0,
+            "output_notes": [{"content": "part 1"}, {"content": "part 2"}]
+        }
+
+        with patch("quality_gate.quality_gate", return_value=passing):
+            result = rst_mod._gate_generated_content(decision, {"quality_gate_enabled": True})
+
+        assert result is not None
+        assert result["passed"] is True
+
+    def test_empty_content_returns_none(self):
+        decision = {"action": "merge", "cluster_index": 0, "merged_content": ""}
+        with patch("quality_gate.quality_gate") as mock_gate:
+            result = rst_mod._gate_generated_content(decision, {"quality_gate_enabled": True})
+        mock_gate.assert_not_called()
+        assert result is None
+
+    def test_hub_spoke_content_evaluated(self):
+        passing = _FakeGateVerdict("pass", True, 0.8, "Good hub")
+        decision = {"action": "hub-spoke", "cluster_index": 0, "hub_content": "hub body"}
+
+        with patch("quality_gate.quality_gate", return_value=passing):
+            result = rst_mod._gate_generated_content(decision, {"quality_gate_enabled": True})
+
+        assert result is not None
+        assert result["passed"] is True
+
+    def test_merge_dispatches_restructure_merge(self):
+        passing = _FakeGateVerdict("pass", True, 0.9, "Good")
+        decision = {"action": "merge", "cluster_index": 0, "merged_content": "merged"}
+
+        with patch("quality_gate.quality_gate", return_value=passing) as mock_gate:
+            rst_mod._gate_generated_content(decision, {"quality_gate_enabled": True})
+
+        assert mock_gate.call_args[0][0] == "restructure_merge"
+
+    def test_split_dispatches_restructure_split(self):
+        passing = _FakeGateVerdict("pass", True, 0.9, "Good")
+        decision = {"action": "split", "note_index": 0, "output_notes": [{"content": "p1"}]}
+
+        with patch("quality_gate.quality_gate", return_value=passing) as mock_gate:
+            rst_mod._gate_generated_content(decision, {"quality_gate_enabled": True})
+
+        assert mock_gate.call_args[0][0] == "restructure_split"
+
+    def test_hub_spoke_dispatches_restructure_hub(self):
+        passing = _FakeGateVerdict("pass", True, 0.9, "Good")
+        decision = {"action": "hub-spoke", "cluster_index": 0, "hub_content": "hub"}
+
+        with patch("quality_gate.quality_gate", return_value=passing) as mock_gate:
+            rst_mod._gate_generated_content(decision, {"quality_gate_enabled": True})
+
+        assert mock_gate.call_args[0][0] == "restructure_hub"
+
+    def test_subfolder_dispatches_restructure_hub(self):
+        passing = _FakeGateVerdict("pass", True, 0.9, "Good")
+        decision = {"action": "subfolder", "cluster_index": 0, "hub_content": "hub"}
+
+        with patch("quality_gate.quality_gate", return_value=passing) as mock_gate:
+            rst_mod._gate_generated_content(decision, {"quality_gate_enabled": True})
+
+        assert mock_gate.call_args[0][0] == "restructure_hub"
+
+
+class TestFormatGateVerdicts:
+    """Tests for _format_gate_verdicts."""
+
+    def test_empty_when_no_results(self):
+        assert rst_mod._format_gate_verdicts([], []) == ""
+
+    def test_pass_verdict_formatted(self):
+        gate_results = [{
+            "decision_index": 0, "action": "merge", "verdict": "pass",
+            "confidence": 0.9, "rationale": "Good", "issues": [], "passed": True,
+        }]
+        out = rst_mod._format_gate_verdicts([], gate_results)
+        assert "PASS" in out
+        assert "0.90" in out
+
+    def test_fail_verdict_shows_issues(self):
+        gate_results = [{
+            "decision_index": 0, "action": "merge", "verdict": "fail",
+            "confidence": 0.3, "rationale": "Bad grouping",
+            "issues": ["Notes are unrelated", "Topic mismatch"], "passed": False,
+        }]
+        out = rst_mod._format_gate_verdicts([], gate_results)
+        assert "FAIL" in out
+        assert "Notes are unrelated" in out
+        assert "Topic mismatch" in out
+        assert "downgraded" in out.lower() or "flagged" in out.lower()
+
+    def test_fail_verdict_shows_configure_hint(self):
+        gate_results = [{
+            "decision_index": 0, "action": "merge", "verdict": "fail",
+            "confidence": 0.3, "rationale": "Bad grouping",
+            "issues": ["Notes are unrelated"], "passed": False,
+        }]
+        out = rst_mod._format_gate_verdicts([], gate_results)
+        assert "cb_configure(quality_gate_enabled=False)" in out
+
+    def test_generation_gate_info_from_decisions(self):
+        decisions = [{
+            "action": "merge", "cluster_index": 0,
+            "_gate_gen_verdict": "uncertain",
+            "_gate_gen_confidence": 0.55,
+            "_gate_gen_rationale": "Possible info loss",
+            "_gate_gen_issues": ["Missing section"],
+        }]
+        out = rst_mod._format_gate_verdicts(decisions, [])
+        assert "UNCERTAIN" in out
+        assert "Missing section" in out
+        assert "cb_configure(quality_gate_enabled=False)" in out
+
+
+class TestGenerateAllParallelWithGate:
+    """Tests for quality gate integration in _generate_all_parallel."""
+
+    def test_gate_retry_on_fail(self):
+        """When generation gate fails, retry once with stronger model."""
+        merged_content = "---\ntitle: M\ntype: reference\nsummary: S\ntags: []\n---\nbody"
+        better_content = "---\ntitle: M\ntype: reference\nsummary: S\ntags: []\n---\nimproved body"
+
+        fail_result = {
+            "verdict": "fail", "passed": False, "confidence": 0.3,
+            "rationale": "Low quality", "issues": ["missing info"],
+            "suggest_retry": True, "suggested_model": "claude-sonnet-4-5-20250514",
+        }
+        pass_result = {
+            "verdict": "pass", "passed": True, "confidence": 0.9,
+            "rationale": "Good", "issues": [], "suggest_retry": False, "suggested_model": "",
+        }
+
+        decisions = [{"action": "merge", "cluster_index": 0, "rationale": "related"}]
+        clusters = [[
+            {"title": "A", "summary": "a", "path": "/a.md"},
+            {"title": "B", "summary": "b", "path": "/b.md"},
+        ]]
+        config = {"quality_gate_enabled": True, "model": "claude-haiku-4-5", "backend": "claude-code"}
+        vault = Path("/fake/vault")
+
+        call_count = {"gen": 0, "gate": 0}
+
+        def mock_gen_cluster(decision, notes, prefs, v, cfg):
+            call_count["gen"] += 1
+            if call_count["gen"] == 1:
+                return {"merged_content": merged_content}
+            return {"merged_content": better_content}
+
+        def mock_gate_content(decision, cfg):
+            call_count["gate"] += 1
+            if call_count["gate"] == 1:
+                return fail_result
+            return pass_result
+
+        with patch.object(rst_mod, "_call_generate_cluster", side_effect=mock_gen_cluster), \
+             patch.object(rst_mod, "_gate_generated_content", side_effect=mock_gate_content), \
+             patch.object(rst_mod, "_is_gate_enabled", return_value=True):
+            rst_mod._generate_all_parallel(decisions, clusters, [], "", vault, config)
+
+        assert call_count["gen"] == 2  # original + retry
+        assert call_count["gate"] == 2  # original + re-check
+        # No gate info attached since second attempt passed
+        assert "_gate_gen_verdict" not in decisions[0]
+
+    def test_gate_attaches_info_on_persistent_failure(self):
+        """When retry also fails, attach gate info to decision."""
+        content = "---\ntitle: M\n---\nbody"
+        fail_result = {
+            "verdict": "fail", "passed": False, "confidence": 0.3,
+            "rationale": "Still bad", "issues": ["problem"],
+            "suggest_retry": True, "suggested_model": "claude-sonnet-4-5-20250514",
+        }
+
+        decisions = [{"action": "merge", "cluster_index": 0, "rationale": "related"}]
+        clusters = [[{"title": "A", "summary": "a", "path": "/a.md"}, {"title": "B", "summary": "b", "path": "/b.md"}]]
+        config = {"quality_gate_enabled": True, "model": "claude-haiku-4-5"}
+        vault = Path("/fake/vault")
+
+        with patch.object(rst_mod, "_call_generate_cluster", return_value={"merged_content": content}), \
+             patch.object(rst_mod, "_gate_generated_content", return_value=fail_result), \
+             patch.object(rst_mod, "_is_gate_enabled", return_value=True):
+            rst_mod._generate_all_parallel(decisions, clusters, [], "", vault, config)
+
+        assert decisions[0]["_gate_gen_verdict"] == "fail"
+        assert decisions[0]["_gate_gen_rationale"] == "Still bad"
+
+    def test_gate_not_called_when_disabled(self):
+        content = "---\ntitle: M\n---\nbody"
+        decisions = [{"action": "merge", "cluster_index": 0}]
+        clusters = [[{"title": "A", "summary": "a", "path": "/a.md"}, {"title": "B", "summary": "b", "path": "/b.md"}]]
+        config = {"quality_gate_enabled": False}
+        vault = Path("/fake/vault")
+
+        with patch.object(rst_mod, "_call_generate_cluster", return_value={"merged_content": content}), \
+             patch.object(rst_mod, "_gate_generated_content") as mock_gate, \
+             patch.object(rst_mod, "_is_gate_enabled", return_value=False):
+            rst_mod._generate_all_parallel(decisions, clusters, [], "", vault, config)
+
+        mock_gate.assert_not_called()
+
+
+class TestCbRestructureQualityGateIntegration:
+    """End-to-end tests for quality gate integration in cb_restructure."""
+
+    def _base_config(self, tmp_path, gate_enabled=True):
+        return {
+            "vault_path": str(tmp_path),
+            "backend": "claude-code",
+            "model": "claude-haiku-4-5",
+            "consolidation_log": "AI/Log.md",
+            "consolidation_log_enabled": True,
+            "quality_gate_enabled": gate_enabled,
+        }
+
+    def test_preview_shows_gate_verdicts(self, tmp_path):
+        """Preview mode surfaces gate verdicts alongside proposed actions."""
+        _make_note(tmp_path / "A.md", "Note A")
+        _make_note(tmp_path / "B.md", "Note B")
+        notes = rst_mod._collect_notes(tmp_path, tmp_path, [])
+        cluster = notes[:2]
+
+        merged_content = "---\ntitle: Merged\ntype: reference\nsummary: S\ntags: []\n---\nbody"
+        decision = {
+            "cluster_index": 0, "action": "merge",
+            "merged_title": "Merged", "merged_path": "Merged.md",
+            "rationale": "related",
+        }
+
+        gate_results = [{
+            "decision_index": 0, "action": "merge", "verdict": "uncertain",
+            "confidence": 0.55, "rationale": "Marginal grouping",
+            "issues": ["Weak thematic link"], "passed": False,
+        }]
+
+        with patch.object(rst_mod, "_load_config", return_value=self._base_config(tmp_path)), \
+             patch.object(rst_mod, "_get_search_backend", return_value=None), \
+             patch.object(rst_mod, "_index_paths"), \
+             patch.object(rst_mod, "_prune_index"), \
+             patch.object(rst_mod, "_load_prompt", return_value="p"), \
+             patch.object(rst_mod, "_build_clusters", return_value=[cluster]), \
+             patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
+             patch.object(rst_mod, "_call_decisions", return_value=[decision]), \
+             patch.object(rst_mod, "_call_generate_cluster", return_value={"merged_content": merged_content}), \
+             patch.object(rst_mod, "_gate_decisions", return_value=gate_results), \
+             patch.object(rst_mod, "_gate_generated_content", return_value=None):
+            result = _cb_restructure()(dry_run=False, preview=True)
+
+        assert "Quality Gate" in result
+        assert "UNCERTAIN" in result
+        assert "Marginal grouping" in result
+
+    def test_execute_with_gate_disabled(self, tmp_path):
+        """Execution works normally when gate is disabled."""
+        _make_note(tmp_path / "A.md", "Note A")
+        _make_note(tmp_path / "B.md", "Note B")
+        notes = rst_mod._collect_notes(tmp_path, tmp_path, [])
+        cluster = notes[:2]
+
+        merged_content = "---\ntitle: Merged\ntype: reference\nsummary: S\ntags: []\n---\nbody"
+        decision = {
+            "cluster_index": 0, "action": "merge",
+            "merged_title": "Merged", "merged_path": "Merged.md",
+            "rationale": "related",
+        }
+
+        with patch.object(rst_mod, "_load_config", return_value=self._base_config(tmp_path, gate_enabled=False)), \
+             patch.object(rst_mod, "_get_search_backend", return_value=None), \
+             patch.object(rst_mod, "_index_paths"), \
+             patch.object(rst_mod, "_prune_index"), \
+             patch.object(rst_mod, "_load_prompt", return_value="p"), \
+             patch.object(rst_mod, "_build_clusters", return_value=[cluster]), \
+             patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
+             patch.object(rst_mod, "_call_decisions", return_value=[decision]), \
+             patch.object(rst_mod, "_call_generate_cluster", return_value={"merged_content": merged_content}):
+            result = _cb_restructure()(dry_run=False)
+
+        assert "Restructure Complete" in result
+        assert (tmp_path / "Merged.md").exists()
+
+    def test_failed_decision_gate_prevents_merge(self, tmp_path):
+        """A FAIL verdict from decision gate downgrades merge to keep-separate."""
+        _make_note(tmp_path / "A.md", "Note A")
+        _make_note(tmp_path / "B.md", "Note B")
+        notes = rst_mod._collect_notes(tmp_path, tmp_path, [])
+        cluster = notes[:2]
+
+        # _gate_decisions will modify the decision in-place to keep-separate
+        decision = {
+            "cluster_index": 0, "action": "keep-separate",
+            "_gate_original_action": "merge",
+            "rationale": "Quality gate failed (confidence: 0.30): Unrelated. Original action was 'merge'.",
+            "_gate_verdict": "fail",
+            "_gate_confidence": 0.3,
+            "_gate_rationale": "Unrelated",
+            "_gate_issues": ["No thematic connection"],
+        }
+
+        gate_results = [{
+            "decision_index": 0, "action": "merge", "verdict": "fail",
+            "confidence": 0.3, "rationale": "Unrelated",
+            "issues": ["No thematic connection"], "passed": False,
+        }]
+
+        with patch.object(rst_mod, "_load_config", return_value=self._base_config(tmp_path)), \
+             patch.object(rst_mod, "_get_search_backend", return_value=None), \
+             patch.object(rst_mod, "_index_paths"), \
+             patch.object(rst_mod, "_prune_index"), \
+             patch.object(rst_mod, "_load_prompt", return_value="p"), \
+             patch.object(rst_mod, "_build_clusters", return_value=[cluster]), \
+             patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
+             patch.object(rst_mod, "_call_decisions", return_value=[decision]), \
+             patch.object(rst_mod, "_gate_decisions", return_value=gate_results), \
+             patch.object(rst_mod, "_gate_generated_content", return_value=None):
+            result = _cb_restructure()(dry_run=False)
+
+        # Merge should NOT have happened — downgraded to keep-separate
+        assert not (tmp_path / "Merged.md").exists()
+        assert "kept separate" in result.lower() or "keep separate" in result.lower()

@@ -10,7 +10,7 @@
 ## Design Constraints
 6. **All vault writes go through Python.** `extract_beats.py` (or `import.py`) is the single write path. MCP tools never write vault files directly. This ensures consistent path validation, logging, and error handling.
 7. **Hooks always exit 0.** PreCompact and SessionEnd hooks must never block the parent Claude Code session, even on failure.
-8. **Subprocess env var stripping.** When spawning `claude -p`, strip `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` to prevent subprocess hangs.
+8. **Subprocess env var stripping.** When spawning `claude -p`, strip `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, `CLAUDE_CODE_SESSION_ACCESS_TOKEN` to prevent subprocess hangs.
 9. **Subprocess runs from neutral CWD.** `claude -p` subprocess runs from `~/.claude/cyberbrain/` (no CLAUDE.md) to prevent project config injection.
 10. **Soft delete only.** All vault note deletions go through `_move_to_trash()`. Notes are moved to the trash folder, never permanently deleted. Vault-relative structure is preserved in trash.
 11. **Single session dedup.** Extraction is deduplicated by session ID via `cb-extract.log`. Each session is processed at most once.

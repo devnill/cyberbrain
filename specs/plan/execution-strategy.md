@@ -1,54 +1,45 @@
-# Execution Strategy
+# Execution Strategy — Refinement Cycle 4
 
 ## Mode
 Batched parallel
 
 ## Parallelism
-Max concurrent agents: 3
+Max concurrent agents: 4
 
 ## Worktrees
-Enabled: yes
-Reason: Parallel work items may touch overlapping modules. Worktrees provide isolation and clean merge points.
+Enabled: no
 
 ## Review Cadence
-After every batch (group)
+After every work item
 
 ## Work Item Groups
 
-Group 1 (parallel — foundational, no dependencies):
-- 001: Evaluation tooling framework
-- 002: Manual validation test plan for automatic invocation
-- 003: Knowledge graph + ML research investigation
+Group 1 (parallel — non-overlapping file scope):
+- 027: Dead code removal and utility consolidation
+- 029: Fix cb_setup predicate guidance
 
-Group 2 (parallel, depends on group 1):
-- 004: Restructure pipeline quality improvements
-- 005: RAG synthesis and context injection
+Group 2 (after Group 1 — depends on 027 for restructure.py):
+- 028: Gate hint wording standardization
 
-Group 3 (sequential, depends on group 2):
-- 006: Automatic invocation hardening
-- 007: Per-tool model selection
+Group 3 (last — manual test, after all code changes):
+- 030: Manual capture mode re-test
 
 ## Dependency Graph
 
 ```
-001 (eval tooling) ──┬──→ 004 (restructure quality)
-                     │
-002 (invocation test)┼──→ 006 (invocation hardening)
-                     │
-003 (graph research) ┴──→ 005 (RAG synthesis)
-                              │
-                              └──→ 007 (per-tool model selection)
+027 (dead code + consolidation) ── independent
+029 (predicate guidance) ── independent
+028 (hint wording) ── depends on 027
+030 (manual retest) ── depends on 027, 028, 029
 ```
 
 ## Agent Configuration
-Model for workers: opus
-Model for reviewers: opus
-Permission mode: acceptEdits
+Model for workers: sonnet
+Model for reviewers: sonnet
+Permission mode: bypassPermissions
 
 ## Notes
 
-This is a baseline plan. The work items are large and intentionally broad — they capture workstreams, not atomic tasks. Each will be decomposed into atomic work items via `/ideate:refine` before execution begins.
+027 and 029 have non-overlapping file scope and can run in parallel. 028 depends on 027 because both modify `restructure.py` and `test_restructure_tool.py`. 030 is a manual test procedure that runs last after all code changes are complete.
 
-Group 1 is research and tooling that informs Group 2 decisions. Group 3 depends on Group 2 being stable enough to build on.
-
-The human-in-the-loop concern applies especially to item 004 (restructure). The evaluation tooling (001) must be usable before restructure quality work can iterate effectively.
+WI-030 produces a research document, not code changes. It requires a live Claude Desktop session and cannot be automated.

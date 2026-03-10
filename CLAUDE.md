@@ -173,8 +173,9 @@ When `claude -p` is spawned as a subprocess, these inherited env vars cause hang
 - `CLAUDE_CODE_ENTRYPOINT`
 - `CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY`
 - `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`
+- `CLAUDE_CODE_SESSION_ACCESS_TOKEN`
 
-The `claude-code` backend strips all four unconditionally and uses `start_new_session=True` to fully detach from the parent process group. The subprocess also runs from a neutral working directory (`~/.claude/cyberbrain/`) that has no CLAUDE.md, preventing project config injection.
+The `claude-code` backend strips all five unconditionally and uses `start_new_session=True` to fully detach from the parent process group. The subprocess also runs from a neutral working directory (`~/.claude/cyberbrain/`) that has no CLAUDE.md, preventing project config injection.
 
 **Architectural constraint:** All vault writes go through `extract_beats.py` or `import.py`. This ensures path validation, logging, and error fallback are consistently enforced in Python. MCP tools never write vault files directly.
 

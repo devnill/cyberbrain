@@ -10,21 +10,9 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
-from shared import _load_config, _get_search_backend, _parse_frontmatter, _prune_index, _index_paths, _move_to_trash
+from shared import _load_config, _get_search_backend, _parse_frontmatter, _prune_index, _index_paths, _move_to_trash, _load_tool_prompt as _load_prompt, _is_within_vault
 
-_PROMPTS_DIR = Path.home() / ".claude" / "cyberbrain" / "prompts"
-_WM_RECALL_LOG = Path.home() / ".claude" / "cyberbrain" / "wm-recall.jsonl"
 _PREFS_HEADING = "## Cyberbrain Preferences"
-
-
-def _load_prompt(filename: str) -> str:
-    prompt_path = _PROMPTS_DIR / filename
-    if prompt_path.exists():
-        return prompt_path.read_text(encoding="utf-8")
-    dev_path = Path(__file__).parent.parent.parent / "prompts" / filename
-    if dev_path.exists():
-        return dev_path.read_text(encoding="utf-8")
-    raise ToolError(f"Prompt file not found: {filename}. Run install.sh first.")
 
 
 def _read_vault_prefs(vault_path: str) -> str:
@@ -40,14 +28,6 @@ def _read_vault_prefs(vault_path: str) -> str:
         if m.start() > 0:
             return rest[:m.start()].strip()
     return rest.strip()
-
-
-def _is_within_vault(vault: Path, target: Path) -> bool:
-    try:
-        target.resolve().relative_to(vault.resolve())
-        return True
-    except ValueError:
-        return False
 
 
 def _find_due_notes(vault: Path, wm_root: Path, days_ahead: int) -> list[dict]:
@@ -241,9 +221,11 @@ def register(mcp: FastMCP) -> None:
         Working memory notes are created automatically from extraction when beats
         are classified as 'working-memory' durability.
         """
-        from backends import call_model, BackendError
+        from backends import call_model, BackendError, get_model_for_tool
+        from quality_gate import quality_gate as _quality_gate
 
         config = _load_config()
+        gate_enabled = config.get("quality_gate_enabled", True)
         vault_path_str = config.get("vault_path", "")
         if not vault_path_str:
             raise ToolError("No vault configured. Run cb_configure(vault_path=...) first.")
@@ -296,8 +278,9 @@ def register(mcp: FastMCP) -> None:
             .replace("{notes_block}", notes_block)
         )
 
+        tool_config = {**config, "model": get_model_for_tool(config, "review")}
         try:
-            raw = call_model(system_prompt, user_message, config)
+            raw = call_model(system_prompt, user_message, tool_config)
         except BackendError as e:
             raise ToolError(f"Backend error during review: {e}")
 
@@ -315,6 +298,7 @@ def register(mcp: FastMCP) -> None:
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
         errata: list[str] = []
         result_lines: list[str] = []
+        gate_flagged: list[tuple[list[str], str, str, object]] = []  # (titles, action, rationale, verdict)
         promoted = deleted = extended = 0
         written_paths: list[Path] = []
 
@@ -335,6 +319,37 @@ def register(mcp: FastMCP) -> None:
                 handled.add(i)
 
             titles = [n["title"] for n in affected_notes]
+
+            # ── Quality gate ──
+            if gate_enabled:
+                gate_op = f"review_{action}" if action in ("promote", "delete") else "review_decide"
+                note_summaries = "\n".join(
+                    f"- {n['title']} (overdue {n['days_overdue']}d): {n['summary']}"
+                    for n in affected_notes
+                )
+                gate_input = f"Working memory notes:\n{note_summaries}"
+                gate_output = json.dumps(decision)
+                verdict = _quality_gate(gate_op, gate_input, gate_output, config)
+                if not verdict.passed:
+                    from quality_gate import Verdict as _Verdict
+                    if verdict.verdict == _Verdict.UNCERTAIN:
+                        # Uncertain — flag for confirmation but still report
+                        gate_flagged.append((titles, action, rationale, verdict))
+                        result_lines.append(
+                            f"**Needs confirmation** — {action} for {', '.join(repr(t) for t in titles)}: "
+                            f"{verdict.rationale} (confidence: {verdict.confidence:.2f}). "
+                            f"Call cb_configure(quality_gate_enabled=False) to disable quality gates."
+                        )
+                        continue
+                    else:
+                        # Failed — block entirely
+                        gate_flagged.append((titles, action, rationale, verdict))
+                        result_lines.append(
+                            f"Gate blocked {action} for {', '.join(repr(t) for t in titles)} — "
+                            f"{verdict.rationale} (confidence: {verdict.confidence:.2f}). "
+                            f"Call cb_configure(quality_gate_enabled=False) to disable quality gates."
+                        )
+                        continue
 
             if action == "promote":
                 promoted_title = decision.get("promoted_title", "Promoted Note")
@@ -416,6 +431,7 @@ def register(mcp: FastMCP) -> None:
             f"Promoted:  {promoted}",
             f"Extended:  {extended}",
             f"Deleted:   {deleted}",
+            f"Blocked:   {len(gate_flagged)}",
         ]
         log_rel = config.get("consolidation_log", "AI/Cyberbrain-Log.md")
         if errata and config.get("consolidation_log_enabled", True):

@@ -10,25 +10,11 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
-from shared import _load_config, _get_search_backend, _parse_frontmatter, _prune_index, _index_paths, _move_to_trash
+from shared import _load_config, _get_search_backend, _parse_frontmatter, _prune_index, _index_paths, _move_to_trash, _load_tool_prompt as _load_prompt, _is_within_vault
 
-_PROMPTS_DIR = Path.home() / ".claude" / "cyberbrain" / "prompts"
 _GROUPS_CACHE = Path.home() / ".claude" / "cyberbrain" / ".restructure-groups-cache.json"
 _PREFS_HEADING = "## Cyberbrain Preferences"
 _LOCK_FIELD = "cb_lock"
-
-
-def _load_prompt(filename: str) -> str:
-    prompt_path = _PROMPTS_DIR / filename
-    if prompt_path.exists():
-        return prompt_path.read_text(encoding="utf-8")
-    dev_path = Path(__file__).parent.parent.parent / "prompts" / filename
-    if dev_path.exists():
-        return dev_path.read_text(encoding="utf-8")
-    raise ToolError(
-        f"Prompt file not found: {filename}. "
-        "Run install.sh to ensure all prompt files are installed."
-    )
 
 
 def _repair_json(raw: str) -> list:
@@ -234,58 +220,6 @@ def _collect_notes_for_hub(scan_root: Path, vault: Path, excluded_folders: list[
     return flat_notes + subfolder_notes
 
 
-def _title_concept_clusters(notes: list[dict], min_cluster_size: int) -> list[list[dict]]:
-    """
-    Group notes by the primary distinctive concept word in their title.
-
-    Better than search-based clustering for folder_hub mode because:
-    - Notes within a folder are already topically related; what matters is which
-      sub-topic each note covers (hooks vs plugins vs skills, etc.)
-    - Content similarity is noisy — hook docs mention plugins, plugin docs mention
-      hooks — creating false cross-group adjacency
-    - Title words are the most intentional signal about what a note is primarily about
-
-    Simple stemming: "hook" and "hooks" map to the same group.
-    """
-    _STOP = {"claude", "code", "the", "and", "for", "with", "using", "how",
-             "what", "why", "non", "vs", "ai", "its", "are", "can", "via",
-             "has", "that", "this", "from", "into", "not", "but"}
-
-    def _stem(word: str) -> str:
-        """Strip trailing 's' for simple plural normalization."""
-        return word[:-1] if word.endswith("s") and len(word) > 3 else word
-
-    # Map each note to its primary concept (first non-stop title word, stemmed)
-    # Also track all title words per note for singleton fallback.
-    concept_to_indices: dict[str, list[int]] = {}
-    note_words: dict[int, list[str]] = {}
-    for i, note in enumerate(notes):
-        words = [_stem(w.lower()) for w in re.sub(r"[^\w\s]", " ", note["title"]).split()
-                 if len(w) > 2 and w.lower() not in _STOP]
-        if not words:
-            continue
-        note_words[i] = words
-        concept_to_indices.setdefault(words[0], []).append(i)
-
-    # Second pass: reassign singletons to an existing group if they share a
-    # secondary title word with that group (e.g. "SessionEnd Hook" → hooks group).
-    for concept in list(concept_to_indices.keys()):
-        if len(concept_to_indices.get(concept, [])) == 1:
-            i = concept_to_indices[concept][0]
-            for word in note_words.get(i, [])[1:]:
-                if word in concept_to_indices and len(concept_to_indices[word]) >= 1:
-                    concept_to_indices[word].append(i)
-                    del concept_to_indices[concept]
-                    break
-
-    clusters = []
-    for indices in concept_to_indices.values():
-        if len(indices) >= min_cluster_size:
-            clusters.append([notes[i] for i in indices])
-
-    return sorted(clusters, key=len, reverse=True)
-
-
 def _save_groups_cache(folder_path: str, clusters: list[list[dict]], strategy: str = "") -> None:
     """Save grouping result to cache so dry_run → preview → execute stay consistent."""
     cache_data = {
@@ -349,7 +283,8 @@ def _call_group_notes(
     if cached is not None:
         return cached
 
-    from backends import call_model, BackendError
+    from backends import call_model, BackendError, get_model_for_tool
+    tool_config = {**config, "model": get_model_for_tool(config, "restructure")}
     group_system = _load_prompt("restructure-group-system.md")
     notes_block = _build_audit_notes_block(notes)
     user_msg = (
@@ -360,7 +295,7 @@ def _call_group_notes(
         .replace("{notes_block}", notes_block)
     )
     try:
-        raw = call_model(group_system, user_msg, config)
+        raw = call_model(group_system, user_msg, tool_config)
     except BackendError:
         return []
     raw = re.sub(r"^```(?:json)?\s*", "", raw.strip())
@@ -510,7 +445,8 @@ def _llm_validate_clusters(
     Reuses the group-system prompt for consistent quality criteria, with an
     added section showing the algorithm's proposed clusters as a starting point.
     """
-    from backends import call_model, BackendError
+    from backends import call_model, BackendError, get_model_for_tool
+    tool_config = {**config, "model": get_model_for_tool(config, "restructure")}
 
     # Format embedding clusters as a hint section
     hint_lines = ["## Algorithm-proposed clusters (starting point — revise freely)\n"]
@@ -537,7 +473,7 @@ def _llm_validate_clusters(
     )
 
     try:
-        raw = call_model(group_system, user_msg, config)
+        raw = call_model(group_system, user_msg, tool_config)
     except BackendError:
         return clusters  # Fall back to algorithmic result
 
@@ -604,7 +540,7 @@ def _dispatch_grouping(
     return result
 
 
-def _build_clusters(notes: list[dict], backend, similarity_threshold: float, min_cluster_size: int) -> list[list[dict]]:
+def _build_clusters(notes: list[dict], backend, min_cluster_size: int) -> list[list[dict]]:
     """
     Build clusters of related notes using the search backend.
 
@@ -1063,7 +999,8 @@ def _call_audit_notes_batch(
     audit_user_tmpl: str,
 ) -> list[dict]:
     """Audit a single batch of notes. Returns flag decisions only."""
-    from backends import call_model, BackendError
+    from backends import call_model, BackendError, get_model_for_tool
+    tool_config = {**config, "model": get_model_for_tool(config, "restructure")}
     notes_block = _build_audit_notes_block(notes)
     user_msg = (
         audit_user_tmpl
@@ -1074,7 +1011,7 @@ def _call_audit_notes_batch(
         .replace("{notes_block}", notes_block)
     )
     try:
-        raw = call_model(audit_system, user_msg, config)
+        raw = call_model(audit_system, user_msg, tool_config)
     except BackendError:
         return []
     raw = re.sub(r"^```(?:json)?\s*", "", raw.strip())
@@ -1132,7 +1069,8 @@ def _call_decisions(
     folder_note_count: int = 0,
 ) -> list[dict]:
     """Phase 1 LLM call: decide actions for all clusters and splits (no content generation)."""
-    from backends import call_model, BackendError
+    from backends import call_model, BackendError, get_model_for_tool
+    tool_config = {**config, "model": get_model_for_tool(config, "restructure")}
     _standalone = standalone or []
     decide_system = _load_prompt("restructure-decide-system.md")
     clusters_block = _build_cluster_summary_block(clusters)
@@ -1152,7 +1090,7 @@ def _call_decisions(
         .replace("{folder_note_count}", str(folder_note_count))
     )
     try:
-        raw = call_model(decide_system, user_msg, config)
+        raw = call_model(decide_system, user_msg, tool_config)
     except BackendError as e:
         raise ToolError(f"Backend error during decision phase: {e}")
     raw = re.sub(r"^```(?:json)?\s*", "", raw.strip())
@@ -1171,7 +1109,8 @@ def _call_generate_cluster(
     config: dict,
 ) -> dict:
     """Phase 2 LLM call: generate content for a single cluster decision."""
-    from backends import call_model, BackendError
+    from backends import call_model, BackendError, get_model_for_tool
+    tool_config = {**config, "model": get_model_for_tool(config, "restructure")}
     generate_system = _load_prompt("restructure-generate-system.md")
     action_desc = _format_action_description(decision)
     source_block = _format_cluster_block([cluster_notes], vault)
@@ -1182,7 +1121,7 @@ def _call_generate_cluster(
         .replace("{source_notes_block}", source_block)
     )
     try:
-        raw = call_model(generate_system, user_msg, config)
+        raw = call_model(generate_system, user_msg, tool_config)
     except BackendError as e:
         raise ToolError(
             f"Backend error during generation for cluster {decision.get('cluster_index', '?')}: {e}"
@@ -1209,7 +1148,8 @@ def _call_generate_split(
     config: dict,
 ) -> dict:
     """Phase 2 LLM call: generate content for a single split decision."""
-    from backends import call_model, BackendError
+    from backends import call_model, BackendError, get_model_for_tool
+    tool_config = {**config, "model": get_model_for_tool(config, "restructure")}
     generate_system = _load_prompt("restructure-generate-system.md")
     action_desc = _format_action_description(decision)
     source_block = _format_cluster_block([[split_note]], vault)
@@ -1220,7 +1160,7 @@ def _call_generate_split(
         .replace("{source_notes_block}", source_block)
     )
     try:
-        raw = call_model(generate_system, user_msg, config)
+        raw = call_model(generate_system, user_msg, tool_config)
     except BackendError as e:
         raise ToolError(
             f"Backend error during generation for split note {decision.get('note_index', '?')}: {e}"
@@ -1239,6 +1179,154 @@ def _call_generate_split(
         )
 
 
+def _is_gate_enabled(config: dict) -> bool:
+    """Check if quality gate is enabled (default: True)."""
+    return config.get("quality_gate_enabled", True)
+
+
+
+def _gate_decisions(decisions: list[dict], clusters: list[list[dict]],
+                    split_candidates: list[dict], config: dict) -> list[dict]:
+    """Run quality gate on proposed decisions. Returns gate verdicts for each non-trivial decision.
+
+    Each verdict dict has: decision_index, verdict, confidence, rationale, issues.
+    Decisions that are simple (keep, keep-separate) skip the gate.
+    """
+    if not _is_gate_enabled(config):
+        return []
+
+    try:
+        from quality_gate import quality_gate
+    except ImportError:
+        return []
+
+    gate_results = []
+
+    for i, decision in enumerate(decisions):
+        action = decision.get("action", "")
+        # Simple/no-op actions don't need gating
+        if action in ("keep", "keep-separate", "flag-misplaced", "flag-low-quality"):
+            continue
+
+        # Build context describing what the decision proposes
+        if "cluster_index" in decision:
+            cidx = decision.get("cluster_index", -1)
+            if cidx < 0 or cidx >= len(clusters):
+                continue
+            cluster = clusters[cidx]
+            titles = [n["title"] for n in cluster]
+            summaries = [n.get("summary", "") for n in cluster]
+            input_ctx = (
+                f"Cluster of {len(cluster)} notes proposed for action '{action}':\n"
+                + "\n".join(f"- {t}: {s}" for t, s in zip(titles, summaries))
+            )
+        elif "note_index" in decision:
+            nidx = decision.get("note_index", -1)
+            if nidx < 0 or nidx >= len(split_candidates):
+                continue
+            note = split_candidates[nidx]
+            input_ctx = (
+                f"Large note proposed for action '{action}':\n"
+                f"- {note['title']}: {note.get('summary', '')}\n"
+                f"- Size: {len(note.get('content', ''))} chars"
+            )
+        else:
+            continue
+
+        output_text = json.dumps(decision, indent=2, default=str)
+        if "cluster_index" in decision:
+            op_action = decision.get("action", "merge")
+            operation = "restructure_hub" if op_action in ("hub-spoke", "subfolder") else "restructure_merge"
+        else:
+            operation = "restructure_split"
+        verdict = quality_gate(operation, input_ctx, output_text, config)
+
+        gate_result = {
+            "decision_index": i,
+            "action": action,
+            "verdict": verdict.verdict.value,
+            "confidence": verdict.confidence,
+            "rationale": verdict.rationale,
+            "issues": verdict.issues,
+            "passed": verdict.passed,
+        }
+
+        # If below threshold and not passed, mark the decision with gate info
+        if not verdict.passed:
+            decision["_gate_verdict"] = verdict.verdict.value
+            decision["_gate_confidence"] = verdict.confidence
+            decision["_gate_rationale"] = verdict.rationale
+            decision["_gate_issues"] = verdict.issues
+            if verdict.verdict.value == "uncertain":
+                decision["_gate_needs_confirmation"] = True
+            elif verdict.verdict.value == "fail":
+                # Downgrade failed decisions to keep-separate/keep
+                original_action = decision["action"]
+                if "cluster_index" in decision:
+                    decision["action"] = "keep-separate"
+                else:
+                    decision["action"] = "keep"
+                decision["_gate_original_action"] = original_action
+                decision["rationale"] = (
+                    f"Quality gate failed (confidence: {verdict.confidence:.2f}): "
+                    f"{verdict.rationale}. Original action was '{original_action}'."
+                )
+
+        gate_results.append(gate_result)
+
+    return gate_results
+
+
+def _gate_generated_content(decision: dict, config: dict) -> dict | None:
+    """Run quality gate on generated content. Returns GateVerdict-like dict or None if skipped.
+
+    On FAIL, returns the verdict with suggest_retry=True.
+    """
+    if not _is_gate_enabled(config):
+        return None
+
+    try:
+        from quality_gate import quality_gate
+    except ImportError:
+        return None
+
+    action = decision.get("action", "")
+
+    # Determine the content to evaluate and the operation type
+    if action in ("merge",):
+        content = decision.get("merged_content", "")
+        if not content:
+            return None
+        operation = "restructure_merge"
+        input_ctx = f"Merge action for cluster {decision.get('cluster_index', '?')}"
+    elif action in ("hub-spoke", "subfolder"):
+        content = decision.get("hub_content", "")
+        if not content:
+            return None
+        operation = "restructure_hub"
+        input_ctx = f"{action} action for cluster {decision.get('cluster_index', '?')}"
+    elif action in ("split", "split-subfolder"):
+        notes = decision.get("output_notes", [])
+        if not notes:
+            return None
+        content = "\n---\n".join(n.get("content", "") for n in notes)
+        operation = "restructure_split"
+        input_ctx = f"Split action for note {decision.get('note_index', '?')}"
+    else:
+        return None
+
+    verdict = quality_gate(operation, input_ctx, content, config)
+    return {
+        "verdict": verdict.verdict.value,
+        "confidence": verdict.confidence,
+        "rationale": verdict.rationale,
+        "issues": verdict.issues,
+        "passed": verdict.passed,
+        "suggest_retry": verdict.suggest_retry,
+        "suggested_model": verdict.suggested_model,
+    }
+
+
 def _generate_all_parallel(
     decisions: list[dict],
     clusters: list[list[dict]],
@@ -1247,8 +1335,15 @@ def _generate_all_parallel(
     vault: Path,
     config: dict,
 ) -> None:
-    """Run all Phase 2 generation calls in parallel. Modifies decisions in-place."""
+    """Run all Phase 2 generation calls in parallel. Modifies decisions in-place.
+
+    When the quality gate is enabled, generated content is validated. On FAIL,
+    a single retry is attempted (with a stronger model if suggested). On
+    UNCERTAIN, the gate verdict is attached to the decision for surfacing.
+    """
     from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    gate_enabled = _is_gate_enabled(config)
 
     def _gen_one(decision: dict) -> None:
         action = decision.get("action", "")
@@ -1263,6 +1358,47 @@ def _generate_all_parallel(
                 content = _call_generate_split(decision, split_candidates[nidx], prefs_section, vault, config)
                 decision.update(content)
 
+        # Quality gate on generated content
+        if gate_enabled:
+            gate_result = _gate_generated_content(decision, config)
+            if gate_result and not gate_result["passed"]:
+                # Retry once on FAIL with stronger model if suggested
+                if gate_result["verdict"] == "fail" and gate_result.get("suggest_retry"):
+                    retry_config = dict(config)
+                    if gate_result.get("suggested_model"):
+                        retry_config["model"] = gate_result["suggested_model"]
+                    # Re-generate
+                    if "cluster_index" in decision and action in ("merge", "hub-spoke", "subfolder"):
+                        cidx = decision.get("cluster_index", -1)
+                        if 0 <= cidx < len(clusters):
+                            try:
+                                content = _call_generate_cluster(
+                                    decision, clusters[cidx], prefs_section, vault, retry_config
+                                )
+                                decision.update(content)
+                                # Re-check
+                                gate_result = _gate_generated_content(decision, config)
+                            except Exception:
+                                pass
+                    elif "note_index" in decision and action in ("split", "split-subfolder"):
+                        nidx = decision.get("note_index", -1)
+                        if 0 <= nidx < len(split_candidates):
+                            try:
+                                content = _call_generate_split(
+                                    decision, split_candidates[nidx], prefs_section, vault, retry_config
+                                )
+                                decision.update(content)
+                                gate_result = _gate_generated_content(decision, config)
+                            except Exception:
+                                pass
+
+                # Attach gate info to the decision for surfacing
+                if gate_result and not gate_result["passed"]:
+                    decision["_gate_gen_verdict"] = gate_result["verdict"]
+                    decision["_gate_gen_confidence"] = gate_result["confidence"]
+                    decision["_gate_gen_rationale"] = gate_result["rationale"]
+                    decision["_gate_gen_issues"] = gate_result["issues"]
+
     actionable = [
         d for d in decisions
         if d.get("action") not in ("keep", "keep-separate", "move-cluster", "flag-misplaced", "flag-low-quality")
@@ -1276,14 +1412,6 @@ def _generate_all_parallel(
                 future.result()
             except Exception:
                 pass
-
-
-def _is_within_vault(vault: Path, target: Path) -> bool:
-    try:
-        target.resolve().relative_to(vault.resolve())
-        return True
-    except ValueError:
-        return False
 
 
 def _execute_cluster_decisions(
@@ -1488,6 +1616,57 @@ def _execute_cluster_decisions(
     return notes_created, notes_deleted
 
 
+def _format_gate_verdicts(decisions: list[dict], gate_results: list[dict]) -> str:
+    """Format quality gate verdicts into human-readable output."""
+    has_gen_gate = any(d.get("_gate_gen_verdict") for d in decisions)
+    if not gate_results and not has_gen_gate:
+        return ""
+    lines = ["### Quality Gate Results\n"]
+    has_issues = False
+    for gr in gate_results:
+        verdict = gr["verdict"]
+        confidence = gr["confidence"]
+        action = gr["action"]
+        idx = gr["decision_index"]
+        symbol = "PASS" if gr["passed"] else ("UNCERTAIN" if verdict == "uncertain" else "FAIL")
+        line = f"- Decision {idx} ({action}): **{symbol}** (confidence: {confidence:.2f})"
+        if gr.get("rationale"):
+            line += f" — {gr['rationale']}"
+        lines.append(line)
+        if gr.get("issues"):
+            for issue in gr["issues"]:
+                lines.append(f"  - {issue}")
+        if not gr["passed"]:
+            has_issues = True
+
+    # Surface generation-phase gate info from decisions
+    for d in decisions:
+        gen_verdict = d.get("_gate_gen_verdict")
+        if gen_verdict and gen_verdict != "pass":
+            action = d.get("action", "?")
+            idx = d.get("cluster_index", d.get("note_index", "?"))
+            lines.append(
+                f"- Generated content ({action}, index {idx}): **{gen_verdict.upper()}** "
+                f"(confidence: {d.get('_gate_gen_confidence', 0):.2f}) — "
+                f"{d.get('_gate_gen_rationale', '')}"
+            )
+            for issue in d.get("_gate_gen_issues", []):
+                lines.append(f"  - {issue}")
+            has_issues = True
+
+    if has_issues:
+        lines.append("")
+        lines.append(
+            "**Note:** Some decisions were flagged by the quality gate. "
+            "Failed decisions have been downgraded. Uncertain decisions may warrant review."
+        )
+        lines.append(
+            "Call cb_configure(quality_gate_enabled=False) to disable quality gates."
+        )
+
+    return "\n".join(lines)
+
+
 def _format_preview_output(decisions: list, clusters: list[list[dict]], split_candidates: list[dict]) -> str:
     """Format LLM decisions into a human-readable preview without writing any files."""
     lines = ["## Preview — Proposed Restructure (no files written)\n"]
@@ -1588,10 +1767,6 @@ def register(mcp: FastMCP) -> None:
                 "If empty, the LLM decides. If the file already exists it will be merged with new content."
             )
         )] = "",
-        similarity_threshold: Annotated[float, Field(
-            ge=0.1, le=1.0,
-            description="Similarity threshold for clustering (0.1–1.0). Lower = more aggressive grouping. Default: 0.3"
-        )] = 0.3,
         min_cluster_size: Annotated[int, Field(
             ge=2, le=20,
             description="Minimum number of notes to form a cluster. Default: 2."
@@ -1645,7 +1820,7 @@ def register(mcp: FastMCP) -> None:
         Notes with cb_lock: true in frontmatter are never restructured.
         Preferences from vault CLAUDE.md (set via cb_configure) are respected.
         """
-        from backends import call_model, BackendError
+        from backends import call_model, BackendError, get_model_for_tool
 
         config = _load_config()
         vault_path_str = config.get("vault_path", "")
@@ -1777,6 +1952,9 @@ def register(mcp: FastMCP) -> None:
                 # Phase 1b: generate content for non-flag decisions
                 decisions1 = [d for d in decisions1 if d.get("action") not in ("flag-misplaced", "flag-low-quality")]
 
+                # Quality gate on decisions
+                decision_gate_results1 = _gate_decisions(decisions1, clusters, [], config)
+
                 _generate_all_parallel(decisions1, clusters, [], prefs_section, vault, config)
 
                 now = datetime.now(timezone.utc)
@@ -1820,7 +1998,8 @@ def register(mcp: FastMCP) -> None:
                 .replace("{split_candidates_block}", "_No split candidates in folder hub mode._")
             )
             try:
-                raw2 = call_model(system_prompt, user_msg_phase2, config)
+                tool_config = {**config, "model": get_model_for_tool(config, "restructure")}
+                raw2 = call_model(system_prompt, user_msg_phase2, tool_config)
             except BackendError as e:
                 raise ToolError(f"Backend error during hub creation phase: {e}")
 
@@ -1873,6 +2052,12 @@ def register(mcp: FastMCP) -> None:
                     break
                 if flag_decisions_hub:
                     preview_lines.append("\n" + _format_flag_output(flag_decisions_hub))
+                gate_section = _format_gate_verdicts(
+                    decisions1 if isinstance(decisions1, list) else [],
+                    decision_gate_results1 if clusters else [],
+                )
+                if gate_section:
+                    preview_lines.append("\n" + gate_section)
                 preview_lines.append("To execute, call cb_restructure with the same parameters and preview=False.")
                 return "\n".join(preview_lines)
 
@@ -1924,6 +2109,13 @@ def register(mcp: FastMCP) -> None:
                 errata_entries.append(f"Notes deleted: {notes_deleted} | Notes created: {notes_created}")
                 _append_errata_log(vault, log_rel, errata_entries)
 
+            gate_section = _format_gate_verdicts(
+                decisions1 if isinstance(decisions1, list) else [],
+                decision_gate_results1 if clusters else [],
+            )
+            if gate_section:
+                result_lines.append("")
+                result_lines.append(gate_section)
             result_lines += ["", f"Notes created: {notes_created}", f"Notes deleted: {notes_deleted}"]
             if log_enabled and errata_entries:
                 result_lines.append(f"Changes logged to: {log_rel}")
@@ -1931,7 +2123,7 @@ def register(mcp: FastMCP) -> None:
             return "\n".join(result_lines)
 
         # ── NORMAL MODE (cluster + split) ──────────────────────────────────────────
-        clusters = _build_clusters(notes, backend, similarity_threshold, min_cluster_size)
+        clusters = _build_clusters(notes, backend, min_cluster_size)
         clusters = clusters[:max_clusters]
         clustered_paths = {str(n["path"]) for cluster in clusters for n in cluster}
         split_candidates = _find_split_candidates(notes, clustered_paths, split_threshold)[:max_splits]
@@ -1940,7 +2132,7 @@ def register(mcp: FastMCP) -> None:
             return (
                 f"Nothing to restructure (scanned {len(notes)} notes). "
                 f"No clusters with {min_cluster_size}+ related notes and no notes over {split_threshold} chars. "
-                "Try lowering similarity_threshold, min_cluster_size, split_threshold, "
+                "Try lowering min_cluster_size, split_threshold, "
                 "or use folder_hub=True to create a navigation hub for the folder."
             )
 
@@ -2009,11 +2201,17 @@ def register(mcp: FastMCP) -> None:
         flag_decisions = audit_flags + [d for d in decisions if d.get("action") in ("flag-misplaced", "flag-low-quality")]
         decisions = [d for d in decisions if d.get("action") not in ("flag-misplaced", "flag-low-quality")]
 
+        # Quality gate on decisions (before generation)
+        decision_gate_results = _gate_decisions(decisions, clusters, split_candidates, config)
+
         # Phase 2: generate content for each decision that needs it (parallel)
         _generate_all_parallel(decisions, clusters, split_candidates, prefs_section, vault, config)
 
         if preview:
             out = _format_preview_output(decisions, clusters, split_candidates)
+            gate_section = _format_gate_verdicts(decisions, decision_gate_results)
+            if gate_section:
+                out += "\n\n" + gate_section
             if flag_decisions:
                 out += "\n\n" + _format_flag_output(flag_decisions)
             return out
@@ -2160,6 +2358,10 @@ def register(mcp: FastMCP) -> None:
         if flag_decisions:
             result_lines.append("")
             result_lines.append(_format_flag_output(flag_decisions))
+        gate_section = _format_gate_verdicts(decisions, decision_gate_results)
+        if gate_section:
+            result_lines.append("")
+            result_lines.append(gate_section)
         lines = ["## Restructure Complete\n"] + result_lines + [
             "",
             f"Notes created: {notes_created}",

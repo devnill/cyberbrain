@@ -13,6 +13,8 @@ NOT responsible for: prompt loading, response parsing, beat extraction logic.
 - `_call_bedrock(system_prompt, user_message, config) -> str` — Bedrock backend.
 - `_call_ollama(system_prompt, user_message, config) -> str` — Ollama backend.
 - `BackendError` — Exception class for all backend failures.
+- `get_model_for_tool(config: dict, tool: str) -> str` — Resolves per-tool model override via `{tool}_model` config key, falling back to global `config["model"]`.
+- `get_judge_model(config: dict) -> str` — Resolves the quality gate judge model via `get_model_for_tool(config, "judge")`.
 - `MAX_TRANSCRIPT_CHARS` — 150,000 character limit for transcript input.
 - `DEFAULT_BACKEND` — `"claude-code"`
 - `CLI_DEFAULT_MODEL` — `"claude-haiku-4-5"`

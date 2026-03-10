@@ -5,11 +5,12 @@ Make cyberbrain tools invoke automatically in Claude Desktop and Claude Code wit
 
 ## Acceptance Criteria
 - [ ] All issues identified in the validation test plan (002) are addressed or explicitly deferred with rationale
-- [ ] Claude Desktop: `cyberbrain://guide` resource is fetched and influences model behavior at session start
-- [ ] Claude Desktop: `orient` prompt works from the UI and produces useful session-start context
-- [ ] Claude Code: `proactive_recall` config flag triggers relevant recall at session start without user action
-- [ ] Mid-session proactive recall triggers on topic changes (when configured)
-- [ ] The system works without the user knowing tool names — natural language like "what do I know about X" routes to the right tool
+- [ ] Claude Desktop: orient prompt works from the UI and produces useful session-start context (confirmed working — C1, C2)
+- [ ] Claude Desktop: proactive recall triggers reliably after orient prompt loads the guide (confirmed working — A1, A5)
+- [ ] Claude Code: CLAUDE.md instructions effectively drive tool usage as a substitute for guide resource (confirmed working — A4)
+- [ ] Mid-session proactive recall triggers on topic changes in Desktop (confirmed working — A5)
+- [ ] Manual capture mode enforcement is strengthened — model currently still offers to file in manual mode (D2 partial pass)
+- [ ] The system works without the user knowing tool names — natural language like "what do I know about X" routes to the right tool (confirmed working — D1)
 - [ ] Test coverage for proactive recall logic
 
 ## File Scope
@@ -20,20 +21,32 @@ Make cyberbrain tools invoke automatically in Claude Desktop and Claude Code wit
 
 ## Dependencies
 - Depends on: 002 (validation results inform what to fix), 005 (synthesis quality affects whether automatic injection is useful)
+- Informed by: 020 (WI-020 invocation test results — see `specs/steering/research/invocation-test-results.md`)
 - Blocks: none
 
 ## Implementation Notes
-This depends heavily on what the validation (002) reveals. Possible issues and approaches:
 
-- **Guide resource not auto-loaded:** May need to embed guide content directly in prompt messages rather than relying on resource auto-fetch. Or accept that resources require manual loading and focus on prompts instead.
+Findings from WI-020 validation (see `specs/steering/research/invocation-test-results.md`):
 
-- **Proactive recall not triggering:** The `proactive_recall` config flag may not be wired up correctly, or the trigger conditions may be wrong. Need to trace the code path.
+- **Guide resource auto-fetch unsupported (B1):** Claude Desktop does not auto-fetch `cyberbrain://guide`. The guide only loads when the user selects the orient prompt. This means proactive recall in Desktop requires the user to explicitly select orient at session start. Accept this limitation — focus on making orient discoverable rather than trying to auto-fetch the resource.
 
-- **Mid-session recall:** Currently there's no mechanism for the system to detect topic changes and proactively recall. This may require adding guidance to the Claude Desktop system prompt or the guide resource.
+- **Orient and recall prompts work well (C1-C4):** Both prompts appear in the Desktop connector picker and execute correctly. Orient loads guide content and triggers cb_status + cb_recall. Recall prompt scans for unfamiliar topics mid-session. These are confirmed working and need no changes.
 
-- **Natural language routing (D7):** The deferred spec describes intent-to-tool routing. This could be addressed via the guide resource (teaching the model which tool handles which intent) or via a dedicated routing layer.
+- **Mid-session recall works (A5):** Topic shifts within a Desktop session (after orient) correctly trigger proactive cb_recall. No code changes needed for this.
 
-The key insight from the interview: the user hasn't seen automatic invocation work without prompting. This might be a simple bug, a missing configuration, or a fundamental gap in how MCP resources/prompts work in current Claude Desktop versions.
+- **CLAUDE.md is the path for Code (A4):** CLAUDE.md instructions effectively replicate guide behavior in Claude Code. cb_setup should ensure the generated CLAUDE.md includes recall-on-topic-mention instructions.
+
+- **Manual capture mode insufficient (D2):** In manual mode, the model still offers to file when it should not. The guide says "only when asked" but the model's helpfulness overrides the instruction. Needs stronger wording (e.g., "Do NOT offer to file anything") or removal of the filing suggestion entirely in manual mode.
+
+- **Tool discovery from descriptions works (D1):** Both clients find and use tools from MCP tool descriptions alone, without needing the guide resource. Natural language routing works.
+
+- **proactive_recall config toggle works (A3):** Setting proactive_recall: false correctly suppresses automatic cb_recall calls in Desktop.
+
+### Remaining work
+1. Strengthen manual capture mode enforcement in guide resource text
+2. Ensure cb_setup generates CLAUDE.md with recall-on-topic-mention instructions for Claude Code
+3. Consider adding a reminder about the orient prompt to cb_setup output or first-run experience
+4. Add proactive_recall to cb_configure parameters (currently only settable by editing config.json)
 
 ## Complexity
 Medium

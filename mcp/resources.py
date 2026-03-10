@@ -85,8 +85,9 @@ def _get_guide() -> str:
             "Mention what was saved: \"Filed: [title]\"."
         ),
         "manual": (
-            "Only call cb_file when the user explicitly asks you to save or file something. "
-            "Do not proactively identify or offer to file anything."
+            "NEVER suggest, offer, or mention filing. Do NOT proactively identify content worth saving. "
+            "Only call cb_file when the user explicitly says words like 'save', 'file', 'capture', or "
+            "'remember this'. If unsure whether the user is asking to file, do nothing."
         ),
     }
     filing_instruction = filing_instructions.get(mode, filing_instructions["suggest"])

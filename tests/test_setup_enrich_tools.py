@@ -52,6 +52,12 @@ if "extract_beats" not in sys.modules:
 if "frontmatter" not in sys.modules:
     sys.modules["frontmatter"] = MagicMock()
 
+# Pre-install a mock quality_gate module so the real one (which imports from
+# backends at module level) is never loaded during tests.
+if "quality_gate" not in sys.modules:
+    _mock_qg = MagicMock()
+    sys.modules["quality_gate"] = _mock_qg
+
 # ---------------------------------------------------------------------------
 # FakeMCP (same as test_mcp_server.py)
 # ---------------------------------------------------------------------------
@@ -344,6 +350,8 @@ class TestCbSetupPhase2:
 
         assert "[DRY RUN]" in result
         assert not (vault / "CLAUDE.md").exists()
+        assert "plus button > connectors > cyberbrain > orient" in result
+        assert "cb_recall" in result
 
     def test_writes_claude_md_when_write_true(self, vault):
         """Phase 2 with write=True creates CLAUDE.md at the vault root."""
@@ -361,6 +369,8 @@ class TestCbSetupPhase2:
         assert claude_md.exists()
         assert "Vault Overview" in claude_md.read_text()
         assert "CLAUDE.md written to" in result
+        assert "plus button > connectors > cyberbrain > orient" in result
+        assert "cb_recall" in result
 
     def test_types_override_skips_archetype_analysis(self, vault):
         """When types= is provided, the analysis prompt includes the override note."""
@@ -838,6 +848,166 @@ class TestCbEnrichNormalMode:
 
 
 # ---------------------------------------------------------------------------
+# cb_enrich — quality gate integration
+# ---------------------------------------------------------------------------
+
+
+class TestCbEnrichQualityGate:
+    """Verify that the quality gate blocks bad classifications."""
+
+    @pytest.fixture
+    def vault(self, tmp_path):
+        v = tmp_path / "vault"
+        v.mkdir()
+        return v
+
+    def _config(self, vault, gate_enabled=True):
+        cfg = _vault_config(str(vault))
+        cfg["quality_gate_enabled"] = gate_enabled
+        return cfg
+
+    def test_gate_blocks_bad_classification(self, vault):
+        """A classification that fails the quality gate is not applied."""
+        from unittest.mock import MagicMock as _MagicMock
+        note_path = write_note(vault, "Decorators.md", "# Python Decorators\n\nHow to use decorators in Python.")
+
+        classification = [{
+            "index": 0,
+            "type": "problem",
+            "summary": "Cooking recipe for pasta.",
+            "tags": ["cooking", "recipes"],
+            "skip": False,
+        }]
+
+        # Create a failing verdict
+        fail_verdict = _MagicMock()
+        fail_verdict.passed = False
+        fail_verdict.rationale = "Type 'problem' does not match tutorial content"
+        fail_verdict.confidence = 0.3
+
+        with patch("shared._resolve_config", return_value=self._config(vault)):
+            with patch("backends.call_model", return_value=json.dumps(classification)):
+                with patch("quality_gate.quality_gate", return_value=fail_verdict):
+                    result = cb_enrich()
+
+        assert "Gate blocked: 1" in result
+        assert "Enriched:     0" in result
+        assert "Call cb_configure(quality_gate_enabled=False) to disable quality gates." in result
+        # File should not have been modified
+        content = note_path.read_text()
+        assert "type: problem" not in content
+        assert "cooking" not in content
+
+    def test_gate_passes_good_classification(self, vault):
+        """A classification that passes the quality gate is applied normally."""
+        from unittest.mock import MagicMock as _MagicMock
+        note_path = write_note(vault, "Decorators.md", "# Python Decorators\n\nHow to use decorators in Python.")
+
+        classification = [{
+            "index": 0,
+            "type": "reference",
+            "summary": "Python decorator usage patterns.",
+            "tags": ["python", "decorators"],
+            "skip": False,
+        }]
+
+        pass_verdict = _MagicMock()
+        pass_verdict.passed = True
+        pass_verdict.confidence = 0.9
+
+        with patch("shared._resolve_config", return_value=self._config(vault)):
+            with patch("backends.call_model", return_value=json.dumps(classification)):
+                with patch("quality_gate.quality_gate", return_value=pass_verdict):
+                    result = cb_enrich()
+
+        assert "Enriched:     1" in result
+        assert "Gate blocked: 0" in result
+        content = note_path.read_text()
+        assert "type: reference" in content
+
+    def test_gate_disabled_skips_check(self, vault):
+        """When quality_gate_enabled is false, classifications are applied without gating."""
+        note_path = write_note(vault, "Note.md", "# Note\n\nBody text.")
+
+        classification = [{
+            "index": 0,
+            "type": "insight",
+            "summary": "A note.",
+            "tags": ["test"],
+            "skip": False,
+        }]
+
+        with patch("shared._resolve_config", return_value=self._config(vault, gate_enabled=False)):
+            with patch("backends.call_model", return_value=json.dumps(classification)):
+                # quality_gate should NOT be called at all
+                with patch("quality_gate.quality_gate", side_effect=AssertionError("should not be called")) as mock_gate:
+                    result = cb_enrich()
+
+        assert "Enriched:     1" in result
+        mock_gate.assert_not_called()
+
+    def test_gate_blocks_some_passes_others_in_batch(self, vault):
+        """In a batch, gate blocks bad items while passing good ones."""
+        from unittest.mock import MagicMock as _MagicMock
+        # Files are sorted alphabetically: Bad.md (idx 0), Good.md (idx 1)
+        note_b = write_note(vault, "Bad.md", "# Bad\n\nBad content.")
+        note_a = write_note(vault, "Good.md", "# Good\n\nGood content.")
+
+        classification = [
+            {"index": 0, "type": "problem", "summary": "Nonsense.", "tags": ["cooking"], "skip": False},
+            {"index": 1, "type": "reference", "summary": "Good summary.", "tags": ["good"], "skip": False},
+        ]
+
+        pass_verdict = _MagicMock()
+        pass_verdict.passed = True
+        pass_verdict.confidence = 0.9
+
+        fail_verdict = _MagicMock()
+        fail_verdict.passed = False
+        fail_verdict.rationale = "Tags are irrelevant"
+        fail_verdict.confidence = 0.2
+
+        call_count = [0]
+        def gate_side_effect(op, inp, out, cfg):
+            call_count[0] += 1
+            if "Good.md" in inp:
+                return pass_verdict
+            return fail_verdict
+
+        with patch("shared._resolve_config", return_value=self._config(vault)):
+            with patch("backends.call_model", return_value=json.dumps(classification)):
+                with patch("quality_gate.quality_gate", side_effect=gate_side_effect):
+                    result = cb_enrich()
+
+        assert "Enriched:     1" in result
+        assert "Gate blocked: 1" in result
+        # Good note was enriched
+        assert "type: reference" in note_a.read_text()
+        # Bad note was NOT enriched
+        assert "type: problem" not in note_b.read_text()
+
+    def test_gate_report_shows_rationale(self, vault):
+        """The report includes the gate's rationale for blocked items."""
+        from unittest.mock import MagicMock as _MagicMock
+        write_note(vault, "Note.md", "# Note\n\nContent.")
+
+        classification = [{"index": 0, "type": "insight", "summary": "X.", "tags": ["x"], "skip": False}]
+
+        fail_verdict = _MagicMock()
+        fail_verdict.passed = False
+        fail_verdict.rationale = "Summary does not match content"
+        fail_verdict.confidence = 0.3
+
+        with patch("shared._resolve_config", return_value=self._config(vault)):
+            with patch("backends.call_model", return_value=json.dumps(classification)):
+                with patch("quality_gate.quality_gate", return_value=fail_verdict):
+                    result = cb_enrich()
+
+        assert "Blocked by quality gate" in result
+        assert "Summary does not match content" in result
+
+
+# ---------------------------------------------------------------------------
 # cb_enrich — frontmatter application helpers
 # ---------------------------------------------------------------------------
 
@@ -1131,31 +1301,29 @@ class TestNeedsEnrichmentEdgeCases:
 
 
 class TestLoadPrompt:
-    """Cover _load_prompt path resolution branches."""
+    """Cover _load_tool_prompt path resolution branches (now in shared.py)."""
 
     def test_load_prompt_uses_installed_path_when_it_exists(self, tmp_path):
-        """Line 26: returns content from installed prompts dir when file exists."""
-        from tools.enrich import _load_prompt
+        """Returns content from installed prompts dir when file exists."""
+        from shared import _load_tool_prompt
         fake_installed = tmp_path / "prompts"
         fake_installed.mkdir()
         prompt_file = fake_installed / "enrich-system.md"
         prompt_file.write_text("# Installed prompt\n")
 
-        with patch("tools.enrich._PROMPTS_DIR", fake_installed):
-            result = _load_prompt("enrich-system.md")
+        with patch("shared._PROMPTS_DIR", fake_installed):
+            result = _load_tool_prompt("enrich-system.md")
 
         assert result == "# Installed prompt\n"
 
     def test_load_prompt_raises_tool_error_simple(self, tmp_path):
-        """Line 31: ToolError raised when installed dir doesn't exist and dev path missing."""
-        import sys
-        from tools.enrich import _load_prompt
+        """ToolError raised when installed dir doesn't exist and dev path missing."""
+        from shared import _load_tool_prompt
         nonexistent = tmp_path / "no-such-prompts"
 
-        # Point _PROMPTS_DIR at nonexistent; dev path also won't exist for a made-up filename
-        with patch("tools.enrich._PROMPTS_DIR", nonexistent):
+        with patch("shared._PROMPTS_DIR", nonexistent):
             with pytest.raises(ToolError, match="not found"):
-                _load_prompt("this-file-does-not-exist-anywhere.md")
+                _load_tool_prompt("this-file-does-not-exist-anywhere.md")
 
 
 # ---------------------------------------------------------------------------

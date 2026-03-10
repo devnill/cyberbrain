@@ -1,0 +1,101 @@
+# Automatic Invocation Validation — Test Results
+
+## Execution Metadata
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-03-09 |
+| **Claude Desktop version** | Current (macOS) |
+| **Claude Code version** | 2.1.71 |
+| **MCP server commit** | e88d48f |
+| **FastMCP version** | 3.1.0 |
+| **Config at start** | proactive_recall: true, desktop_capture_mode: suggest, backend: claude-code |
+| **Vault note count** | 1,630 |
+| **OS** | macOS 26.3.1 |
+
+---
+
+## Test Results
+
+### Group A — Proactive Recall
+
+| ID | Description | Result | Notes |
+|---|---|---|---|
+| A1 | Proactive recall on topic mention (Desktop) | **Pass** | Orient prompt loaded, mentioned "pinball", model called cb_recall proactively and integrated results. |
+| A2 | Proactive recall on topic mention (Code) | **Fail (expected)** | Claude Code has no mechanism to auto-load the guide resource. Model used its own memory instead of calling cb_recall. |
+| A3 | Proactive recall disabled (Desktop) | **Pass** | With proactive_recall: false, model did not call cb_recall proactively after topic mention. |
+| A4 | Proactive recall via CLAUDE.md hint (Code) | **Pass** | CLAUDE.md instruction "call cb_recall with pinball" triggered cb_recall on first user message. Did not fire at absolute startup (expected — no tool calls until user input). |
+| A5 | Mid-session topic shift (Desktop) | **Pass** | Shifted from pinball to ham radio. Model proactively called cb_recall for ham radio and returned relevant notes. |
+
+### Group B — Resource Loading
+
+| ID | Description | Result | Notes |
+|---|---|---|---|
+| B1 | Guide resource auto-fetch (Desktop) | **Fail** | Claude Desktop does not auto-fetch cyberbrain://guide. Model listed tools from MCP tool descriptions only, lacking behavioral guidance. |
+| B2 | Guide resource manual fetch (Desktop) | **Fail** | Model called cb_read looking for a vault note instead of fetching the MCP resource URI. Desktop doesn't support explicit resource reads from user request. |
+| B3 | Guide resource availability (Code) | **Pass** | Claude Code CLI successfully read the resource via readMcpResource. Full guide text returned. |
+| B4 | Guide content reflects config changes | **Pass** | After setting proactive_recall: false and capture_mode: auto, guide text updated accordingly. Recall section changed to "suggest and confirm", capture section changed to "call immediately". Tested in Claude Code CLI. |
+
+### Group C — Prompt Invocation
+
+| ID | Description | Result | Notes |
+|---|---|---|---|
+| C1 | Orient prompt appears in picker (Desktop) | **Pass** | Found via plus > connectors > cyberbrain > orient. |
+| C2 | Orient prompt executes correctly (Desktop) | **Pass** | Injected guide content, model called cb_status and cb_recall. |
+| C3 | Recall prompt appears in picker (Desktop) | **Pass** | Available in same connector menu. |
+| C4 | Recall prompt scans and queries (Desktop) | **Pass** | After discussing pinball and ham radio, recall prompt triggered 2 cb_recall calls with summary. |
+| C5 | Prompts in Claude Code | **Pass** | Accessible via /mcp__cyberbrain__orient syntax. Executed correctly, called cb_status. |
+
+### Group D — Cross-Client Behavior Differences
+
+| ID | Description | Result | Notes |
+|---|---|---|---|
+| D1 | Tool discovery without guide (both) | **Pass** | Both clients found and used tools from descriptions alone. Desktop called cb_recall when asked to search notes. |
+| D2 | Capture mode behavior (Desktop) | **Partial** | suggest: pass (offered and waited). auto: pass (filed immediately). manual: **partial** — model still offered to file when it should not have. Guide says "only when asked" but model offered anyway. |
+| D3 | CLAUDE.md-driven invocation (Code) | **Pass** | Covered by A4. CLAUDE.md instructions effectively drive tool usage. |
+
+---
+
+## Summary
+
+**Pass: 12 | Fail: 2 | Partial: 1 | Expected Fail: 1**
+
+---
+
+## Gap Analysis
+
+### What works as expected
+
+- Orient and recall MCP prompts work in both Claude Desktop (picker) and Claude Code (/mcp__ syntax)
+- Proactive recall with proactive_recall: true triggers reliably in Desktop after orient
+- Proactive recall: false correctly suppresses automatic cb_recall calls
+- Guide resource is dynamic — reflects config changes in real time
+- CLAUDE.md instructions effectively substitute for the guide resource in Claude Code
+- Tool discovery from descriptions works in both clients
+- Capture modes suggest and auto behave correctly
+
+### What does not work
+
+- **Guide resource auto-fetch (B1)**: Claude Desktop does not auto-fetch MCP resources. The guide only loads when the orient prompt is selected. This means proactive recall only works when the user explicitly selects orient at session start.
+- **Manual resource read in Desktop (B2)**: Claude Desktop cannot fetch MCP resources by URI on user request. Claude Code CLI can via readMcpResource.
+- **Manual capture mode (D2)**: The model still offers to file in manual mode. The guide says "only when explicitly asked" but the model's tendency to be helpful overrides the instruction. May need stronger wording or a different approach.
+
+### Client capability matrix
+
+| Capability | Claude Desktop | Claude Code |
+|---|---|---|
+| Auto-fetch resources | No | No |
+| Manual resource read | No | Yes (readMcpResource) |
+| Prompt picker | Yes (connectors menu) | Yes (/mcp__ syntax) |
+| Proactive tool calls (from guide) | Yes (after orient) | N/A (no guide loading) |
+| Proactive tool calls (from CLAUDE.md) | N/A | Yes |
+| Tool discovery from descriptions | Yes | Yes |
+
+### Recommendations
+
+1. **Orient prompt is essential for Desktop** — since auto-fetch doesn't work, users must manually select orient to get proactive recall. Consider making cb_setup generate a reminder about this.
+2. **CLAUDE.md is the path for Claude Code** — cb_setup should generate CLAUDE.md instructions that replicate guide behavior (recall on topic mention, file on decision). This is already partially working (A4).
+3. **Manual capture mode needs stronger enforcement** — consider removing the filing suggestion from the guide entirely in manual mode, or using more emphatic language ("Do NOT offer to file anything").
+4. **proactive_recall should be in cb_configure** — currently only settable by editing config.json directly. Add it as a cb_configure parameter.
+5. **Guide resource remains valuable** — even without auto-fetch, it works well via orient prompt and dynamically reflects config. Worth maintaining.
+6. **Claude Code's readMcpResource is underutilized** — could add a CLAUDE.md instruction to read the guide at session start as an alternative to orient.

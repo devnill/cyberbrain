@@ -9,7 +9,7 @@ NOT responsible for: individual tool logic (mcp-tools module), extractor interna
 ## Provides
 
 ### From `server.py`:
-- FastMCP instance named `"cyberbrain"` with 10 registered tools, 1 resource, 2 prompts.
+- FastMCP instance named `"cyberbrain"` with 11 registered tools, 1 resource, 2 prompts.
 - Entry point: `python3 server.py` starts the MCP server (stdio transport).
 
 ### From `shared.py`:

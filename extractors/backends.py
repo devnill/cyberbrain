@@ -246,6 +246,25 @@ def _call_ollama(system_prompt: str, user_message: str, config: dict) -> str:
             )
 
 
+def get_model_for_tool(config: dict, tool: str) -> str:
+    """Return the model to use for a specific tool.
+
+    Checks for a dedicated <tool>_model config key (e.g. restructure_model,
+    enrich_model, judge_model); falls back to the global model if not set.
+    """
+    tool_key = f"{tool}_model"
+    return config.get(tool_key, config.get("model", CLI_DEFAULT_MODEL))
+
+
+def get_judge_model(config: dict) -> str:
+    """Return the model to use for quality gate judgments.
+
+    Checks for a dedicated judge_model config key; falls back to the
+    default model if not set. Delegates to get_model_for_tool internally.
+    """
+    return get_model_for_tool(config, "judge")
+
+
 def call_model(system_prompt: str, user_message: str, config: dict) -> str:
     backend = config.get("backend", DEFAULT_BACKEND)
     if backend == "claude-code":

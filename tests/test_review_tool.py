@@ -3,7 +3,6 @@ test_review_tool.py — unit tests for mcp/tools/review.py
 
 Covers:
 - _read_vault_prefs: no CLAUDE.md, no prefs heading, has prefs, with following section
-- _is_within_vault: inside/outside vault
 - _find_due_notes: finds due notes, skips non-ephemeral, skips bad dates, skips hidden dirs
 - _cluster_notes: single note, backend=None returns singletons, multi-note with backend
 - _format_notes_block: singleton, multi-note cluster
@@ -34,9 +33,17 @@ for d in [str(MCP_DIR), str(EXTRACTORS_DIR), str(REPO_ROOT)]:
         sys.path.insert(0, d)
 
 # conftest.py installs shared extract_beats mock.
-for _mod in ["shared", "tools.review"]:
+# Pre-install a mock quality_gate module so the real one (which imports from
+# backends at module level) is never loaded during tests.
+if "quality_gate" not in sys.modules:
+    _mock_qg = MagicMock()
+    sys.modules["quality_gate"] = _mock_qg
+
+for _mod in ["tools.review"]:
     sys.modules.pop(_mod, None)
 
+if "shared" not in sys.modules:
+    sys.modules.pop("shared", None)
 import shared as _shared  # noqa: E402
 import tools.review as review_mod  # noqa: E402
 from fastmcp.exceptions import ToolError  # noqa: E402
@@ -119,14 +126,14 @@ class TestReadVaultPrefs:
 class TestIsWithinVault:
     def test_path_inside_vault(self, tmp_path):
         sub = tmp_path / "notes" / "note.md"
-        assert review_mod._is_within_vault(tmp_path, sub) is True
+        assert _shared._is_within_vault(tmp_path, sub) is True
 
     def test_path_outside_vault(self, tmp_path):
         outside = Path("/tmp/other_location")
-        assert review_mod._is_within_vault(tmp_path, outside) is False
+        assert _shared._is_within_vault(tmp_path, outside) is False
 
     def test_vault_itself(self, tmp_path):
-        assert review_mod._is_within_vault(tmp_path, tmp_path) is True
+        assert _shared._is_within_vault(tmp_path, tmp_path) is True
 
 
 # ===========================================================================
@@ -601,6 +608,208 @@ class TestCbReviewActions:
             result = _cb_review()(dry_run=False)
         assert "Deleted:" in result
         assert "Working Memory Review Complete" in result
+
+
+class TestCbReviewQualityGate:
+    """Verify that the quality gate blocks bad review decisions."""
+
+    def _setup(self, tmp_path):
+        config = _base_config(tmp_path)
+        wm = tmp_path / "AI" / "WM"
+        wm.mkdir(parents=True)
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        path = _make_wm_note(wm, "Test Note", yesterday, summary="a summary")
+        return config, path
+
+    def test_gate_blocks_bad_delete(self, tmp_path):
+        """A delete decision that fails the gate is not executed."""
+        config, path = self._setup(tmp_path)
+        decisions = [{"action": "delete", "indices": [0], "rationale": "stale"}]
+
+        fail_verdict = MagicMock()
+        fail_verdict.passed = False
+        fail_verdict.rationale = "Note is only 1 day old and topic may still be active"
+        fail_verdict.confidence = 0.3
+
+        with patch.object(review_mod, "_load_config", return_value=config), \
+             patch.object(review_mod, "_get_search_backend", return_value=None), \
+             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
+             patch.object(review_mod, "_index_paths"), \
+             patch.object(review_mod, "_prune_index"), \
+             patch("backends.call_model", return_value=json.dumps(decisions)), \
+             patch("backends.BackendError", Exception), \
+             patch("quality_gate.quality_gate", return_value=fail_verdict):
+            result = _cb_review()(dry_run=False)
+
+        # File should still exist
+        assert path.exists()
+        assert "Gate blocked delete" in result
+        assert "Deleted:   0" in result
+        assert "Blocked:   1" in result
+
+    def test_gate_passes_good_delete(self, tmp_path):
+        """A delete decision that passes the gate is executed."""
+        config, path = self._setup(tmp_path)
+        decisions = [{"action": "delete", "indices": [0], "rationale": "stale"}]
+
+        pass_verdict = MagicMock()
+        pass_verdict.passed = True
+        pass_verdict.confidence = 0.9
+
+        with patch.object(review_mod, "_load_config", return_value=config), \
+             patch.object(review_mod, "_get_search_backend", return_value=None), \
+             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
+             patch.object(review_mod, "_index_paths"), \
+             patch.object(review_mod, "_prune_index"), \
+             patch("backends.call_model", return_value=json.dumps(decisions)), \
+             patch("backends.BackendError", Exception), \
+             patch("quality_gate.quality_gate", return_value=pass_verdict):
+            result = _cb_review()(dry_run=False)
+
+        assert not path.exists()
+        assert "Deleted:   1" in result
+        assert "Blocked:   0" in result
+
+    def test_gate_blocks_bad_promote(self, tmp_path):
+        """A promote decision that fails the gate is not executed."""
+        config, path = self._setup(tmp_path)
+        promoted_content = "---\ntitle: Promoted\ntype: reference\n---\n\nBody\n"
+        decisions = [{
+            "action": "promote",
+            "indices": [0],
+            "rationale": "valuable",
+            "promoted_title": "My Note",
+            "promoted_path": "Knowledge/Promoted.md",
+            "promoted_content": promoted_content,
+        }]
+
+        fail_verdict = MagicMock()
+        fail_verdict.passed = False
+        fail_verdict.rationale = "Content is still working-memory level"
+        fail_verdict.confidence = 0.4
+
+        with patch.object(review_mod, "_load_config", return_value=config), \
+             patch.object(review_mod, "_get_search_backend", return_value=None), \
+             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
+             patch.object(review_mod, "_index_paths"), \
+             patch.object(review_mod, "_prune_index"), \
+             patch("backends.call_model", return_value=json.dumps(decisions)), \
+             patch("backends.BackendError", Exception), \
+             patch("quality_gate.quality_gate", return_value=fail_verdict):
+            result = _cb_review()(dry_run=False)
+
+        # Promoted file should NOT exist
+        assert not (tmp_path / "Knowledge" / "Promoted.md").exists()
+        assert "Gate blocked promote" in result
+        assert "Promoted:  0" in result
+
+    def test_gate_disabled_skips_check(self, tmp_path):
+        """When quality_gate_enabled is false, decisions execute without gating."""
+        config, path = self._setup(tmp_path)
+        config["quality_gate_enabled"] = False
+        decisions = [{"action": "delete", "indices": [0], "rationale": "stale"}]
+
+        with patch.object(review_mod, "_load_config", return_value=config), \
+             patch.object(review_mod, "_get_search_backend", return_value=None), \
+             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
+             patch.object(review_mod, "_index_paths"), \
+             patch.object(review_mod, "_prune_index"), \
+             patch("backends.call_model", return_value=json.dumps(decisions)), \
+             patch("backends.BackendError", Exception), \
+             patch("quality_gate.quality_gate", side_effect=AssertionError("should not be called")) as mock_gate:
+            result = _cb_review()(dry_run=False)
+
+        assert not path.exists()
+        mock_gate.assert_not_called()
+
+    def test_gate_blocks_some_passes_others(self, tmp_path):
+        """In a multi-decision review, gate blocks some actions while passing others."""
+        config = _base_config(tmp_path)
+        wm = tmp_path / "AI" / "WM"
+        wm.mkdir(parents=True)
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        path_a = _make_wm_note(wm, "Stale Task", yesterday, summary="old task")
+        path_b = _make_wm_note(wm, "Active Bug", yesterday, summary="active bug")
+
+        decisions = [
+            {"action": "delete", "indices": [0], "rationale": "no longer relevant"},
+            {"action": "delete", "indices": [1], "rationale": "also stale"},
+        ]
+
+        pass_verdict = MagicMock()
+        pass_verdict.passed = True
+        pass_verdict.confidence = 0.9
+
+        fail_verdict = MagicMock()
+        fail_verdict.passed = False
+        fail_verdict.rationale = "Bug is still active"
+        fail_verdict.confidence = 0.2
+
+        call_count = [0]
+        def gate_side_effect(op, inp, out, cfg):
+            call_count[0] += 1
+            if "Active Bug" in inp:
+                return fail_verdict
+            return pass_verdict
+
+        with patch.object(review_mod, "_load_config", return_value=config), \
+             patch.object(review_mod, "_get_search_backend", return_value=None), \
+             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
+             patch.object(review_mod, "_index_paths"), \
+             patch.object(review_mod, "_prune_index"), \
+             patch("backends.call_model", return_value=json.dumps(decisions)), \
+             patch("backends.BackendError", Exception), \
+             patch("quality_gate.quality_gate", side_effect=gate_side_effect):
+            result = _cb_review()(dry_run=False)
+
+        assert "Deleted:   1" in result
+        assert "Blocked:   1" in result
+        assert "Bug is still active" in result
+
+    def test_gate_report_includes_confidence(self, tmp_path):
+        """The report shows the gate's confidence score for blocked items."""
+        config, path = self._setup(tmp_path)
+        decisions = [{"action": "extend", "indices": [0], "rationale": "still active"}]
+
+        fail_verdict = MagicMock()
+        fail_verdict.passed = False
+        fail_verdict.rationale = "Topic seems resolved"
+        fail_verdict.confidence = 0.45
+
+        with patch.object(review_mod, "_load_config", return_value=config), \
+             patch.object(review_mod, "_get_search_backend", return_value=None), \
+             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
+             patch.object(review_mod, "_index_paths"), \
+             patch.object(review_mod, "_prune_index"), \
+             patch("backends.call_model", return_value=json.dumps(decisions)), \
+             patch("backends.BackendError", Exception), \
+             patch("quality_gate.quality_gate", return_value=fail_verdict):
+            result = _cb_review()(dry_run=False)
+
+        assert "confidence: 0.45" in result
+        assert "Topic seems resolved" in result
+
+    def test_gate_fail_shows_configure_hint(self, tmp_path):
+        """FAIL verdict output includes cb_configure hint to disable gates."""
+        config, path = self._setup(tmp_path)
+        decisions = [{"action": "delete", "indices": [0], "rationale": "stale"}]
+
+        fail_verdict = MagicMock()
+        fail_verdict.passed = False
+        fail_verdict.rationale = "Note is still relevant"
+        fail_verdict.confidence = 0.3
+
+        with patch.object(review_mod, "_load_config", return_value=config), \
+             patch.object(review_mod, "_get_search_backend", return_value=None), \
+             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
+             patch.object(review_mod, "_index_paths"), \
+             patch.object(review_mod, "_prune_index"), \
+             patch("backends.call_model", return_value=json.dumps(decisions)), \
+             patch("backends.BackendError", Exception), \
+             patch("quality_gate.quality_gate", return_value=fail_verdict):
+            result = _cb_review()(dry_run=False)
+
+        assert "cb_configure(quality_gate_enabled=False)" in result
 
 
 class TestCbReviewLoadPromptError:

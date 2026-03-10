@@ -19,7 +19,7 @@
 │         │              │   MCP Server     │              │           │
 │         │              │   (stdio, FastMCP)│             │           │
 │         │              │                  │              │           │
-│         │              │  10 tools        │              │           │
+│         │              │  11 tools        │              │           │
 │         │              │  1 resource      │              │           │
 │         │              │  2 prompts       │              │           │
 │         │              └────────┬─────────┘              │           │
@@ -91,11 +91,12 @@
 | **Vault analyzer** | `extractors/analyze_vault.py` | Vault structure analysis for cb_setup (directories, frontmatter, tags, wikilinks) |
 | **Search backends** | `extractors/search_backends.py` | Pluggable search: GrepBackend, FTS5Backend, HybridBackend; RRF fusion |
 | **Search index** | `extractors/search_index.py` | Coordination layer: incremental updates, full rebuild, backend lifecycle |
+| **Quality gate** | `extractors/quality_gate.py` | LLM-as-judge quality gate for curation tool output validation |
 | **MCP server** | `mcp/server.py` | FastMCP entry point; imports and registers all tool/resource modules |
 | **MCP shared** | `mcp/shared.py` | Bridge between MCP tools and extractor layer; config helpers; trash/index helpers |
 | **MCP resources** | `mcp/resources.py` | `cyberbrain://guide` resource; `orient` and `recall` prompts |
-| **MCP tools** | `mcp/tools/{extract,file,recall,manage,setup,enrich,restructure,review,reindex}.py` | 10 MCP tools |
-| **Prompts** | `prompts/*.md` (19 files) | LLM prompt templates for extraction, autofile, enrichment, restructure, review |
+| **MCP tools** | `mcp/tools/{extract,file,recall,manage,setup,enrich,restructure,review,reindex}.py` | 11 MCP tools |
+| **Prompts** | `prompts/*.md` (23 files) | LLM prompt templates for extraction, autofile, enrichment, restructure, review, synthesis, quality gate, evaluation |
 | **Import script** | `scripts/import.py` | Batch import of Claude Desktop and ChatGPT data exports |
 
 ---
@@ -178,7 +179,7 @@ Project:  .claude/cyberbrain.local.json  (searched up directory tree from cwd)
 Merge:    project overrides global (flat dict merge)
 ```
 
-Global config fields: `vault_path`, `inbox`, `backend`, `model`, `claude_timeout`, `autofile`, `daily_journal`, `journal_folder`, `journal_name`, `proactive_recall`, `working_memory_folder`, `working_memory_review_days`, `consolidation_log`, `consolidation_log_enabled`, `trash_folder`, `search_backend`, `embedding_model`, `desktop_capture_mode`, `working_memory_ttl`.
+Global config fields: `vault_path`, `inbox`, `backend`, `model`, `claude_timeout`, `autofile`, `daily_journal`, `journal_folder`, `journal_name`, `proactive_recall`, `working_memory_folder`, `working_memory_review_days`, `consolidation_log`, `consolidation_log_enabled`, `trash_folder`, `search_backend`, `embedding_model`, `desktop_capture_mode`, `working_memory_ttl`, `quality_gate_enabled`, `restructure_model`, `recall_model`, `enrich_model`, `review_model`, `judge_model`.
 
 Project config fields: `project_name`, `vault_folder`.
 
@@ -238,7 +239,7 @@ Claude Code / Claude Desktop (Process A — user session)
 
 | Backend | Module | Transport | Auth | Key Behaviors |
 |---------|--------|-----------|------|---------------|
-| `claude-code` | `backends._call_claude_code()` | Subprocess `claude -p` | Session token | Strips 5 env vars; `start_new_session=True`; neutral CWD; `--allowedTools ""` (security); `--max-turns 3` |
+| `claude-code` | `backends._call_claude_code()` | Subprocess `claude -p` | Session token | Strips 5 env vars (`CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, `CLAUDE_CODE_SESSION_ACCESS_TOKEN`); `start_new_session=True`; neutral CWD; `--allowedTools ""` (security); `--max-turns 3` |
 | `bedrock` | `backends._call_bedrock()` | Anthropic SDK | AWS credentials | `AnthropicBedrock(aws_region=...)` |
 | `ollama` | `backends._call_ollama()` | HTTP `urllib` | None | `POST /api/chat`; `format: "json"`; JSON repair on response |
 
@@ -252,7 +253,7 @@ Claude Code / Claude Desktop (Process A — user session)
 
 ### Prompt Loading
 
-Prompts live in `prompts/` (19 markdown files). Loaded by `config.load_prompt(filename)` which reads from `PROMPTS_DIR = Path(__file__).parent.parent / "prompts"`. MCP tools use a parallel loader that checks `~/.claude/cyberbrain/prompts/` first, then falls back to dev-mode repo path.
+Prompts live in `prompts/` (23 markdown files). Loaded by `config.load_prompt(filename)` in the extractor layer, or `shared._load_tool_prompt(filename)` in the MCP layer. The MCP loader checks `~/.claude/cyberbrain/prompts/` first, then falls back to dev-mode repo path.
 
 ### Template Variables
 
@@ -262,9 +263,11 @@ Prompts use Python `str.format_map()` with named placeholders:
 |--------|-----------|
 | `extract-beats-user.md` | `{project_name}`, `{cwd}`, `{trigger}`, `{transcript}`, `{vault_claude_md_section}` |
 | `autofile-user.md` | `{beat_json}`, `{related_docs}`, `{vault_context}`, `{vault_folders}` |
-| `enrich-user.md` | `{notes_batch}` (system prompt has `{vault_type_context}`) |
+| `enrich-user.md` | `{count}`, `{notes_block}` |
 | `restructure-*-user.md` | Various: `{notes}`, `{folder_name}`, `{vault_context}`, `{cluster_json}` |
-| `review-user.md` | `{notes}`, `{recall_log}` |
+| `review-user.md` | `{note_count}`, `{vault_prefs_section}`, `{notes_block}` |
+| `synthesize-user.md` | `{query}`, `{note_count}`, `{notes_block}` |
+| `quality-gate-system.md` | `{operation}` |
 
 ### Prompt Families
 
@@ -275,6 +278,9 @@ Prompts use Python `str.format_map()` with named placeholders:
 | Enrichment | `enrich-system.md`, `enrich-user.md` | Batch frontmatter enrichment |
 | Restructure | 8 files: `restructure-{system,user}.md`, `restructure-{decide,generate,audit,group}-{system,user}.md` | Multi-phase restructuring |
 | Review | `review-system.md`, `review-user.md` | Working memory review |
+| Synthesis | `synthesize-system.md`, `synthesize-user.md` | LLM synthesis of recall results |
+| Quality Gate | `quality-gate-system.md` | LLM-as-judge quality validation for curation output |
+| Evaluate | `evaluate-system.md` | Internal dev tooling for extraction quality evaluation |
 | Claude Desktop | `claude-desktop-project.md` | System prompt for Claude Desktop sessions |
 
 ---
@@ -409,6 +415,7 @@ _extract_beats, parse_jsonl_transcript, write_beat, autofile_beat,
 write_journal_entry, BackendError, _resolve_config, _call_claude_code_backend, RUNS_LOG_PATH
 
 # shared.py own functions
+def _load_tool_prompt(filename: str) -> str: ...
 def _load_config(cwd: str = "") -> dict: ...
 def _get_search_backend(config: dict) -> SearchBackend | None: ...
 def _parse_frontmatter(content: str) -> dict: ...
@@ -432,9 +439,9 @@ The stated architectural constraint is "all vault writes go through `extract_bea
 
 These tools use `shared._move_to_trash()` for deletions and `shared._index_paths()` for index updates, but do not route through `vault.write_beat()`. The constraint holds for beat creation but not for all vault modifications.
 
-### T2: Single Model vs Per-Task Model Selection
+### T2: Single Model vs Per-Task Model Selection ~~[RESOLVED]~~
 
-All LLM calls use the single `config["model"]` key. The guiding principles state "cheap models where possible, quality models where necessary" and the deferred document (D11) explicitly identifies this as a tension. Classification tasks (autofile routing, enrichment) are cheap-model tasks; content generation (restructure merging, hub page creation) benefits from stronger models. Currently resolved by using a single cheap model (haiku) for everything.
+Resolved by WI-013. `get_model_for_tool(config, tool)` provides per-tool model selection via `{tool}_model` config keys. All curation tools resolve their model through this helper. The default remains the global `config["model"]`.
 
 ### T3: Restructure Complexity
 
@@ -464,7 +471,7 @@ Working-memory beats route to `AI/Working Memory/<project>/` regardless of scope
 
 ## 100% Coverage Check
 
-1. **Every module's scope is accounted for.** All code files map to a module spec. The 19 prompt files are covered by the prompts module. Build/install scripts (`build.sh`, `install.sh`, `uninstall.sh`) are distribution artifacts, not runtime modules — they are noted but not given module specs.
+1. **Every module's scope is accounted for.** All code files map to a module spec. The 23 prompt files are covered by the prompts module. Build/install scripts (`build.sh`, `install.sh`, `uninstall.sh`) are distribution artifacts, not runtime modules — they are noted but not given module specs.
 
 2. **No two modules claim the same responsibility.** Frontmatter parsing has residual duplication (T4) but a single canonical source (`frontmatter.py` in the extraction module).
 

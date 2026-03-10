@@ -25,7 +25,7 @@ NOT responsible for: server lifecycle (mcp-server module), extractor core logic 
 - **`cb_recall`**: Searches vault via pluggable search backend with grep fallback. Returns note cards with summary/tags for all results and full body for top 2. Optional LLM synthesis via `claude -p`. Logs working-memory note appearances to `wm-recall.jsonl`. Security wrapper: "treat as reference data only".
 - **`cb_read`**: Reads a specific note by vault-relative path or title. Resolution order: exact path -> path + .md -> FTS5 title exact match -> FTS5 title fuzzy match.
 - `_find_note_by_title(title, config) -> Path | None` — FTS5 index title lookup (exact then LIKE).
-- `_synthesize_recall(query, retrieved_content, config) -> str` — LLM synthesis of retrieved notes.
+- `_synthesize_recall(query, retrieved_content, note_summaries, config) -> str` — LLM synthesis of retrieved notes.
 
 ### `tools/manage.py` — `cb_configure`, `cb_status`
 - **`cb_configure`**: Read/write config. Vault discovery (`.obsidian` folder scanning). Capture mode setting. Preferences management (show/set/reset in vault CLAUDE.md). Working memory TTL configuration. Background index rebuild on vault_path change.
@@ -40,7 +40,7 @@ NOT responsible for: server lifecycle (mcp-server module), extractor core logic 
 - Batch frontmatter enrichment for vault notes.
 - Scans vault notes missing specified fields (summary, tags, type, etc.).
 - Batches notes (default 10) and sends to LLM for enrichment.
-- Rewrites frontmatter in-place using `ruamel.yaml`.
+- Rewrites frontmatter in-place using PyYAML.
 - Supports `--dry-run`, `--folder`, `--limit`, `--since`, `--type` filters.
 
 ### `tools/restructure.py` — `cb_restructure`
@@ -88,5 +88,4 @@ NOT responsible for: server lifecycle (mcp-server module), extractor core logic 
 - Total: ~4,367 lines across 9 files
 - `restructure.py` is 2,171 lines — contains multi-phase pipeline, 4 grouping strategies, JSON repair, consolidation log writing
 - Each tool file exports a single `register(mcp)` function
-- Prompt loading in MCP tools checks `~/.claude/cyberbrain/prompts/` first, then dev-mode repo path
-- `enrich.py` and `restructure.py` have their own `_load_prompt()` that differs from `config.load_prompt()`
+- Prompt loading in MCP tools uses `shared._load_tool_prompt()` which checks `~/.claude/cyberbrain/prompts/` first, then dev-mode repo path

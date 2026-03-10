@@ -745,15 +745,20 @@ class TestCbRecallSynthesize:
     def test_synthesize_recall_prepends_synthesis_before_retrieved_content(self, tmp_path):
         config = {**BASE_CONFIG, "vault_path": str(tmp_path)}
         retrieved = "## Retrieved from knowledge vault\n\nsome vault content\n## End of retrieved content"
-        with patch.object(_recall_mod, "_call_claude_code_backend", return_value="Here is the synthesis."):
-            result = _recall_mod._synthesize_recall("test query", retrieved, config)
-        assert result.index("synthesis") < result.index("Retrieved from knowledge vault")
+        note_summaries = [{"title": "Note 1", "type": "insight", "tags": [], "date": "2026-01-01", "source": "Note1.md", "summary": "s", "body_excerpt": "body"}]
+        with patch.object(_recall_mod, "_call_claude_code_backend", return_value="Here is the synthesis."), \
+             patch.object(_recall_mod, "_load_prompt", return_value="prompt"):
+            result = _recall_mod._synthesize_recall("test query", retrieved, note_summaries, config)
+        assert "## Relevant Knowledge" in result
+        assert "Here is the synthesis" in result
 
     def test_synthesize_recall_falls_back_gracefully_on_error(self, tmp_path):
         config = {**BASE_CONFIG, "vault_path": str(tmp_path)}
         retrieved = "## Retrieved from knowledge vault\n\nsome content\n## End of retrieved content"
-        with patch.object(_recall_mod, "_call_claude_code_backend", side_effect=RuntimeError("backend error")):
-            result = _recall_mod._synthesize_recall("test query", retrieved, config)
+        note_summaries = [{"title": "Note 1", "type": "insight", "tags": [], "date": "2026-01-01", "source": "Note1.md", "summary": "s", "body_excerpt": "body"}]
+        with patch.object(_recall_mod, "_call_claude_code_backend", side_effect=RuntimeError("backend error")), \
+             patch.object(_recall_mod, "_load_prompt", return_value="prompt"):
+            result = _recall_mod._synthesize_recall("test query", retrieved, note_summaries, config)
         assert "some content" in result
         assert "Synthesis failed" in result or "synthesis failed" in result.lower()
 
@@ -1086,6 +1091,8 @@ class TestResources:
         with patch.object(_resources_mod, "_load_config", return_value=config):
             guide = _resources_mod._get_guide()
         assert "explicitly" in guide.lower() or "manual" in guide.lower()
+        assert "NEVER" in guide
+        assert "Do NOT" in guide
 
 
 # ===========================================================================

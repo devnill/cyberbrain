@@ -25,25 +25,10 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-import yaml
+from frontmatter import parse_frontmatter
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
-
-def parse_frontmatter(text: str) -> dict:
-    """Extract YAML frontmatter from markdown. Returns {} if none found."""
-    if not text.startswith("---"):
-        return {}
-    end = text.find("\n---", 3)
-    if end == -1:
-        return {}
-    fm_text = text[3:end].strip()
-    try:
-        result = yaml.safe_load(fm_text)
-        return result if isinstance(result, dict) else {}
-    except yaml.YAMLError:
-        return {}
-
 
 def extract_wikilinks(text: str) -> list[str]:
     """Extract all [[wikilink]] targets from markdown text."""

@@ -260,7 +260,6 @@ cb_configure(reset_prefs=True)             # restore defaults
 ```
 cb_restructure(dry_run=True)                    # preview proposed changes (always start here)
 cb_restructure(folder="Projects/myapp")         # target a specific folder
-cb_restructure(similarity_threshold=0.7)        # lower threshold = more aggressive clustering
 cb_restructure(split_threshold=3000)            # min note size (chars) to be a split candidate
 ```
 
@@ -376,7 +375,7 @@ The installer registers a FastMCP server in Claude Desktop, exposing eleven tool
 | `cb_setup(vault_path?, dry_run?)` | Analyze vault and generate/update its CLAUDE.md |
 | `cb_configure(...)` | View or change config, vault path, and preferences |
 | `cb_status()` | Show vault health, index stats, and recent extraction runs |
-| `cb_restructure(folder?, dry_run?, similarity_threshold?, split_threshold?)` | Merge related note clusters and split large notes to keep the vault clean |
+| `cb_restructure(folder?, dry_run?, split_threshold?, folder_hub?, grouping?)` | Merge related note clusters and split large notes to keep the vault clean |
 | `cb_review(days_ahead?, dry_run?, folder?)` | Review working memory notes that are due — promote, extend, or delete |
 | `cb_reindex(rebuild?, prune?)` | Rebuild or prune the search index |
 

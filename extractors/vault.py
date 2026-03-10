@@ -158,7 +158,7 @@ def resolve_output_dir(beat: dict, config: dict) -> Path | None:
 # ---------------------------------------------------------------------------
 
 # Controlled predicate vocabulary grounded in SKOS / Dublin Core / PROV-O.
-VALID_PREDICATES = {"related", "references", "broader", "narrower", "supersedes", "wasDerivedFrom"}
+VALID_PREDICATES = {"related", "references", "broader", "narrower", "supersedes", "wasderivedfrom"}
 
 
 def build_vault_titles_set(vault_path: str) -> set:

@@ -21,6 +21,7 @@ try:
         _call_claude_code as _call_claude_code_backend,
         RUNS_LOG_PATH,
     )
+    from frontmatter import parse_frontmatter as _parse_frontmatter
 except ImportError as e:
     raise RuntimeError(
         f"Could not import extract_beats from ~/.claude/cyberbrain/extractors/: {e}. "
@@ -43,27 +44,41 @@ def _get_search_backend(config: dict):
     return _search_backend
 
 
+_PROMPTS_DIR = Path.home() / ".claude" / "cyberbrain" / "prompts"
+
+
+def _load_tool_prompt(filename: str) -> str:
+    """Load a prompt file from the cyberbrain prompts directory."""
+    from fastmcp.exceptions import ToolError
+
+    prompt_path = _PROMPTS_DIR / filename
+    if prompt_path.exists():
+        return prompt_path.read_text(encoding="utf-8")
+    # Dev-mode fallback: look relative to this file's repo root
+    dev_path = Path(__file__).parent.parent / "prompts" / filename
+    if dev_path.exists():
+        return dev_path.read_text(encoding="utf-8")
+    raise ToolError(
+        f"Prompt file not found: {filename}. "
+        "Run install.sh to ensure all prompt files are installed."
+    )
+
+
 def _load_config(cwd: str = "") -> dict:
     return _resolve_config(cwd or str(Path.home()))
 
 
+def _is_within_vault(vault: Path, target: Path) -> bool:
+    """Return True if target path is within the vault directory."""
+    try:
+        target.resolve().relative_to(vault.resolve())
+        return True
+    except ValueError:
+        return False
+
+
 def _relpath(path: Path, vault_path: str) -> str:
     return os.path.relpath(str(path), vault_path)
-
-
-def _parse_frontmatter(content: str) -> dict:
-    """Extract YAML frontmatter from markdown content. Returns {} on any error."""
-    if not content.startswith("---"):
-        return {}
-    end = content.find("\n---", 3)
-    if end == -1:
-        return {}
-    try:
-        import yaml
-        fm = yaml.safe_load(content[3:end])
-        return fm if isinstance(fm, dict) else {}
-    except Exception:
-        return {}
 
 
 def _move_to_trash(file_path: Path, vault: Path, config: dict) -> Path:

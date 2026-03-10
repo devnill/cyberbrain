@@ -134,6 +134,20 @@ def register(mcp: FastMCP) -> None:
                 "Only affects newly written working-memory notes."
             )
         )] = None,
+        tool_models: Annotated[dict | None, Field(
+            description=(
+                "Set per-tool model overrides. Pass a dict with tool names as keys and model names as values. "
+                "Valid keys: restructure, recall, enrich, review, judge. "
+                "Example: {\"restructure\": \"claude-sonnet-4-5-20250514\", \"judge\": \"claude-sonnet-4-5-20250514\"}. "
+                "Omitted keys fall back to the global model."
+            )
+        )] = None,
+        quality_gate_enabled: Annotated[bool | None, Field(
+            description="Enable or disable quality gates for curation tools (restructure, enrich, review, recall). Default: True."
+        )] = None,
+        proactive_recall: Annotated[bool | None, Field(
+            description="Enable or disable proactive recall (automatic context injection). Default: True."
+        )] = None,
     ) -> str:
         """
         Configure cyberbrain or show current configuration.
@@ -146,6 +160,9 @@ def register(mcp: FastMCP) -> None:
         Call with set_prefs='...' to update preferences (written to vault CLAUDE.md).
         Call with reset_prefs=True to restore default preferences.
         Call with working_memory_ttl={...} to set per-type review TTL in days.
+        Call with tool_models={...} to set per-tool model overrides.
+        Call with quality_gate_enabled=True/False to enable/disable quality gates.
+        Call with proactive_recall=True/False to enable/disable proactive recall.
 
         Use this to set up cyberbrain through conversation instead of editing config files.
         """
@@ -232,7 +249,7 @@ def register(mcp: FastMCP) -> None:
 
         # --- writes ---
         changed = []
-        if vault_path is not None or inbox is not None or capture_mode is not None or working_memory_ttl is not None:
+        if vault_path is not None or inbox is not None or capture_mode is not None or working_memory_ttl is not None or tool_models is not None or quality_gate_enabled is not None or proactive_recall is not None:
             cfg = _load_raw()
 
             if vault_path is not None:
@@ -282,6 +299,29 @@ def register(mcp: FastMCP) -> None:
                 cfg["working_memory_ttl"] = existing
                 changed.append(f"working_memory_ttl → {existing}")
 
+            if tool_models is not None:
+                if not isinstance(tool_models, dict):
+                    raise ToolError("tool_models must be a dict, e.g. {\"restructure\": \"claude-sonnet-4-5-20250514\"}.")
+                _valid_tool_keys = {"restructure", "recall", "enrich", "review", "judge"}
+                for k, v in tool_models.items():
+                    if k not in _valid_tool_keys:
+                        raise ToolError(
+                            f"Invalid tool_models key: {k!r}. "
+                            f"Valid keys: {', '.join(sorted(_valid_tool_keys))}."
+                        )
+                    if not isinstance(v, str) or not v.strip():
+                        raise ToolError(f"tool_models values must be non-empty strings. Got {k!r}: {v!r}")
+                    cfg[f"{k}_model"] = v
+                    changed.append(f"{k}_model → {v}")
+
+            if quality_gate_enabled is not None:
+                cfg["quality_gate_enabled"] = quality_gate_enabled
+                changed.append(f"quality_gate_enabled → {quality_gate_enabled}")
+
+            if proactive_recall is not None:
+                cfg["proactive_recall"] = proactive_recall
+                changed.append(f"proactive_recall → {proactive_recall}")
+
             _save_raw(cfg)
             result = "Configuration updated:\n" + "\n".join(f"  - {c}" for c in changed)
             if vault_path is not None:
@@ -311,6 +351,15 @@ def register(mcp: FastMCP) -> None:
         backend = cfg.get("backend", "claude-code")
         model = cfg.get("model", "claude-haiku-4-5")
         lines.append(f"Backend:      {backend} ({model})")
+        _tool_model_keys = ["restructure_model", "recall_model", "enrich_model", "review_model", "judge_model"]
+        overrides = {k: cfg[k] for k in _tool_model_keys if k in cfg}
+        if overrides:
+            override_parts = [f"{k.replace('_model', '')}: {v}" for k, v in overrides.items()]
+            lines.append(f"Tool models:  {', '.join(override_parts)}")
+        if cfg.get("quality_gate_enabled") is False:
+            lines.append("Quality gate: disabled")
+        if cfg.get("proactive_recall") is False:
+            lines.append("Proactive recall: disabled")
         capture = cfg.get("desktop_capture_mode", "suggest")
         lines.append(f"Capture mode: {capture}")
 
@@ -439,6 +488,18 @@ def register(mcp: FastMCP) -> None:
         model = config.get("model", "claude-haiku-4-5")
         lines.append(f"- Backend: {backend} ({model})")
 
+        # Per-tool model overrides
+        _tool_model_keys = ["restructure_model", "recall_model", "enrich_model", "review_model", "judge_model"]
+        overrides = {k: config[k] for k in _tool_model_keys if k in config}
+        if overrides:
+            override_parts = [f"{k.replace('_model', '')}: {v}" for k, v in overrides.items()]
+            lines.append(f"- Per-tool models: {', '.join(override_parts)}")
+
+        if not config.get("quality_gate_enabled", True):
+            lines.append("- Quality gate: DISABLED")
+        if not config.get("proactive_recall", True):
+            lines.append("- Proactive recall: DISABLED")
+
         # Preferences and provenance coverage
         vp = config.get("vault_path", "")
         if vp and Path(vp).exists():
@@ -449,16 +510,15 @@ def register(mcp: FastMCP) -> None:
             else:
                 lines.append("- Preferences: not set — cb_configure(reset_prefs=True) to add defaults")
 
-            # Provenance coverage: count notes missing cb_source
+            # Provenance coverage
             try:
                 import sqlite3 as _sqlite3
                 from tools.recall import _DEFAULT_DB_PATH
                 db_path = config.get("search_db_path", _DEFAULT_DB_PATH)
                 conn = _sqlite3.connect(db_path)
                 total_notes = conn.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
-                # cb_lock count — scan frontmatter files (can't store in SQLite easily, skip for now)
                 conn.close()
-                lines.append(f"- Provenance coverage: run cb_enrich to backfill missing cb_source fields")
+                lines.append(f"- Provenance coverage: {total_notes} notes indexed — run cb_enrich to backfill missing cb_source fields")
             except Exception:
                 pass
 

@@ -312,6 +312,152 @@ class TestCbConfigureWorkingMemoryTTL:
 
 
 # ===========================================================================
+# cb_configure — tool_models
+# ===========================================================================
+
+class TestCbConfigureToolModels:
+    def test_valid_tool_models_writes_config(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+        cfg_dir = tmp_path / ".claude" / "cyberbrain"
+        cfg_dir.mkdir(parents=True)
+        cfg_file = cfg_dir / "config.json"
+        cfg_file.write_text(json.dumps({"vault_path": str(tmp_path)}), encoding="utf-8")
+
+        with patch.object(manage_mod, "_load_config", return_value={}):
+            result = _cb_configure()(tool_models={"restructure": "claude-sonnet-4-5-20250514", "judge": "claude-opus-4-5"})
+        assert "restructure_model" in result
+        assert "judge_model" in result
+        saved = json.loads(cfg_file.read_text())
+        assert saved["restructure_model"] == "claude-sonnet-4-5-20250514"
+        assert saved["judge_model"] == "claude-opus-4-5"
+
+    def test_invalid_tool_key_raises(self):
+        with pytest.raises(ToolError, match="Invalid tool_models key"):
+            _cb_configure()(tool_models={"extract": "claude-sonnet-4-5-20250514"})
+
+    def test_invalid_tool_model_value_raises(self):
+        with pytest.raises(ToolError, match="non-empty strings"):
+            _cb_configure()(tool_models={"restructure": ""})
+
+    def test_tool_models_not_dict_raises(self):
+        with pytest.raises(ToolError, match="must be a dict"):
+            _cb_configure()(tool_models="not a dict")  # type: ignore[arg-type]
+
+
+# ===========================================================================
+# cb_configure — quality_gate_enabled
+# ===========================================================================
+
+class TestCbConfigureQualityGate:
+    def test_set_quality_gate_enabled_false(self, tmp_path, monkeypatch):
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+        cfg_dir = home / ".claude" / "cyberbrain"
+        cfg_dir.mkdir(parents=True)
+        cfg_file = cfg_dir / "config.json"
+        cfg_file.write_text("{}", encoding="utf-8")
+
+        result = _cb_configure()(quality_gate_enabled=False)
+        assert "quality_gate_enabled" in result
+        assert "False" in result
+
+        import json
+        saved = json.loads(cfg_file.read_text())
+        assert saved["quality_gate_enabled"] is False
+
+    def test_set_quality_gate_enabled_true(self, tmp_path, monkeypatch):
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+        cfg_dir = home / ".claude" / "cyberbrain"
+        cfg_dir.mkdir(parents=True)
+        cfg_file = cfg_dir / "config.json"
+        cfg_file.write_text('{"quality_gate_enabled": false}', encoding="utf-8")
+
+        result = _cb_configure()(quality_gate_enabled=True)
+        assert "quality_gate_enabled" in result
+        assert "True" in result
+
+        import json
+        saved = json.loads(cfg_file.read_text())
+        assert saved["quality_gate_enabled"] is True
+
+    def test_no_args_shows_gate_disabled(self, tmp_path):
+        cfg = {"vault_path": str(tmp_path), "quality_gate_enabled": False}
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            result = _cb_configure()()
+        assert "Quality gate: disabled" in result
+
+    def test_no_args_hides_gate_when_default(self, tmp_path):
+        cfg = {"vault_path": str(tmp_path)}
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            result = _cb_configure()()
+        assert "Quality gate" not in result
+
+
+# ===========================================================================
+# cb_configure — proactive_recall
+# ===========================================================================
+
+class TestCbConfigureProactiveRecall:
+    def test_set_proactive_recall_false(self, tmp_path, monkeypatch):
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+        cfg_dir = home / ".claude" / "cyberbrain"
+        cfg_dir.mkdir(parents=True)
+        cfg_file = cfg_dir / "config.json"
+        cfg_file.write_text("{}", encoding="utf-8")
+
+        result = _cb_configure()(proactive_recall=False)
+        assert "proactive_recall" in result
+        assert "False" in result
+
+        import json
+        saved = json.loads(cfg_file.read_text())
+        assert saved["proactive_recall"] is False
+
+    def test_set_proactive_recall_true(self, tmp_path, monkeypatch):
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+        cfg_dir = home / ".claude" / "cyberbrain"
+        cfg_dir.mkdir(parents=True)
+        cfg_file = cfg_dir / "config.json"
+        cfg_file.write_text('{"proactive_recall": false}', encoding="utf-8")
+
+        result = _cb_configure()(proactive_recall=True)
+        assert "proactive_recall" in result
+        assert "True" in result
+
+        import json
+        saved = json.loads(cfg_file.read_text())
+        assert saved["proactive_recall"] is True
+
+    def test_no_args_shows_recall_disabled(self, tmp_path):
+        cfg = {"vault_path": str(tmp_path), "proactive_recall": False}
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            with patch.object(manage_mod, "_read_index_stats", return_value={}):
+                result = _cb_configure()()
+        assert "Proactive recall: disabled" in result
+
+    def test_no_args_hides_recall_when_default(self, tmp_path):
+        cfg = {"vault_path": str(tmp_path)}
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            with patch.object(manage_mod, "_read_index_stats", return_value={}):
+                result = _cb_configure()()
+        assert "Proactive recall" not in result
+
+    def test_no_args_hides_recall_when_explicit_true(self, tmp_path):
+        cfg = {"vault_path": str(tmp_path), "proactive_recall": True}
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            with patch.object(manage_mod, "_read_index_stats", return_value={}):
+                result = _cb_configure()()
+        assert "Proactive recall" not in result
+
+
+# ===========================================================================
 # cb_configure — vault_path write path (background index rebuild)
 # ===========================================================================
 
@@ -394,6 +540,33 @@ class TestCbConfigureNoArgs:
         assert "Cyberbrain Configuration" in result
         assert "ollama" in result
         assert "AI/Inbox" in result
+
+    def test_no_args_shows_tool_models(self, tmp_path):
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        cfg = {
+            **BASE_CONFIG,
+            "vault_path": str(vault),
+            "restructure_model": "claude-sonnet-4-5-20250514",
+            "judge_model": "claude-opus-4-5",
+        }
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            with patch.object(manage_mod, "_read_index_stats", return_value={"total": 0, "by_type": {}}):
+                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-runs.log")):
+                    result = _cb_configure()()
+        assert "Tool models:" in result
+        assert "restructure: claude-sonnet-4-5-20250514" in result
+        assert "judge: claude-opus-4-5" in result
+
+    def test_no_args_hides_tool_models_when_none_set(self, tmp_path):
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        cfg = {**BASE_CONFIG, "vault_path": str(vault)}
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            with patch.object(manage_mod, "_read_index_stats", return_value={"total": 0, "by_type": {}}):
+                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-runs.log")):
+                    result = _cb_configure()()
+        assert "Tool models:" not in result
 
     def test_no_args_vault_not_set(self, tmp_path):
         cfg = {**BASE_CONFIG, "vault_path": ""}
@@ -517,6 +690,61 @@ class TestCbStatus:
         assert "insight: 20" in result
         assert "Relations: 10" in result
         assert "all indexed notes exist" in result
+
+    def test_with_per_tool_models(self, tmp_path):
+        cfg = {
+            **BASE_CONFIG,
+            "vault_path": "",
+            "restructure_model": "claude-sonnet-4-5-20250514",
+            "judge_model": "claude-opus-4-5",
+        }
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            with patch.object(manage_mod, "_read_index_stats", return_value={}):
+                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                    result = _cb_status()()
+        assert "Per-tool models" in result
+        assert "restructure: claude-sonnet-4-5-20250514" in result
+        assert "judge: claude-opus-4-5" in result
+
+    def test_without_per_tool_models(self, tmp_path):
+        cfg = {**BASE_CONFIG, "vault_path": ""}
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            with patch.object(manage_mod, "_read_index_stats", return_value={}):
+                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                    result = _cb_status()()
+        assert "Per-tool models" not in result
+
+    def test_quality_gate_disabled_shown(self, tmp_path):
+        cfg = {**BASE_CONFIG, "vault_path": "", "quality_gate_enabled": False}
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            with patch.object(manage_mod, "_read_index_stats", return_value={}):
+                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                    result = _cb_status()()
+        assert "Quality gate: DISABLED" in result
+
+    def test_quality_gate_default_not_shown(self, tmp_path):
+        cfg = {**BASE_CONFIG, "vault_path": ""}
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            with patch.object(manage_mod, "_read_index_stats", return_value={}):
+                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                    result = _cb_status()()
+        assert "Quality gate" not in result
+
+    def test_proactive_recall_disabled_shown(self, tmp_path):
+        cfg = {**BASE_CONFIG, "vault_path": "", "proactive_recall": False}
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            with patch.object(manage_mod, "_read_index_stats", return_value={}):
+                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                    result = _cb_status()()
+        assert "Proactive recall: DISABLED" in result
+
+    def test_proactive_recall_default_not_shown(self, tmp_path):
+        cfg = {**BASE_CONFIG, "vault_path": ""}
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            with patch.object(manage_mod, "_read_index_stats", return_value={}):
+                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                    result = _cb_status()()
+        assert "Proactive recall" not in result
 
     def test_with_stale_paths(self, tmp_path):
         cfg = {**BASE_CONFIG, "vault_path": ""}

@@ -111,7 +111,7 @@ Required sections (in order):
 2. Knowledge Graph:
    2a. Principles (~300-400 words, adapted from canonical text below — do not copy verbatim)
    2b. Relation Vocabulary (table with columns: Predicate, When to use; include \
-related/references/broader/narrower/supersedes/wasDerivedFrom plus 2-4 domain-specific ones)
+related/references/broader/narrower/supersedes/wasDerivedFrom — these are the only supported predicates; do not define custom ones)
 3. Folder Structure (filing rules using structural patterns, not enumerated specific folders)
 4. Entity Types (one subsection per type: what it captures, required frontmatter, \
 YAML example with realistic values, body structure guidance)
@@ -142,6 +142,31 @@ Non-negotiable output rules:
 - Preserve any custom sections found in an existing CLAUDE.md
 
 Return ONLY the CLAUDE.md content. No preamble, no explanation, no markdown wrapping."""
+
+
+_SETUP_GUIDANCE = """
+
+---
+
+## Enabling Proactive Recall
+
+### Claude Desktop
+
+Proactive recall in Claude Desktop requires selecting the orient prompt at the
+start of each session. Open the **plus button > connectors > cyberbrain > orient**
+menu to activate it.
+
+### Claude Code
+
+Add this snippet to your project's CLAUDE.md to enable proactive recall:
+
+```markdown
+## Cyberbrain
+When the user mentions a topic you have notes about, call cb_recall to
+check for relevant context. When you learn something worth remembering,
+call cb_file to save it.
+```
+"""
 
 
 def register(mcp: FastMCP) -> None:
@@ -261,6 +286,7 @@ def register(mcp: FastMCP) -> None:
                     f"```markdown\n{claude_md_content}\n```\n\n"
                     f"{prefix}No files written. "
                     "Call cb_setup(answers=..., write=True) to save."
+                    + _SETUP_GUIDANCE
                 )
 
             try:
@@ -275,4 +301,5 @@ def register(mcp: FastMCP) -> None:
                 f"  Size:  {word_count} words\n\n"
                 "Recommended next step: Run cb_enrich(dry_run=True) to see which "
                 "notes are missing metadata."
+                + _SETUP_GUIDANCE
             )

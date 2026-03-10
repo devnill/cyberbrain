@@ -603,3 +603,245 @@ class TestCbRead:
             result = cb_read(identifier="Titled Note.md")
 
         assert "My Special Title" in result
+
+
+# ===========================================================================
+# cb_recall — synthesis (synthesize=True)
+# ===========================================================================
+
+class TestCbRecallSynthesis:
+    """cb_recall with synthesize=True uses prompt templates and quality gate."""
+
+    def _setup_vault_and_backend(self, tmp_path):
+        """Helper: create vault with notes and a mock search backend returning them."""
+        vault = _make_vault(tmp_path)
+        notes = []
+        for i in range(3):
+            n = _write_note(vault, f"Note{i}.md", {
+                "title": f"Note {i}",
+                "type": "insight",
+                "summary": f"Summary of note {i}.",
+                "tags": ["test"],
+            }, body=f"## Note {i}\n\nBody content for note {i}.")
+            notes.append(n)
+
+        from search_backends import SearchResult
+        results = [
+            SearchResult(
+                path=str(n), title=f"Note {i}", summary=f"Summary of note {i}.",
+                tags=["test"], note_type="insight", date="2026-01-15",
+                score=float(3 - i), backend="fts5"
+            )
+            for i, n in enumerate(notes)
+        ]
+        config = _vault_config(vault)
+        mock_backend = MagicMock()
+        mock_backend.search.return_value = results
+        mock_backend.backend_name.return_value = "fts5"
+        return vault, config, mock_backend
+
+    def test_synthesis_returns_structured_output(self, tmp_path):
+        """synthesize=True returns structured synthesis with sources, not note cards."""
+        vault, config, mock_backend = self._setup_vault_and_backend(tmp_path)
+        mod = _get_recall_module()
+        cb_recall, _ = _register()
+
+        # Mock the quality gate to pass
+        mock_verdict = MagicMock()
+        mock_verdict.passed = True
+
+        with patch.object(mod, "_load_config", return_value=config), \
+             patch.object(mod, "_get_search_backend", return_value=mock_backend), \
+             patch.object(mod, "_load_prompt", return_value="prompt"), \
+             patch.object(mod, "_call_claude_code_backend", return_value="Synthesized answer citing [Note 0]."), \
+             patch("tools.recall.quality_gate", return_value=mock_verdict, create=True):
+            # We need to patch the import inside the function
+            with patch.dict("sys.modules", {"quality_gate": MagicMock(
+                quality_gate=MagicMock(return_value=mock_verdict),
+                Verdict=MagicMock(),
+            )}):
+                output = cb_recall(query="test content notes", synthesize=True)
+
+        # Should contain synthesis sections with security wrapper
+        assert "## Retrieved from knowledge vault" in output
+        assert "## Relevant Knowledge" in output
+        assert "## Sources" in output
+        assert "Synthesized answer" in output
+        assert "## End of retrieved content" in output
+
+    def test_synthesis_false_preserves_note_cards(self, tmp_path):
+        """synthesize=False returns note cards with full bodies (unchanged behavior)."""
+        vault, config, mock_backend = self._setup_vault_and_backend(tmp_path)
+        mod = _get_recall_module()
+        cb_recall, _ = _register()
+
+        with patch.object(mod, "_load_config", return_value=config), \
+             patch.object(mod, "_get_search_backend", return_value=mock_backend):
+            output = cb_recall(query="test content notes", synthesize=False)
+
+        assert "## Retrieved from knowledge vault" in output
+        assert "Body content for note 0" in output
+        assert "Body content for note 1" in output
+        assert "## Relevant Knowledge" not in output
+
+    def test_synthesis_sources_list_all_notes(self, tmp_path):
+        """The Sources section lists all retrieved note titles with paths."""
+        vault, config, mock_backend = self._setup_vault_and_backend(tmp_path)
+        mod = _get_recall_module()
+        cb_recall, _ = _register()
+
+        mock_verdict = MagicMock()
+        mock_verdict.passed = True
+
+        with patch.object(mod, "_load_config", return_value=config), \
+             patch.object(mod, "_get_search_backend", return_value=mock_backend), \
+             patch.object(mod, "_load_prompt", return_value="prompt"), \
+             patch.object(mod, "_call_claude_code_backend", return_value="Synthesis."), \
+             patch.dict("sys.modules", {"quality_gate": MagicMock(
+                quality_gate=MagicMock(return_value=mock_verdict),
+                Verdict=MagicMock(),
+             )}):
+            output = cb_recall(query="test content notes", synthesize=True)
+
+        assert "Note 0" in output
+        assert "Note 1" in output
+        assert "Note 2" in output
+
+    def test_synthesis_llm_failure_falls_back_to_note_cards(self, tmp_path):
+        """When the LLM call fails, falls back to note cards with error note."""
+        vault, config, mock_backend = self._setup_vault_and_backend(tmp_path)
+        mod = _get_recall_module()
+        cb_recall, _ = _register()
+
+        with patch.object(mod, "_load_config", return_value=config), \
+             patch.object(mod, "_get_search_backend", return_value=mock_backend), \
+             patch.object(mod, "_load_prompt", return_value="prompt"), \
+             patch.object(mod, "_call_claude_code_backend", side_effect=RuntimeError("LLM down")):
+            output = cb_recall(query="test content notes", synthesize=True)
+
+        # Falls back to note cards
+        assert "## Retrieved from knowledge vault" in output
+        assert "Synthesis failed" in output
+
+    def test_synthesis_quality_gate_failure_falls_back_to_note_cards(self, tmp_path):
+        """When the quality gate fails, returns note cards without synthesis."""
+        vault, config, mock_backend = self._setup_vault_and_backend(tmp_path)
+        mod = _get_recall_module()
+        cb_recall, _ = _register()
+
+        mock_verdict = MagicMock()
+        mock_verdict.passed = False
+        mock_verdict.rationale = "Hallucinated content detected"
+
+        with patch.object(mod, "_load_config", return_value=config), \
+             patch.object(mod, "_get_search_backend", return_value=mock_backend), \
+             patch.object(mod, "_load_prompt", return_value="prompt"), \
+             patch.object(mod, "_call_claude_code_backend", return_value="Bad synthesis."), \
+             patch.dict("sys.modules", {"quality_gate": MagicMock(
+                quality_gate=MagicMock(return_value=mock_verdict),
+                Verdict=MagicMock(),
+             )}):
+            output = cb_recall(query="test content notes", synthesize=True)
+
+        # Should fall back to note cards
+        assert "## Retrieved from knowledge vault" in output
+        assert "## Relevant Knowledge" not in output
+
+    def test_synthesis_quality_gate_unavailable_proceeds(self, tmp_path):
+        """When quality_gate import fails, synthesis proceeds (graceful degradation)."""
+        vault, config, mock_backend = self._setup_vault_and_backend(tmp_path)
+        mod = _get_recall_module()
+        cb_recall, _ = _register()
+
+        # Remove quality_gate from sys.modules so import fails inside the function
+        with patch.object(mod, "_load_config", return_value=config), \
+             patch.object(mod, "_get_search_backend", return_value=mock_backend), \
+             patch.object(mod, "_load_prompt", return_value="prompt"), \
+             patch.object(mod, "_call_claude_code_backend", return_value="Good synthesis."), \
+             patch.dict("sys.modules", {"quality_gate": None}):
+            # When sys.modules has None, import raises ImportError
+            output = cb_recall(query="test content notes", synthesize=True)
+
+        # Synthesis should proceed despite gate unavailability
+        assert "## Relevant Knowledge" in output
+        assert "Good synthesis." in output
+
+    def test_synthesis_uses_prompt_templates(self, tmp_path):
+        """Synthesis loads prompts from files, not inline strings."""
+        vault, config, mock_backend = self._setup_vault_and_backend(tmp_path)
+        mod = _get_recall_module()
+        cb_recall, _ = _register()
+
+        mock_verdict = MagicMock()
+        mock_verdict.passed = True
+        load_prompt_calls = []
+
+        def track_load_prompt(filename):
+            load_prompt_calls.append(filename)
+            if "user" in filename:
+                return "Query: {query}\n\nSource notes ({note_count}):\n\n{notes_block}\n\nSynthesize."
+            return "System prompt."
+
+        with patch.object(mod, "_load_config", return_value=config), \
+             patch.object(mod, "_get_search_backend", return_value=mock_backend), \
+             patch.object(mod, "_load_prompt", side_effect=track_load_prompt), \
+             patch.object(mod, "_call_claude_code_backend", return_value="Synthesis."), \
+             patch.dict("sys.modules", {"quality_gate": MagicMock(
+                quality_gate=MagicMock(return_value=mock_verdict),
+                Verdict=MagicMock(),
+             )}):
+            cb_recall(query="test content notes", synthesize=True)
+
+        assert "synthesize-system.md" in load_prompt_calls
+        assert "synthesize-user.md" in load_prompt_calls
+
+    def test_synthesis_body_excerpt_truncated(self, tmp_path):
+        """Body excerpts passed to synthesis are truncated for token efficiency."""
+        vault = _make_vault(tmp_path)
+        long_body = "x" * 1000
+        note = _write_note(vault, "Long Note.md", {
+            "title": "Long Note",
+            "type": "reference",
+            "summary": "A long note.",
+            "tags": ["test"],
+        }, body=long_body)
+
+        from search_backends import SearchResult
+        sr = SearchResult(
+            path=str(note), title="Long Note", summary="A long note.",
+            tags=["test"], note_type="reference", date="2026-01-15",
+            score=1.0, backend="fts5"
+        )
+        config = _vault_config(vault)
+        mock_backend = MagicMock()
+        mock_backend.search.return_value = [sr]
+        mock_backend.backend_name.return_value = "fts5"
+
+        mod = _get_recall_module()
+        cb_recall, _ = _register()
+
+        captured_args = {}
+
+        def capture_backend_call(system, user, cfg):
+            captured_args["user"] = user
+            return "Synthesis."
+
+        mock_verdict = MagicMock()
+        mock_verdict.passed = True
+
+        with patch.object(mod, "_load_config", return_value=config), \
+             patch.object(mod, "_get_search_backend", return_value=mock_backend), \
+             patch.object(mod, "_load_prompt", return_value="{query}\n{note_count}\n{notes_block}"), \
+             patch.object(mod, "_call_claude_code_backend", side_effect=capture_backend_call), \
+             patch.dict("sys.modules", {"quality_gate": MagicMock(
+                quality_gate=MagicMock(return_value=mock_verdict),
+                Verdict=MagicMock(),
+             )}):
+            cb_recall(query="long note test", synthesize=True)
+
+        # The user prompt should contain the body excerpt, but truncated to 500 chars
+        user_msg = captured_args["user"]
+        # The full 1000-char body should NOT appear
+        assert long_body not in user_msg
+        # But the first 500 chars should
+        assert "x" * 500 in user_msg

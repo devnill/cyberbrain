@@ -2,13 +2,13 @@
 
 ## Scope
 
-LLM prompt templates stored as markdown files. These define the behavior of all LLM calls in the system: extraction, autofile routing, enrichment, restructuring (6 phases), and working memory review.
+LLM prompt templates stored as markdown files. These define the behavior of all LLM calls in the system: extraction, autofile routing, enrichment, restructuring (6 phases), working memory review, recall synthesis, quality gate validation, and evaluation.
 
 NOT responsible for: prompt loading logic (config module and per-tool loaders), template variable injection (calling code).
 
 ## Provides
 
-19 prompt files organized into families:
+23 prompt files organized into families:
 
 ### Extraction (2 files)
 - `extract-beats-system.md` — System prompt for beat extraction. Defines beat JSON schema, type vocabulary reference, durability rules, title constraints, relation format. (~7,900 chars)
@@ -20,7 +20,7 @@ NOT responsible for: prompt loading logic (config module and per-tool loaders), 
 
 ### Enrichment (2 files)
 - `enrich-system.md` — System prompt for batch frontmatter enrichment. Variables: `{vault_type_context}`.
-- `enrich-user.md` — User message template. Variables: `{notes_batch}`.
+- `enrich-user.md` — User message template. Variables: `{count}`, `{notes_block}`.
 
 ### Restructure (8 files)
 - `restructure-system.md` / `restructure-user.md` — Legacy single-call restructure prompt (split + merge).
@@ -31,7 +31,17 @@ NOT responsible for: prompt loading logic (config module and per-tool loaders), 
 
 ### Review (2 files)
 - `review-system.md` — System prompt for working memory review decisions (promote/extend/delete).
-- `review-user.md` — User message template. Variables: `{notes}`, `{recall_log}`.
+- `review-user.md` — User message template. Variables: `{note_count}`, `{vault_prefs_section}`, `{notes_block}`.
+
+### Synthesis (2 files)
+- `synthesize-system.md` — System prompt for LLM synthesis of recall results.
+- `synthesize-user.md` — User message template. Variables: `{query}`, `{note_count}`, `{notes_block}`.
+
+### Quality Gate (1 file)
+- `quality-gate-system.md` — System prompt for LLM-as-judge quality validation. Variables: `{operation}`. Contains per-operation criteria sections.
+
+### Evaluate (1 file)
+- `evaluate-system.md` — System prompt for internal dev tooling (extraction quality evaluation). Not loaded by production code.
 
 ### Claude Desktop (1 file)
 - `claude-desktop-project.md` — System prompt / project context for Claude Desktop sessions using cyberbrain.
@@ -51,7 +61,7 @@ Nothing — prompts are passive template files loaded by other modules.
 
 ## Internal Design Notes
 
-- Directory: `prompts/` (19 files, ~45KB total)
+- Directory: `prompts/` (23 files)
 - Restructure has the most prompts (8 files) reflecting its multi-phase architecture
 - `extract-beats-system.md` is the longest prompt (~7,900 chars) — defines the core beat extraction behavior
 - `claude-desktop-project.md` (~6,500 chars) is a standalone guide not loaded by any Python code — it's meant to be pasted into Claude Desktop project settings

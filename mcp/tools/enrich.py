@@ -11,27 +11,11 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
-from shared import _load_config, _parse_frontmatter, _index_paths
+from shared import _load_config, _parse_frontmatter, _index_paths, _load_tool_prompt as _load_prompt
 
-_PROMPTS_DIR = Path.home() / ".claude" / "cyberbrain" / "prompts"
 _DAILY_JOURNAL_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
 _BATCH_SIZE = 10
 _DEFAULT_TYPES = ["decision", "insight", "problem", "reference"]
-
-
-def _load_prompt(filename: str) -> str:
-    """Load a prompt file from the cyberbrain prompts directory."""
-    prompt_path = _PROMPTS_DIR / filename
-    if prompt_path.exists():
-        return prompt_path.read_text(encoding="utf-8")
-    # Dev-mode fallback: look relative to this file's repo root
-    dev_path = Path(__file__).parent.parent.parent / "prompts" / filename
-    if dev_path.exists():
-        return dev_path.read_text(encoding="utf-8")
-    raise ToolError(
-        f"Prompt file not found: {filename}. "
-        "Run install.sh to ensure all prompt files are installed."
-    )
 
 
 def _get_valid_types(vault: Path) -> list[str]:
@@ -226,9 +210,11 @@ def register(mcp: FastMCP) -> None:
         Use dry_run=True first to preview how many notes would be affected and why.
         Processes up to 10 notes per LLM call; large vaults may take multiple calls.
         """
-        from backends import call_model
+        from backends import call_model, get_model_for_tool
+        from quality_gate import quality_gate as _quality_gate
 
         config = _load_config()
+        gate_enabled = config.get("quality_gate_enabled", True)
         vault_path_str = config.get("vault_path", "")
         if not vault_path_str:
             raise ToolError("No vault configured. Run cb_configure(vault_path=...) first.")
@@ -315,6 +301,7 @@ def register(mcp: FastMCP) -> None:
 
         enriched: list[tuple[Path, dict]] = []
         errors: list[tuple[Path, str]] = []
+        gate_skipped: list[tuple[Path, dict, object]] = []
 
         # ── Process in batches ──
         for batch_start in range(0, len(needs_enrichment), _BATCH_SIZE):
@@ -333,8 +320,9 @@ def register(mcp: FastMCP) -> None:
                 .replace("{notes_block}", notes_block)
             )
 
+            tool_config = {**config, "model": get_model_for_tool(config, "enrich")}
             try:
-                raw = call_model(system_prompt, user_message, config)
+                raw = call_model(system_prompt, user_message, tool_config)
                 stripped = re.sub(r"^```(?:json)?\s*", "", raw.strip())
                 stripped = re.sub(r"\s*```$", "", stripped).strip()
                 classifications = json.loads(stripped)
@@ -362,6 +350,15 @@ def register(mcp: FastMCP) -> None:
                     skipped += 1
                     continue
 
+                # ── Quality gate ──
+                if gate_enabled:
+                    gate_input = f"Note path: {f.relative_to(vault)}\n\nNote content:\n{content[:2000]}"
+                    gate_output = json.dumps(cls)
+                    verdict = _quality_gate("enrich_classify", gate_input, gate_output, config)
+                    if not verdict.passed:
+                        gate_skipped.append((f, cls, verdict))
+                        continue
+
                 success = _apply_frontmatter_update(f, content, cls, overwrite)
                 if success:
                     enriched.append((f, cls))
@@ -377,6 +374,7 @@ def register(mcp: FastMCP) -> None:
             f"  Enriched:     {len(enriched)} notes",
             f"  Already done: {already_done} notes",
             f"  Skipped:      {skipped} notes (templates, daily journals, enrich:skip, no-match)",
+            f"  Gate blocked: {len(gate_skipped)} notes",
             f"  Errors:       {len(errors)} notes",
         ]
         if enriched:
@@ -385,6 +383,17 @@ def register(mcp: FastMCP) -> None:
                 rel = f.relative_to(vault)
                 tags_str = ", ".join(cls.get("tags", [])[:3])
                 lines.append(f"  + {rel}  → type: {cls.get('type', '?')}, tags: [{tags_str}]")
+        if gate_skipped:
+            lines.append("\nBlocked by quality gate (not applied):")
+            for f, cls, verdict in gate_skipped:
+                rel = f.relative_to(vault)
+                lines.append(
+                    f"  ✗ {rel}  → type: {cls.get('type', '?')} — "
+                    f"{verdict.rationale}"
+                )
+            lines.append(
+                "\nCall cb_configure(quality_gate_enabled=False) to disable quality gates."
+            )
         if errors:
             lines.append("\nErrors:")
             for f, reason in errors:

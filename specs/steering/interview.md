@@ -32,3 +32,116 @@ A: This area has been minimally validated. Haven't seen it work without promptin
 
 **Q: Any other areas of attention?**
 A: Yes — developing better testing and planning tools is a cross-cutting concern. Dry run is a very crude instrument. It might be worth investing effort into creating dedicated evaluation tools that allow comparing which results look best when presented with several alternatives. This applies across the full curation pipeline, not just restructuring.
+
+---
+
+## Refinement Interview — 2026-03-09
+
+**Context**: Group 1 complete (001 evaluation tooling, 002 invocation validation test plan, 003 KG+ML research). Decomposing Groups 2-3 (004-007) into atomic work items, informed by research findings.
+
+**Q: Group 1 research is done. Key findings: KG graph ML is not viable at vault scale; SQL CTEs recommended for graph expansion; invocation test plan written but unexecuted. How should these findings shape the next work?**
+
+A: Defer graph expansion (003 recommendations) until other search improvements are validated. Want to see if KG is needed after RAG synthesis and retrieval are improved. Defer 006 (invocation hardening) until 002's manual tests are executed. Keep 004 broad — covers full curation pipeline, not just restructure.
+
+**Q: The evaluation framework (cb_evaluate) was built as an MCP tool. Should it be in the MCP server or a companion tool? Is the data actionable during regular usage? How does a manual, laborious tool align with guiding principles?**
+
+A: Unless the data captured by an MCP tool can be acted on during regular usage, it shouldn't be in the product. Like the idea of human-in-the-loop quality gates to validate work is done well, or using opus to judge work done by cheaper models. The problem to address is confusion and frustration from poor curation — just need to make curation work well with minimum intervention during regular usage.
+
+**Q: So the direction is: quality gates built into curation tools (cheap model produces, judge evaluates, escalate on low confidence). The evaluation framework stays as internal dev tooling but not a product feature?**
+
+A: Yes. Want to formalize the ability to improve results without leaning on heavy, expensive models. Keep 007 (per-tool model selection) in scope — valuable for users who aren't price-conscious.
+
+**Decisions made:**
+- cb_evaluate removed from MCP server (not a product feature)
+- extractors/evaluate.py preserved as internal dev tooling
+- Quality gates built into curation tools (restructure, enrich, review)
+- Graph expansion deferred until search improvements are validated
+- Invocation hardening deferred until manual tests executed
+- Per-tool model selection stays in scope
+
+---
+## Refinement Interview — 2026-03-09
+
+**Context**: Post-review correction. Capstone review of refinement cycle 1 (WI-008–013) found 4 significant findings, 16 minor findings, and 3 user decision points. All findings to be addressed; none deferred.
+
+**Q: Guiding principles still hold?**
+A: Yes, no changes.
+
+**Q: quality_gate_threshold — remove (YAGNI) or wire it into the gate?**
+A: Remove. YAGNI.
+
+**Q: quality_gate_enabled configurable via cb_configure?**
+A: Yes. We're removing the threshold, but quality_gate_enabled should be configurable via cb_configure. Update error messages to reference cb_configure syntax.
+
+**Q: Execute the automatic invocation test plan (WI-002) before next cycle?**
+A: Yes.
+
+**Q: _load_prompt duplication (M2/N2) and hub-page gate criteria (EC1/EC2) — defer or address now?**
+A: Address them now.
+
+**Decisions made:**
+- Remove `_get_gate_threshold` and `quality_gate_threshold` config key entirely (YAGNI)
+- Add `quality_gate_enabled` to `cb_configure` and `cb_status`; update error messages to reference `cb_configure` syntax
+- Execute WI-002 automatic invocation test plan this cycle
+- Fix all significant and minor findings from capstone review; no deferrals
+- Extract `_load_prompt` into `mcp/shared.py`
+- Add `### synthesis` and `### restructure_hub` criteria to quality-gate-system.md
+- Sync all stale documentation (architecture, constraints, CLAUDE.md, module specs)
+
+---
+## Refinement Interview — 2026-03-09 (Cycle 3)
+
+**Context**: Post-review correction + new requirement. Cycle 2 capstone review found 5 significant findings and 12 minor findings. User also wants mock vault testing infrastructure for human-in-the-loop QA.
+
+**Q: Guiding principles still hold?**
+A: Yes, no changes.
+
+**Q: Review findings — address all, defer any, or dismiss any?**
+A: Address all significant findings (S1/S2 gate hints, MR1 proactive_recall, MR2 manual capture mode, MR3 setup guidance).
+
+**Q: Mock vault — what problem does this solve?**
+A: Complement to automated test fixtures. Need a way for humans to test against actual vault structures, not just conceptual unit tests. Feel the effects of changes.
+
+**Q: What should mock vaults contain?**
+A: A few variants for different use cases — onboarding from empty vault, specific vault structures (PARA, Zettelkasten, custom), and fully populated vaults. Simulate real-world scenarios.
+
+**Q: Mock vault scope — how many variants, where do they live?**
+A: 3-5 variants in a test directory. Should be resettable to initial state. Simple scripts to reset or choose variant, deployed to a predictable location. Use best judgement on use cases, iterate if needed.
+
+**Q: Execution strategy changes?**
+A: Parallel if feasible, sonnet model, bypass permissions.
+
+**Decisions made:**
+- Fix gate-blocked output hints in restructure.py and review.py FAIL path
+- Add proactive_recall to cb_configure following quality_gate_enabled pattern
+- Strengthen manual capture mode wording in resources.py
+- Add orient-prompt and CLAUDE.md recall guidance to cb_setup completion output
+- Fix all residual documentation errors from cycle 2 review
+- Update WI-006 with WI-020 confirmed findings
+- Create 5 mock vault variants (empty, PARA, Zettelkasten, mature, working-memory) with deploy/reset scripts
+- Parallel execution with sonnet model
+
+---
+## Refinement Interview — 2026-03-09 (Cycle 4)
+
+**Context**: Post-review correction. Cycle 3 capstone review found 0 critical, 3 significant (fixed immediately), 4 minor findings. Architect codebase analysis surfaced additional dead code, duplicated utilities, and a misleading predicate guidance instruction.
+
+**Q: Guiding principles still hold?**
+A: Yes, no changes.
+
+**Q: Review findings and architect analysis items — address all, defer, or dismiss?**
+A: Address all: dead code removal (_WM_RECALL_LOG, _title_concept_clusters, similarity_threshold, stale files), utility consolidation (_is_within_vault, frontmatter parsing), gate hint wording standardization, cb_setup predicate guidance fix, and manual capture mode re-test.
+
+**Q: Manual capture re-test ordering?**
+A: Execute last, after all code changes are complete.
+
+**Q: Execution strategy?**
+A: Same as last cycle — parallel, sonnet, bypass permissions.
+
+**Decisions made:**
+- Remove all dead code identified by review and architect analysis
+- Consolidate _is_within_vault to shared.py, frontmatter parsing to frontmatter.py
+- Standardize gate hint wording to review.py's imperative form
+- Fix cb_setup to not suggest domain-specific predicates that get normalized away
+- Re-execute WI-020 test D2 as final validation of manual capture mode fix
+- Parallel execution with sonnet model
