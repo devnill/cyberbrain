@@ -164,3 +164,104 @@ Changed enrich.py and restructure.py hint wording to imperative form matching re
 ## [execute] 2026-03-09 — Work item 030: Manual capture mode re-test
 Status: complete
 Re-test procedure documented at specs/steering/research/manual-capture-retest.md. Actual test execution requires a live Claude Desktop session and is pending manual execution by the user.
+
+## [refine] 2026-03-10 — Refinement cycle 5 planning completed
+Trigger: new requirements — plugin-based distribution for Claude Code
+Principles changed: none
+New work items: 031-033
+Replace install.sh with Claude Code plugin distribution. User releases daily, uses multiple machines, wants eventual public distribution. Two research tasks first (plugin system capabilities, Python MCP distribution patterns with basic-memory as reference), then implementation (plugin manifest cleanup, uv-based MCP launch, install.sh simplification). MCP distribution to Claude Desktop/Cursor/Zed deferred pending separate research. uv user guide filed to vault.
+
+## [execute] 2026-03-10 — Work item 031: Research Claude Code plugin system capabilities
+Status: complete
+Pure research task. Created `specs/steering/research/plugin-system-capabilities.md` covering: plugin.json field schema, post-install lifecycle hooks (not supported), MCP server bundling via mcpServers field, versioning/update mechanism, marketplace install flow, uvx launch pattern, install.sh responsibilities breakdown, and concrete recommendations. All acceptance criteria met.
+
+## [execute] 2026-03-10 — Work item 032: Research distribution patterns for Python-backed tools
+Status: complete
+Pure research task. Created `specs/steering/research/plugin-distribution-patterns.md` covering: basic-memory distribution pattern (uvx, PyPI), other Python MCP tools survey (mcp-server-fetch, fastmcp, etc.), uv distribution patterns (uvx vs uv tool vs uv run), multi-machine sync, first-run config initialization, path resolution changes for plugin model, and concrete recommendations. Key finding: `mcp/shared.py` prompt path resolution must change to `__file__`-relative. All acceptance criteria met.
+
+## [execute] 2026-03-10 — Work item 031: Research Claude Code plugin system capabilities
+Status: complete
+Pure research task. Created `specs/steering/research/plugin-system-capabilities.md` covering: plugin.json field schema, post-install lifecycle hooks (not supported), MCP server bundling via mcpServers field, versioning/update mechanism, marketplace install flow, uvx launch pattern, install.sh responsibilities breakdown, and concrete recommendations. All acceptance criteria met.
+
+## [execute] 2026-03-10 — Work item 032: Research distribution patterns for Python-backed tools
+Status: complete
+Pure research task. Created `specs/steering/research/plugin-distribution-patterns.md` covering: basic-memory distribution pattern (uvx, PyPI), other Python MCP tools survey (mcp-server-fetch, fastmcp, etc.), uv distribution patterns (uvx vs uv tool vs uv run), multi-machine sync, first-run config initialization, path resolution changes for plugin model, and concrete recommendations. Key finding: `mcp/shared.py` prompt path must change to `__file__`-relative. All acceptance criteria met.
+
+## [execute] 2026-03-11 — Work item 033: Implement plugin distribution
+Status: complete
+Implemented Claude Code plugin distribution. Created `pyproject.toml` with package metadata. Fixed `mcp/shared.py` to resolve prompts and extractors from `__file__`-relative paths with legacy fallback. Updated `.claude-plugin/plugin.json` (removed dead `skills` field, fixed `author` to object). Updated `.mcp.json` for distribution-ready launch with `${CLAUDE_PLUGIN_ROOT}`. Added `main()` entry point to `mcp/server.py`. Updated `CLAUDE.md` with plugin installation instructions. Added Distribution section to `specs/plan/architecture.md`. All acceptance criteria met.
+
+## [review] 2026-03-11 — Comprehensive review completed (cycles 4-5, preliminary)
+Critical findings: 0
+Significant findings: 0
+Minor findings: 3
+Suggestions: 1
+Items requiring user input: 0
+
+## [review] 2026-03-11 — Comprehensive review completed (cycle 5 capstone)
+Critical findings: 2
+Significant findings: 3
+Minor findings: 10
+Suggestions: 0
+Items requiring user input: 1
+
+The preliminary cycle 4-5 review passed. The subsequent code-quality review found CRITICAL namespace collision issues that block plugin distribution.
+
+C1: pyproject.toml entry point references non-existent module — `cyberbrain.mcp.server:main` references a `cyberbrain` namespace that does not exist.
+C2: mcp namespace collision with PyPI package — internal `mcp/` directory conflicts with PyPI `mcp` package namespace.
+
+These issues prevent package distribution via uvx or pip. The incremental review passed because acceptance criteria were met on paper, but functional correctness testing revealed the implementation is broken at runtime.
+
+## [review] 2026-03-11 — Comprehensive review completed (cycle 5: WI-031–033)
+Critical findings: 2
+Significant findings: 3
+Minor findings: 7
+Suggestions: 0
+Items requiring user input: 1
+
+### C1: pyproject.toml entry point references non-existent module
+- **File**: `pyproject.toml:36`
+- **Issue**: Entry point `cyberbrain.mcp.server:main` references `cyberbrain.mcp.server` but there is no `cyberbrain` namespace package. Wheel installs files to `mcp/server.py` at top level.
+- **Impact**: `uvx cyberbrain-mcp` fails with `ModuleNotFoundError: No module named 'cyberbrain'`.
+
+### C2: mcp namespace collision with PyPI package
+- **File**: `mcp/` directory
+- **Issue**: Internal `mcp/` directory conflicts with PyPI `mcp` package namespace. `import mcp.server` resolves to PyPI package, not cyberbrain code.
+- **Impact**: Package distribution completely broken; only manual install works.
+
+### S1: Missing trio dependency
+- **File**: `pyproject.toml:23-28`
+- **Issue**: PyPI `mcp` package uses `anyio.run(..., backend="trio")` but `trio` not in dependencies.
+- **Impact**: Running `python -m mcp.server` may fail with `LookupError: No such backend: trio`.
+
+### S2: Ambiguous .mcp.json entry point
+- **File**: `.mcp.json:8`
+- **Issue**: `python -m mcp.server` could resolve to PyPI `mcp.server` or cyberbrain's `mcp/server.py`.
+- **Impact**: Fragile import resolution; depends on Python path order.
+
+### S3: Test suite dependency resolution issues
+- **Issue**: `pytest tests/` fails with `ModuleNotFoundError: No module named 'fastmcp'` because runtime deps not in dev requirements.
+- **Impact**: Developers cannot run tests without manual dependency install.
+
+### Open Questions
+- **OQ1**: How to resolve the mcp namespace collision? Options: (1) Rename to `cyberbrain_mcp/`, or (2) Wrap all packages under `cyberbrain/` namespace.
+- **Recommendation**: Option 1 (rename to `cyberbrain_mcp/`) is the minimal fix.
+
+## [refine] 2026-03-11 — Refinement cycle 6 planning completed
+Trigger: Cycle 5 capstone review findings (C1/C2 namespace collision)
+Principles changed: none
+New work items: 034
+Post-review corrections: Restructure project to src layout with `cyberbrain` namespace package. Move `mcp/`, `extractors/`, `prompts/` under `src/cybrain/`. Add `__init__.py` files for proper packages. Convert all imports to package-qualified (`cyberbrain.mcp.tools`). Define entry points in pyproject.toml. Update hooks to call entry points. Remove `sys.path` manipulation from server.py and shared.py. Sequential execution — single cohesive restructuring task.
+
+## [refine] 2026-03-11 — Refinement cycle 6 planning completed
+Trigger: Cycle 5 capstone review found critical namespace collision blocking plugin distribution
+Principles changed: none
+New work items: 034
+User decision: Adopt src layout with cyberbrain namespace package. Move `mcp/`, `extractors/`, `prompts/` under `src/cybrain/`. Add `__init__.py` files for proper packages. Define entry points in pyproject.toml. Update hooks to call entry points. Remove sys.path manipulation. Sequential execution — single cohesive restructuring task.
+
+## [review] 2026-03-11 — Comprehensive review completed (cycle 6: WI-034)
+Critical findings: 4
+Significant findings: 10
+Minor findings: 4
+Suggestions: 0
+Items requiring user input: 0

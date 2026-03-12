@@ -7,16 +7,11 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-# Ensure extractors dir is on sys.path so quality_gate can be imported
-_extractors_dir = str(Path(__file__).parent.parent / "extractors")
-if _extractors_dir not in sys.path:
-    sys.path.insert(0, _extractors_dir)
-
-from quality_gate import GateVerdict, Verdict, _parse_verdict
-from backends import BackendError
+from cyberbrain.extractors.quality_gate import GateVerdict, Verdict, _parse_verdict
+from cyberbrain.extractors.backends import BackendError
 
 # Import the module itself for patching references
-import quality_gate as _qg_module
+import cyberbrain.extractors.quality_gate as _qg_module
 
 
 class TestGateVerdict:

@@ -43,19 +43,17 @@ MIN_CHARS_FOR_EXTRACTION = 100
 # ---------------------------------------------------------------------------
 
 def _import_extract_beats():
-    """Add the installed extractor to sys.path and import it. Exits on failure."""
-    extractor_path = EXTRACTORS_DIR / "extract_beats.py"
-    if not extractor_path.exists():
+    """Import the cyberbrain extract_beats module. Exits on failure."""
+    try:
+        import cyberbrain.extractors.extract_beats as eb  # noqa: PLC0415
+        return eb
+    except ImportError:
         print(
-            f"[import] extract_beats.py not found at {extractor_path}\n"
-            f"[import] Run install.sh first to install the extractor.",
+            "[import] cyberbrain package not found.\n"
+            "[import] Install with: uv pip install -e . (or pip install cyberbrain-mcp)",
             file=sys.stderr,
         )
         sys.exit(1)
-    if str(EXTRACTORS_DIR) not in sys.path:
-        sys.path.insert(0, str(EXTRACTORS_DIR))
-    import extract_beats as eb  # noqa: PLC0415
-    return eb
 
 
 # ---------------------------------------------------------------------------

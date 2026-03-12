@@ -17,10 +17,9 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 
 REPO_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(REPO_ROOT))
 
-import extractors.extract_beats as eb
-import backends as _backends_module
+import cyberbrain.extractors.extract_beats as eb
+import cyberbrain.extractors.backends as _backends_module
 
 
 # ---------------------------------------------------------------------------

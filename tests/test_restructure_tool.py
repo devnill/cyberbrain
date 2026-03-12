@@ -33,19 +33,13 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
-MCP_DIR = REPO_ROOT / "mcp"
-EXTRACTORS_DIR = REPO_ROOT / "extractors"
-
-for d in [str(MCP_DIR), str(EXTRACTORS_DIR), str(REPO_ROOT)]:
-    if d not in sys.path:
-        sys.path.insert(0, d)
 
 # conftest.py installs shared extract_beats mock.
-for _mod in ["shared", "tools.restructure"]:
+for _mod in ["cyberbrain.mcp.shared", "cyberbrain.mcp.tools.restructure"]:
     sys.modules.pop(_mod, None)
 
-import shared as _shared  # noqa: E402
-import tools.restructure as rst_mod  # noqa: E402
+import cyberbrain.mcp.shared as _shared
+import cyberbrain.mcp.tools.restructure as rst_mod
 from fastmcp.exceptions import ToolError  # noqa: E402
 
 

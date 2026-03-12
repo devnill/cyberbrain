@@ -28,12 +28,9 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
-EXTRACTORS_DIR = REPO_ROOT / "extractors"
-if str(EXTRACTORS_DIR) not in sys.path:
-    sys.path.insert(0, str(EXTRACTORS_DIR))
 
-import search_backends as sb
-from search_backends import (
+import cyberbrain.extractors.search_backends as sb
+from cyberbrain.extractors.search_backends import (
     SearchResult,
     GrepBackend,
     FTS5Backend,

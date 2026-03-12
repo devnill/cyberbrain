@@ -25,12 +25,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
-EXTRACTORS_DIR = REPO_ROOT / "extractors"
-MCP_DIR = REPO_ROOT / "mcp"
-
-for d in [str(EXTRACTORS_DIR), str(MCP_DIR), str(REPO_ROOT)]:
-    if d not in sys.path:
-        sys.path.insert(0, d)
+EXTRACTORS_DIR = REPO_ROOT / "src" / "cyberbrain" / "extractors"
 
 
 # ---------------------------------------------------------------------------
@@ -50,20 +45,20 @@ _mock_eb.resolve_config.return_value = {
     "model": "claude-haiku-4-5",
 }
 
-if "extract_beats" not in sys.modules:
-    sys.modules["extract_beats"] = _mock_eb
-if "frontmatter" not in sys.modules:
-    sys.modules["frontmatter"] = MagicMock()
+if "cyberbrain.extractors.extract_beats" not in sys.modules:
+    sys.modules["cyberbrain.extractors.extract_beats"] = _mock_eb
+if "cyberbrain.extractors.frontmatter" not in sys.modules:
+    sys.modules["cyberbrain.extractors.frontmatter"] = MagicMock()
 
 # Mock backends.call_model and config.load_prompt before evaluate imports them.
 # Save originals so we can restore after import to avoid contaminating other tests.
-_orig_backends = sys.modules.get("backends")
-_orig_config = sys.modules.get("config")
+_orig_backends = sys.modules.get("cyberbrain.extractors.backends")
+_orig_config = sys.modules.get("cyberbrain.extractors.config")
 
 _mock_backends = MagicMock()
 _mock_backends.call_model = MagicMock(return_value="{}")
 _mock_backends.BackendError = _BackendError
-sys.modules["backends"] = _mock_backends
+sys.modules["cyberbrain.extractors.backends"] = _mock_backends
 
 _mock_config = MagicMock()
 _mock_config.load_prompt = MagicMock(return_value="prompt template")
@@ -72,13 +67,13 @@ _mock_config.GLOBAL_CONFIG_PATH = EXTRACTORS_DIR / "config.json"
 _mock_config.load_global_config = MagicMock(return_value={})
 _mock_config.find_project_config = MagicMock(return_value={})
 _mock_config.PROMPTS_DIR = REPO_ROOT / "prompts"
-sys.modules["config"] = _mock_config
+sys.modules["cyberbrain.extractors.config"] = _mock_config
 
 # Clear any cached evaluate module
-sys.modules.pop("evaluate", None)
+sys.modules.pop("cyberbrain.extractors.evaluate", None)
 
 # Now import the module under test
-from evaluate import (
+from cyberbrain.extractors.evaluate import (
     Variant,
     VariantOutput,
     Score,
@@ -91,7 +86,7 @@ from evaluate import (
 )
 
 # Restore original modules so other test files get the real ones
-for _name, _orig in [("backends", _orig_backends), ("config", _orig_config)]:
+for _name, _orig in [("cyberbrain.extractors.backends", _orig_backends), ("cyberbrain.extractors.config", _orig_config)]:
     if _orig is not None:
         sys.modules[_name] = _orig
     else:

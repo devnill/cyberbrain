@@ -21,13 +21,12 @@ import pytest
 # Import the module under test
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(REPO_ROOT))
 
-import extractors.extract_beats as eb
-import config as _config_module
-import run_log as _run_log_module
-import autofile as _autofile_module
-import extractor as _extractor_module
+import cyberbrain.extractors.extract_beats as eb
+import cyberbrain.extractors.config as _config_module
+import cyberbrain.extractors.run_log as _run_log_module
+import cyberbrain.extractors.autofile as _autofile_module
+import cyberbrain.extractors.extractor as _extractor_module
 from tests.conftest import make_beat
 
 
@@ -1073,8 +1072,8 @@ class TestExtractBeats:
 
     def test_parses_json_array_from_model_response(self, global_config, temp_vault):
         """A valid JSON array from call_model is parsed into a list of dicts."""
-        with patch("extractor.call_model", return_value=json.dumps(self._SAMPLE_BEATS)):
-            with patch("extractor.load_prompt", return_value="prompt"):
+        with patch("cyberbrain.extractors.extractor.call_model", return_value=json.dumps(self._SAMPLE_BEATS)):
+            with patch("cyberbrain.extractors.extractor.load_prompt", return_value="prompt"):
                 result = eb.extract_beats("transcript text", global_config, "manual", "/cwd")
         assert isinstance(result, list)
         assert len(result) == 1
@@ -1083,30 +1082,30 @@ class TestExtractBeats:
     def test_strips_markdown_code_fences(self, global_config, temp_vault):
         """call_model returning JSON wrapped in code fences is parsed correctly."""
         fenced = f"```json\n{json.dumps(self._SAMPLE_BEATS)}\n```"
-        with patch("extractor.call_model", return_value=fenced):
-            with patch("extractor.load_prompt", return_value="prompt"):
+        with patch("cyberbrain.extractors.extractor.call_model", return_value=fenced):
+            with patch("cyberbrain.extractors.extractor.load_prompt", return_value="prompt"):
                 result = eb.extract_beats("transcript text", global_config, "manual", "/cwd")
         assert len(result) == 1
 
     def test_handles_trailing_text_after_json(self, global_config, temp_vault):
         """Trailing non-JSON text after the array is ignored via raw_decode."""
         trailing = json.dumps(self._SAMPLE_BEATS) + "\n\nHere are the beats I found."
-        with patch("extractor.call_model", return_value=trailing):
-            with patch("extractor.load_prompt", return_value="prompt"):
+        with patch("cyberbrain.extractors.extractor.call_model", return_value=trailing):
+            with patch("cyberbrain.extractors.extractor.load_prompt", return_value="prompt"):
                 result = eb.extract_beats("transcript text", global_config, "manual", "/cwd")
         assert len(result) == 1
 
     def test_returns_empty_list_on_invalid_json(self, global_config, temp_vault):
         """Non-JSON response → empty list."""
-        with patch("extractor.call_model", return_value="not json at all"):
-            with patch("extractor.load_prompt", return_value="prompt"):
+        with patch("cyberbrain.extractors.extractor.call_model", return_value="not json at all"):
+            with patch("cyberbrain.extractors.extractor.load_prompt", return_value="prompt"):
                 result = eb.extract_beats("transcript text", global_config, "manual", "/cwd")
         assert result == []
 
     def test_returns_empty_list_on_non_list_json(self, global_config, temp_vault):
         """JSON object (not array) → empty list."""
-        with patch("extractor.call_model", return_value='{"key": "value"}'):
-            with patch("extractor.load_prompt", return_value="prompt"):
+        with patch("cyberbrain.extractors.extractor.call_model", return_value='{"key": "value"}'):
+            with patch("cyberbrain.extractors.extractor.load_prompt", return_value="prompt"):
                 result = eb.extract_beats("transcript text", global_config, "manual", "/cwd")
         assert result == []
 
@@ -1119,8 +1118,8 @@ class TestExtractBeats:
             captured_messages.append(user)
             return json.dumps(self._SAMPLE_BEATS)
 
-        with patch("extractor.call_model", side_effect=fake_call_model):
-            with patch("extractor.load_prompt", return_value="{vault_claude_md_section}{transcript}{project_name}{cwd}{trigger}"):
+        with patch("cyberbrain.extractors.extractor.call_model", side_effect=fake_call_model):
+            with patch("cyberbrain.extractors.extractor.load_prompt", return_value="{vault_claude_md_section}{transcript}{project_name}{cwd}{trigger}"):
                 eb.extract_beats("some transcript", global_config, "manual", "/cwd")
 
         assert len(captured_messages) == 1
@@ -1134,8 +1133,8 @@ class TestExtractBeats:
             captured_messages.append(user)
             return json.dumps(self._SAMPLE_BEATS)
 
-        with patch("extractor.call_model", side_effect=fake_call_model):
-            with patch("extractor.load_prompt", return_value="{vault_claude_md_section}{transcript}{project_name}{cwd}{trigger}"):
+        with patch("cyberbrain.extractors.extractor.call_model", side_effect=fake_call_model):
+            with patch("cyberbrain.extractors.extractor.load_prompt", return_value="{vault_claude_md_section}{transcript}{project_name}{cwd}{trigger}"):
                 eb.extract_beats("some transcript", global_config, "manual", "/cwd")
 
         assert len(captured_messages) == 1
@@ -1150,8 +1149,8 @@ class TestExtractBeats:
             captured_messages.append(user)
             return json.dumps([])
 
-        with patch("extractor.call_model", side_effect=fake_call_model):
-            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+        with patch("cyberbrain.extractors.extractor.call_model", side_effect=fake_call_model):
+            with patch("cyberbrain.extractors.extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
                 eb.extract_beats(long_transcript, global_config, "manual", "/cwd")
 
         assert len(captured_messages) == 1
@@ -1172,8 +1171,8 @@ class TestExtractorEmptyResponse:
         than crashing on JSON parsing. This can happen when the model refuses
         to respond or the backend returns empty output.
         """
-        with patch("extractor.call_model", return_value=""):
-            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+        with patch("cyberbrain.extractors.extractor.call_model", return_value=""):
+            with patch("cyberbrain.extractors.extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
                 result = eb.extract_beats("some transcript", global_config, "manual", "/cwd")
         assert result == []
 
@@ -1693,8 +1692,8 @@ class TestMain:
             "body": "## Body\n\nContent.",
         }
 
-        with patch("extractor.call_model", return_value=json.dumps([beat])):
-            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+        with patch("cyberbrain.extractors.extractor.call_model", return_value=json.dumps([beat])):
+            with patch("cyberbrain.extractors.extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
                 exit_code = self._run_main([
                     "extract_beats.py",
                     "--transcript", str(transcript),
@@ -1726,8 +1725,8 @@ class TestMain:
             "body": "## Body\n\nContent.",
         }
 
-        with patch("extractor.call_model", return_value=json.dumps([beat])):
-            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+        with patch("cyberbrain.extractors.extractor.call_model", return_value=json.dumps([beat])):
+            with patch("cyberbrain.extractors.extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
                 exit_code = self._run_main([
                     "extract_beats.py",
                     "--transcript", str(transcript),
@@ -1746,8 +1745,8 @@ class TestMain:
         """When the LLM returns an empty beats list, main() exits 0."""
         transcript = self._make_transcript(tmp_path)
 
-        with patch("extractor.call_model", return_value="[]"):
-            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+        with patch("cyberbrain.extractors.extractor.call_model", return_value="[]"):
+            with patch("cyberbrain.extractors.extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
                 exit_code = self._run_main([
                     "extract_beats.py",
                     "--transcript", str(transcript),
@@ -1824,8 +1823,8 @@ class TestMain:
         cfg["journal_folder"] = "AI/Journal"
         self.config_path.write_text(json.dumps(cfg))
 
-        with patch("extractor.call_model", return_value=json.dumps([beat])):
-            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+        with patch("cyberbrain.extractors.extractor.call_model", return_value=json.dumps([beat])):
+            with patch("cyberbrain.extractors.extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
                 self._run_main([
                     "extract_beats.py",
                     "--transcript", str(transcript),
@@ -1859,8 +1858,8 @@ class TestMain:
         """main() exits 0 and prints a message when the LLM backend raises BackendError (lines 156-158)."""
         transcript = self._make_transcript(tmp_path)
 
-        with patch("extractor.call_model", side_effect=eb.BackendError("backend down")):
-            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+        with patch("cyberbrain.extractors.extractor.call_model", side_effect=eb.BackendError("backend down")):
+            with patch("cyberbrain.extractors.extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
                 exit_code = self._run_main([
                     "extract_beats.py",
                     "--transcript", str(transcript),
@@ -1884,9 +1883,9 @@ class TestMain:
         }
         transcript = self._make_transcript(tmp_path)
 
-        with patch("extractor.call_model", return_value=json.dumps([beat])):
-            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
-                with patch("extractors.extract_beats.resolve_output_dir", side_effect=Exception("no dir")):
+        with patch("cyberbrain.extractors.extractor.call_model", return_value=json.dumps([beat])):
+            with patch("cyberbrain.extractors.extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+                with patch("cyberbrain.extractors.extract_beats.resolve_output_dir", side_effect=Exception("no dir")):
                     exit_code = self._run_main([
                         "extract_beats.py",
                         "--transcript", str(transcript),
@@ -1917,10 +1916,10 @@ class TestMain:
         }
         transcript = self._make_transcript(tmp_path)
 
-        with patch("extractor.call_model", return_value=json.dumps([beat])):
-            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+        with patch("cyberbrain.extractors.extractor.call_model", return_value=json.dumps([beat])):
+            with patch("cyberbrain.extractors.extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
                 # autofile_beat will be called; mock it to avoid real LLM calls
-                with patch("extractors.extract_beats.autofile_beat", return_value=self.vault / "AI" / "Claude-Sessions" / "Autofile Test Beat.md") as mock_af:
+                with patch("cyberbrain.extractors.extract_beats.autofile_beat", return_value=self.vault / "AI" / "Claude-Sessions" / "Autofile Test Beat.md") as mock_af:
                     # Create the file so the log can compute relpath
                     dest = self.vault / "AI" / "Claude-Sessions" / "Autofile Test Beat.md"
                     dest.write_text("content", encoding="utf-8")
@@ -1952,9 +1951,9 @@ class TestMain:
         }
         transcript = self._make_transcript(tmp_path)
 
-        with patch("extractor.call_model", return_value=json.dumps([beat])):
-            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
-                with patch("extractors.extract_beats.autofile_beat", side_effect=eb.BackendError("backend down")):
+        with patch("cyberbrain.extractors.extractor.call_model", return_value=json.dumps([beat])):
+            with patch("cyberbrain.extractors.extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+                with patch("cyberbrain.extractors.extract_beats.autofile_beat", side_effect=eb.BackendError("backend down")):
                     exit_code = self._run_main([
                         "extract_beats.py",
                         "--transcript", str(transcript),
@@ -2000,9 +1999,9 @@ class TestMain:
                 raise OSError("simulated write failure")
             return original_write_beat(beat, *args, **kwargs)
 
-        with patch("extractor.call_model", return_value=json.dumps(beats)):
-            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
-                with patch("extractors.extract_beats.write_beat", side_effect=_flaky_write_beat):
+        with patch("cyberbrain.extractors.extractor.call_model", return_value=json.dumps(beats)):
+            with patch("cyberbrain.extractors.extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+                with patch("cyberbrain.extractors.extract_beats.write_beat", side_effect=_flaky_write_beat):
                     exit_code = self._run_main([
                         "extract_beats.py",
                         "--transcript", str(transcript),
@@ -2037,8 +2036,8 @@ class TestMain:
             "--cwd", str(self.vault),
         ])
 
-        with patch("extractor.call_model", return_value=json.dumps([beat])):
-            with patch("extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
+        with patch("cyberbrain.extractors.extractor.call_model", return_value=json.dumps([beat])):
+            with patch("cyberbrain.extractors.extractor.load_prompt", return_value="{transcript}{vault_claude_md_section}{project_name}{cwd}{trigger}"):
                 try:
                     runpy.run_module(
                         "extractors.extract_beats",

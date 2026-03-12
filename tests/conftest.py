@@ -13,20 +13,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-# Ensure the repo root is on sys.path so `import extractors.extract_beats` works
 REPO_ROOT = Path(__file__).parent.parent
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-# Ensure the extractors/ directory is on sys.path so `import search_backends` works
-EXTRACTORS_DIR = REPO_ROOT / "extractors"
-if str(EXTRACTORS_DIR) not in sys.path:
-    sys.path.insert(0, str(EXTRACTORS_DIR))
-
-# Ensure the mcp/ directory is on sys.path for tool module imports
-MCP_DIR = REPO_ROOT / "mcp"
-if str(MCP_DIR) not in sys.path:
-    sys.path.insert(0, str(MCP_DIR))
 
 # ---------------------------------------------------------------------------
 # Shared extract_beats mock — installed ONCE before any test module imports it.
@@ -53,7 +40,7 @@ class _SharedBackendError(Exception):
     pass
 
 
-if "extract_beats" not in sys.modules:
+if "cyberbrain.extractors.extract_beats" not in sys.modules:
     _shared_mock_eb = MagicMock()
     # Use Exception as BackendError so any exception subclassing Exception is caught
     # by the `except BackendError` clause in tool code. This is safe for tests.
@@ -73,7 +60,7 @@ if "extract_beats" not in sys.modules:
     _shared_mock_eb.autofile_beat = MagicMock()
     _shared_mock_eb.write_journal_entry = MagicMock()
     _shared_mock_eb._call_claude_code = MagicMock(return_value="synthesis result")
-    sys.modules["extract_beats"] = _shared_mock_eb
+    sys.modules["cyberbrain.extractors.extract_beats"] = _shared_mock_eb
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -217,7 +204,7 @@ def fts5_db_path(tmp_path):
 @pytest.fixture
 def mock_search_result():
     """Returns a factory for SearchResult objects."""
-    from search_backends import SearchResult
+    from cyberbrain.extractors.search_backends import SearchResult
 
     def _make(path="/vault/Note.md", title="Test Note", score=1.0, **kwargs):
         return SearchResult(path=path, title=title, score=score, **kwargs)

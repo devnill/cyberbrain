@@ -1,9 +1,11 @@
 {
   "name": "cyberbrain",
   "version": "0.1.0",
-  "description": "Extract knowledge beats from Claude Code sessions and file them into an Obsidian vault. Provides cb-recall, cb-file, cb-extract, cb-setup, and cb-enrich skills plus a PreCompact hook and MCP server for Claude Desktop.",
-  "author": "dan",
-  "skills": "./skills/",
+  "description": "Knowledge capture and retrieval for Claude Code sessions. Extracts durable knowledge beats from conversations and files them into an Obsidian vault for future retrieval.",
+  "author": {
+    "name": "Dan Shipper"
+  },
+  "repository": "https://github.com/danshipper/cyberbrain",
   "hooks": "./hooks/hooks.json",
   "mcpServers": "./.mcp.json"
 }

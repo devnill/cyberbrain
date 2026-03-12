@@ -24,12 +24,6 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
-MCP_DIR = REPO_ROOT / "mcp"
-EXTRACTORS_DIR = REPO_ROOT / "extractors"
-
-for d in [str(MCP_DIR), str(EXTRACTORS_DIR), str(REPO_ROOT)]:
-    if d not in sys.path:
-        sys.path.insert(0, d)
 
 
 class _BackendError(Exception):
@@ -47,16 +41,16 @@ _mock_eb.resolve_config.return_value = {
     "daily_journal": False,
 }
 
-if "extract_beats" not in sys.modules:
-    sys.modules["extract_beats"] = _mock_eb
-if "frontmatter" not in sys.modules:
-    sys.modules["frontmatter"] = MagicMock()
+if "cyberbrain.extractors.extract_beats" not in sys.modules:
+    sys.modules["cyberbrain.extractors.extract_beats"] = _mock_eb
+if "cyberbrain.extractors.frontmatter" not in sys.modules:
+    sys.modules["cyberbrain.extractors.frontmatter"] = MagicMock()
 
 # Pre-install a mock quality_gate module so the real one (which imports from
 # backends at module level) is never loaded during tests.
-if "quality_gate" not in sys.modules:
+if "cyberbrain.extractors.quality_gate" not in sys.modules:
     _mock_qg = MagicMock()
-    sys.modules["quality_gate"] = _mock_qg
+    sys.modules["cyberbrain.extractors.quality_gate"] = _mock_qg
 
 # ---------------------------------------------------------------------------
 # FakeMCP (same as test_mcp_server.py)
@@ -79,12 +73,12 @@ class FakeMCP:
 # ---------------------------------------------------------------------------
 
 # Clear stale module cache entries
-for _mod in ["shared", "tools.setup", "tools.enrich", "backends"]:
+for _mod in ["cyberbrain.mcp.shared", "cyberbrain.mcp.tools.setup", "cyberbrain.mcp.tools.enrich", "cyberbrain.extractors.backends"]:
     sys.modules.pop(_mod, None)
 
-import shared as _shared  # noqa: E402  (sets up extractors in sys.path)
-from tools import setup as _setup_mod  # noqa: E402
-from tools import enrich as _enrich_mod  # noqa: E402
+import cyberbrain.mcp.shared as _shared
+from cyberbrain.mcp.tools import setup as _setup_mod
+from cyberbrain.mcp.tools import enrich as _enrich_mod
 
 _fake_mcp = FakeMCP()
 _setup_mod.register(_fake_mcp)

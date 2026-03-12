@@ -25,27 +25,19 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
-MCP_DIR = REPO_ROOT / "mcp"
-EXTRACTORS_DIR = REPO_ROOT / "extractors"
-
-for d in [str(MCP_DIR), str(EXTRACTORS_DIR), str(REPO_ROOT)]:
-    if d not in sys.path:
-        sys.path.insert(0, d)
 
 # conftest.py installs shared extract_beats mock.
 # Pre-install a mock quality_gate module so the real one (which imports from
 # backends at module level) is never loaded during tests.
-if "quality_gate" not in sys.modules:
+if "cyberbrain.extractors.quality_gate" not in sys.modules:
     _mock_qg = MagicMock()
-    sys.modules["quality_gate"] = _mock_qg
+    sys.modules["cyberbrain.extractors.quality_gate"] = _mock_qg
 
-for _mod in ["tools.review"]:
+for _mod in ["cyberbrain.mcp.tools.review"]:
     sys.modules.pop(_mod, None)
 
-if "shared" not in sys.modules:
-    sys.modules.pop("shared", None)
-import shared as _shared  # noqa: E402
-import tools.review as review_mod  # noqa: E402
+import cyberbrain.mcp.shared as _shared
+import cyberbrain.mcp.tools.review as review_mod
 from fastmcp.exceptions import ToolError  # noqa: E402
 
 

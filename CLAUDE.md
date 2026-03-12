@@ -27,14 +27,51 @@ The system exposes an MCP server with ten tools (`cb_extract`, `cb_file`, `cb_re
 
 ## Build & Install
 
+### Claude Code Plugin Installation (Recommended)
+
+Cyberbrain can be installed as a Claude Code plugin for automatic updates and version management:
+
 ```bash
-bash build.sh          # build release tarball
-bash build.sh --clean  # wipe dist/ before building
+# Prerequisites: uv installed (brew install uv)
+# Add plugin marketplace (one time)
+claude plugin marketplace add danshipper/cyberbrain
+
+# Install the plugin
+claude plugin install cyberbrain@danshipper-cyberbrain
+
+# First-time setup: configure vault path
+# The cb_configure tool will guide you through vault discovery
+```
+
+The plugin system handles:
+- Hook registration (PreCompact, SessionEnd)
+- MCP server launch via `uv run`
+- Version tracking and updates via `/plugin update`
+
+**Config location:** `~/.claude/cyberbrain/config.json` (unchanged from install.sh)
+
+### Development / Manual Installation
+
+For development or users who prefer manual control:
+
+```bash
+# Clone and install dependencies
+git clone https://github.com/danshipper/cyberbrain.git
+cd cyberbrain
+uv sync  # or: pip install -e .
+
+# Run tests
+python3 -m pytest tests/
+```
+
+For Claude Desktop, use `install.sh` which handles MCP registration:
+
+```bash
 bash install.sh        # install to ~/.claude/
 bash uninstall.sh [--yes]  # uninstall
 ```
 
-**Validate the extractor directly:**
+### Validate the extractor directly:
 ```bash
 python3 extractors/extract_beats.py \
   --transcript <path-to-jsonl> \
@@ -45,15 +82,10 @@ python3 extractors/extract_beats.py \
 
 Pass `--beats-json <path>` instead of `--transcript` to skip transcript parsing and feed pre-extracted beats JSON directly.
 
-**Test the hook independently:**
+### Test the hook independently:
 ```bash
 echo '{"transcript_path": "/path/to/transcript.jsonl", "session_id": "test-123", "trigger": "compact", "cwd": "/Users/dan/code/my-project"}' | \
   bash hooks/pre-compact-extract.sh
-```
-
-**Run the test suite:**
-```bash
-python3 -m pytest tests/
 ```
 
 **Hot reload:** The hook and `extract_beats.py` reload on each invocation. MCP server changes require restarting Claude Desktop.
@@ -207,4 +239,47 @@ Claude Code / Claude Desktop (process A — user session, expensive model)
 
 ## Distribution
 
-The release tarball includes hooks, extractors, prompts, and the MCP server. `install.sh` copies files to `~/.claude/` and registers the PreCompact hook in `~/.claude/settings.json`.
+Cyberbrain can be installed via Claude Code's plugin system or manually via `install.sh`.
+
+### Plugin Installation (Claude Code)
+
+The plugin system handles hook registration and MCP server launch automatically:
+
+1. Add the cyberbrain repo as a marketplace:
+   ```
+   /plugin marketplace add danshipper/cyberbrain
+   ```
+
+2. Install the plugin:
+   ```
+   /plugin install cyberbrain@danshipper-cyberbrain
+   ```
+
+3. Configure the vault path:
+   ```
+   cb_configure(discover=True)
+   ```
+
+4. Updates:
+   ```
+   /plugin update cyberbrain@danshipper-cyberbrain
+   ```
+
+The plugin uses `uv run` to manage dependencies automatically — no venv setup required.
+
+### Manual Installation (install.sh)
+
+For Claude Desktop or manual setup:
+
+```bash
+bash install.sh        # install to ~/.claude/cyberbrain/
+bash uninstall.sh      # uninstall
+```
+
+`install.sh` handles:
+- Config initialization (vault path prompt)
+- File migration for existing installs
+- Claude Desktop MCP registration
+- Python dependency installation
+
+The release tarball includes hooks, extractors, prompts, and the MCP server.

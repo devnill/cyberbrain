@@ -14,12 +14,12 @@ from unittest.mock import patch
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "mcp"))
+
 
 from fastmcp import FastMCP
-import resources as resources_mod
-import tools.recall as recall_mod
-import tools.manage as manage_mod
+import cyberbrain.mcp.resources as resources_mod
+import cyberbrain.mcp.tools.recall as recall_mod
+import cyberbrain.mcp.tools.manage as manage_mod
 
 BASE_CONFIG = {
     "vault_path": "/tmp/test-vault",

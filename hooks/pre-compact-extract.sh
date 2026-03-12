@@ -25,24 +25,25 @@ if [ -z "$TRANSCRIPT_PATH" ] || [ ! -f "$TRANSCRIPT_PATH" ]; then
   exit 0
 fi
 
-# Locate extractor: plugin-local copy takes precedence over installed copy
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/extractors/extract_beats.py" ]; then
-  EXTRACTOR="$CLAUDE_PLUGIN_ROOT/extractors/extract_beats.py"
+# Invoke extractor via uv if CLAUDE_PLUGIN_ROOT is set (plugin mode), else fall back to installed path
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+  uv run --directory "$CLAUDE_PLUGIN_ROOT" python -m cyberbrain.extractors.extract_beats \
+    --transcript "$TRANSCRIPT_PATH" \
+    --session-id "$SESSION_ID" \
+    --trigger "$TRIGGER" \
+    --cwd "$CWD" \
+    2>&1
+elif command -v cyberbrain-extract >/dev/null 2>&1; then
+  cyberbrain-extract \
+    --transcript "$TRANSCRIPT_PATH" \
+    --session-id "$SESSION_ID" \
+    --trigger "$TRIGGER" \
+    --cwd "$CWD" \
+    2>&1
 else
-  EXTRACTOR="$HOME/.claude/cyberbrain/extractors/extract_beats.py"
-fi
-
-if [ ! -f "$EXTRACTOR" ]; then
-  echo "pre-compact-extract: extractor not found, skipping" >&2
+  echo "pre-compact-extract: cyberbrain not found, skipping" >&2
   exit 0
 fi
-
-python3 "$EXTRACTOR" \
-  --transcript "$TRANSCRIPT_PATH" \
-  --session-id "$SESSION_ID" \
-  --trigger "$TRIGGER" \
-  --cwd "$CWD" \
-  2>&1
 
 # The extractor writes its own log entry to ~/.claude/logs/cb-extract.log.
 # No separate registry write needed here.

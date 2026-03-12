@@ -36,12 +36,6 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
-MCP_DIR = REPO_ROOT / "mcp"
-EXTRACTORS_DIR = REPO_ROOT / "extractors"
-
-for d in [str(MCP_DIR), str(EXTRACTORS_DIR), str(REPO_ROOT)]:
-    if d not in sys.path:
-        sys.path.insert(0, d)
 
 
 class _BackendError(Exception):
@@ -64,10 +58,10 @@ _mock_frontmatter = MagicMock()
 _mock_frontmatter.parse_frontmatter.return_value = {}
 
 # Register mocks before first import of shared (which does `from extract_beats import ...`)
-if "extract_beats" not in sys.modules:
-    sys.modules["extract_beats"] = _mock_eb
-if "frontmatter" not in sys.modules:
-    sys.modules["frontmatter"] = _mock_frontmatter
+if "cyberbrain.extractors.extract_beats" not in sys.modules:
+    sys.modules["cyberbrain.extractors.extract_beats"] = _mock_eb
+if "cyberbrain.extractors.frontmatter" not in sys.modules:
+    sys.modules["cyberbrain.extractors.frontmatter"] = _mock_frontmatter
 
 # ---------------------------------------------------------------------------
 # FakeMCP: captures tool/resource/prompt registrations without requiring FastMCP
@@ -110,16 +104,16 @@ class FakeMCP:
 # ---------------------------------------------------------------------------
 
 # Clear any stale module cache entries from previous test runs in same process
-for _mod in ["shared", "tools", "tools.extract", "tools.file", "tools.recall",
-             "tools.manage", "resources"]:
+for _mod in ["cyberbrain.mcp.shared", "cyberbrain.mcp.tools.extract", "cyberbrain.mcp.tools.file",
+             "cyberbrain.mcp.tools.recall", "cyberbrain.mcp.tools.manage", "cyberbrain.mcp.resources"]:
     sys.modules.pop(_mod, None)
 
-import shared as _shared
-from tools import extract as _extract_mod
-from tools import file as _file_mod
-from tools import recall as _recall_mod
-from tools import manage as _manage_mod
-import resources as _resources_mod
+import cyberbrain.mcp.shared as _shared
+from cyberbrain.mcp.tools import extract as _extract_mod
+from cyberbrain.mcp.tools import file as _file_mod
+from cyberbrain.mcp.tools import recall as _recall_mod
+from cyberbrain.mcp.tools import manage as _manage_mod
+import cyberbrain.mcp.resources as _resources_mod
 
 fake_mcp = FakeMCP()
 _extract_mod.register(fake_mcp)

@@ -41,28 +41,28 @@ if [ -n "$SESSION_ID" ] && [ -f "$EXTRACT_LOG" ]; then
   fi
 fi
 
-# Locate extractor: plugin-local copy takes precedence over installed copy
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/extractors/extract_beats.py" ]; then
-  EXTRACTOR="$CLAUDE_PLUGIN_ROOT/extractors/extract_beats.py"
-else
-  EXTRACTOR="$HOME/.claude/cyberbrain/extractors/extract_beats.py"
-fi
-
-if [ ! -f "$EXTRACTOR" ]; then
-  echo "session-end-extract: extractor not found, skipping" >&2
-  exit 0
-fi
-
 SESSION_END_LOG="$HOME/.claude/logs/cb-session-end.log"
 mkdir -p "$(dirname "$SESSION_END_LOG")"
 
-# Run detached: nohup + background lets extraction continue after Claude Code
-# exits. setsid is Linux-only and not available on macOS.
-nohup python3 "$EXTRACTOR" \
-  --transcript "$TRANSCRIPT_PATH" \
-  --session-id "$SESSION_ID" \
-  --trigger "session-end" \
-  --cwd "$CWD" \
-  >> "$SESSION_END_LOG" 2>&1 &
+# Invoke extractor via uv if CLAUDE_PLUGIN_ROOT is set (plugin mode), else fall back to installed path
+# Run detached: nohup + background lets extraction continue after Claude Code exits.
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+  nohup uv run --directory "$CLAUDE_PLUGIN_ROOT" python -m cyberbrain.extractors.extract_beats \
+    --transcript "$TRANSCRIPT_PATH" \
+    --session-id "$SESSION_ID" \
+    --trigger "session-end" \
+    --cwd "$CWD" \
+    >> "$SESSION_END_LOG" 2>&1 &
+elif command -v cyberbrain-extract >/dev/null 2>&1; then
+  nohup cyberbrain-extract \
+    --transcript "$TRANSCRIPT_PATH" \
+    --session-id "$SESSION_ID" \
+    --trigger "session-end" \
+    --cwd "$CWD" \
+    >> "$SESSION_END_LOG" 2>&1 &
+else
+  echo "session-end-extract: cyberbrain not found, skipping" >&2
+  exit 0
+fi
 
 exit 0

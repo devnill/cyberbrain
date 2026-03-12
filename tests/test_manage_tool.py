@@ -24,20 +24,13 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
-MCP_DIR = REPO_ROOT / "mcp"
-EXTRACTORS_DIR = REPO_ROOT / "extractors"
 
-for d in [str(MCP_DIR), str(EXTRACTORS_DIR), str(REPO_ROOT)]:
-    if d not in sys.path:
-        sys.path.insert(0, d)
-
-# conftest.py installs the shared extract_beats mock before this module is imported.
 # Clear stale cache entries so we get a fresh import bound to our FakeMCP.
-for _mod in ["shared", "tools.manage"]:
+for _mod in ["cyberbrain.mcp.shared", "cyberbrain.mcp.tools.manage"]:
     sys.modules.pop(_mod, None)
 
-import shared as _shared  # noqa: E402  (needed after sys.path setup)
-import tools.manage as manage_mod  # noqa: E402
+import cyberbrain.mcp.shared as _shared
+import cyberbrain.mcp.tools.manage as manage_mod
 
 try:
     from fastmcp.exceptions import ToolError

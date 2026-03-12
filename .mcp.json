@@ -2,7 +2,11 @@
   "mcpServers": {
     "cyberbrain": {
       "command": "uv",
-      "args": ["run", "--with", "mcp", "python3", "mcp/server.py"]
+      "args": [
+        "run",
+        "--directory", "${CLAUDE_PLUGIN_ROOT}",
+        "python", "-m", "cyberbrain.mcp.server"
+      ]
     }
   }
 }

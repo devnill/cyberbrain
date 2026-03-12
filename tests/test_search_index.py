@@ -21,11 +21,8 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
-EXTRACTORS_DIR = REPO_ROOT / "extractors"
-if str(EXTRACTORS_DIR) not in sys.path:
-    sys.path.insert(0, str(EXTRACTORS_DIR))
 
-import search_index as si
+import cyberbrain.extractors.search_index as si
 
 
 @pytest.fixture(autouse=True)

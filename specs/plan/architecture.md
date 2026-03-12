@@ -469,6 +469,55 @@ Working-memory beats route to `AI/Working Memory/<project>/` regardless of scope
 
 ---
 
+## Distribution
+
+Cyberbrain supports two distribution paths:
+
+### Claude Code Plugin (Primary)
+
+The `.claude-plugin/plugin.json` manifest enables installation via Claude Code's plugin system:
+
+```json
+{
+  "name": "cyberbrain",
+  "version": "0.1.0",
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": "./.mcp.json"
+}
+```
+
+**Key files:**
+- `hooks/hooks.json` — PreCompact and SessionEnd hooks using `${CLAUDE_PLUGIN_ROOT}` for script paths
+- `.mcp.json` — MCP server launch config using `uv run --directory ${CLAUDE_PLUGIN_ROOT}`
+- `pyproject.toml` — Python package metadata for uv dependency resolution
+
+**Path resolution in plugin mode:**
+- `mcp/shared.py` resolves prompts and extractors relative to `__file__` (plugin cache) with legacy `~/.claude/cyberbrain/` fallback
+- Hook scripts check `${CLAUDE_PLUGIN_ROOT}` first, falling back to `~/.claude/cyberbrain/`
+- User config remains at `~/.claude/cyberbrain/config.json` — plugin system does not touch it
+
+**What the plugin system handles:**
+- Hook registration (auto-registered via `hooks/hooks.json`)
+- MCP server launch (via `.mcp.json` with uv dependency resolution)
+- Plugin updates via `/plugin update`
+
+**What install.sh still handles:**
+- Config initialization (interactive vault path prompt)
+- File migration (one-time, for existing installs)
+- Claude Desktop registration (separate from Claude Code plugin system)
+
+### Manual Installation (install.sh)
+
+The `install.sh` script remains for:
+- Claude Desktop users (no plugin system)
+- First-time config initialization
+- Migration from older installations
+- Python dependency setup for the extractor layer
+
+The installer copies files to `~/.claude/cyberbrain/` and registers hooks in `~/.claude/settings.json`.
+
+---
+
 ## 100% Coverage Check
 
 1. **Every module's scope is accounted for.** All code files map to a module spec. The 23 prompt files are covered by the prompts module. Build/install scripts (`build.sh`, `install.sh`, `uninstall.sh`) are distribution artifacts, not runtime modules — they are noted but not given module specs.
@@ -480,3 +529,37 @@ Working-memory beats route to `AI/Working Memory/<project>/` regardless of scope
 4. **Cross-module dependencies have matching Provides/Requires pairs.** All interfaces are documented in the Interface Contracts section above. The MCP shared bridge (shared.py) is the primary coupling point between the MCP layer and the extractor layer.
 
 **Result: Coverage check passes.** Known gaps are flagged as design tensions (T1-T8) above.
+
+---
+
+## Distribution
+
+Cyberbrain supports two distribution paths:
+
+### Plugin Distribution (Claude Code)
+
+The Claude Code plugin system handles hook registration and MCP server launch automatically:
+
+- `.claude-plugin/plugin.json` — plugin manifest with name, version, hooks, and MCP server reference
+- `hooks/hooks.json` — hook definitions using `${CLAUDE_PLUGIN_ROOT}` for script paths
+- `.mcp.json` — MCP server launch config using `uv run` for dependency management
+- `pyproject.toml` — Python package metadata for uv-based dependency resolution
+
+When installed as a plugin:
+1. Hooks fire via `${CLAUDE_PLUGIN_ROOT}/hooks/pre-compact-extract.sh` and `${CLAUDE_PLUGIN_ROOT}/hooks/session-end-extract.sh`
+2. MCP server launches via `uv run --directory ${CLAUDE_PLUGIN_ROOT} python -m mcp.server`
+3. Extractors and prompts are resolved relative to `${CLAUDE_PLUGIN_ROOT}`
+
+Path resolution precedence in `mcp/shared.py`:
+- Primary: `__file__`-relative (works in plugin cache)
+- Fallback: `~/.claude/cyberbrain/` (legacy installed location)
+
+### Manual Distribution (Claude Desktop)
+
+`install.sh` handles:
+- Config initialization (vault path prompt)
+- File migration for existing installs
+- Python dependency installation via pip
+- Claude Desktop MCP registration
+
+Claude Desktop users must run `install.sh` manually; the plugin system is Claude Code-only.

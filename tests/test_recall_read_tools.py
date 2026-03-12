@@ -31,17 +31,11 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
-MCP_DIR = REPO_ROOT / "mcp"
-EXTRACTORS_DIR = REPO_ROOT / "extractors"
-
-for d in [str(MCP_DIR), str(EXTRACTORS_DIR), str(REPO_ROOT)]:
-    if d not in sys.path:
-        sys.path.insert(0, d)
 
 
 # conftest.py installs the shared extract_beats mock before any test module runs.
 # We just import the tool module here.
-import tools.recall as recall_module
+import cyberbrain.mcp.tools.recall as recall_module
 
 
 # ---------------------------------------------------------------------------

@@ -29,20 +29,14 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
-MCP_DIR = REPO_ROOT / "mcp"
-EXTRACTORS_DIR = REPO_ROOT / "extractors"
-
-for d in [str(MCP_DIR), str(EXTRACTORS_DIR), str(REPO_ROOT)]:
-    if d not in sys.path:
-        sys.path.insert(0, d)
 
 
 # conftest.py installs the shared extract_beats mock before any test module runs.
 # We just import the tool modules here; no additional mock setup needed.
 # Using patch.object (not string-based patch) ensures patches always target the
 # live module object, regardless of what other test files do to sys.modules.
-import tools.extract as extract_module
-import tools.file as file_module
+import cyberbrain.mcp.tools.extract as extract_module
+import cyberbrain.mcp.tools.file as file_module
 
 
 def _get_backend_error():
@@ -58,12 +52,12 @@ def _get_backend_error():
 
 def _get_extract_module():
     """Return the live extract module — may have been replaced by another test file."""
-    return sys.modules.get("tools.extract", extract_module)
+    return sys.modules.get("cyberbrain.mcp.tools.extract", extract_module)
 
 
 def _get_file_module():
     """Return the live file module — may have been replaced by another test file."""
-    return sys.modules.get("tools.file", file_module)
+    return sys.modules.get("cyberbrain.mcp.tools.file", file_module)
 
 
 # ---------------------------------------------------------------------------

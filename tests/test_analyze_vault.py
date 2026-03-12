@@ -14,11 +14,8 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).parent.parent
-EXTRACTORS_DIR = REPO_ROOT / "extractors"
-if str(EXTRACTORS_DIR) not in sys.path:
-    sys.path.insert(0, str(EXTRACTORS_DIR))
 
-from analyze_vault import (
+from cyberbrain.extractors.analyze_vault import (
     analyze_vault,
     parse_frontmatter,
     extract_wikilinks,
@@ -368,7 +365,7 @@ class TestAnalyzeVaultMain:
 
         write_note(tmp_path, "Note.md", "---\ntype: decision\n---\nBody.")
         monkeypatch.setattr(_sys, "argv", ["analyze_vault.py", str(tmp_path)])
-        runpy.run_module("analyze_vault", run_name="__main__", alter_sys=True)
+        runpy.run_module("cyberbrain.extractors.analyze_vault", run_name="__main__", alter_sys=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         assert data["total_notes"] == 1
@@ -381,7 +378,7 @@ class TestAnalyzeVaultMain:
         write_note(tmp_path, "Note.md", "---\ntype: insight\n---\nBody.")
         out_file = tmp_path / "report.json"
         monkeypatch.setattr(_sys, "argv", ["analyze_vault.py", str(tmp_path), "--output", str(out_file)])
-        runpy.run_module("analyze_vault", run_name="__main__", alter_sys=True)
+        runpy.run_module("cyberbrain.extractors.analyze_vault", run_name="__main__", alter_sys=True)
         assert out_file.exists()
         data = json.loads(out_file.read_text())
         assert data["total_notes"] == 1
@@ -395,7 +392,7 @@ class TestAnalyzeVaultMain:
 
         monkeypatch.setattr(_sys, "argv", ["analyze_vault.py", "/nonexistent/vault/path"])
         with pytest.raises(SystemExit) as exc_info:
-            runpy.run_module("analyze_vault", run_name="__main__", alter_sys=True)
+            runpy.run_module("cyberbrain.extractors.analyze_vault", run_name="__main__", alter_sys=True)
         assert exc_info.value.code == 1
 
 
@@ -408,14 +405,14 @@ class TestFrontmatterEdgeCases:
 
     def test_parse_frontmatter_returns_empty_when_yaml_is_non_dict(self):
         """YAML that parses to a list (not a dict) returns {}."""
-        from frontmatter import parse_frontmatter
+        from cyberbrain.extractors.frontmatter import parse_frontmatter
         content = "---\n- item1\n- item2\n---\nBody."
         result = parse_frontmatter(content)
         assert result == {}
 
     def test_parse_frontmatter_returns_empty_on_yaml_exception(self):
         """YAML parse errors return {} (the except Exception branch, lines 28-29)."""
-        from frontmatter import parse_frontmatter
+        from cyberbrain.extractors.frontmatter import parse_frontmatter
         from unittest.mock import patch
         # Force yaml.safe_load to raise
         with patch("yaml.safe_load", side_effect=Exception("yaml error")):
@@ -424,7 +421,7 @@ class TestFrontmatterEdgeCases:
 
     def test_read_frontmatter_tags_returns_empty_for_plain_string_tags(self, tmp_path):
         """Tags that aren't JSON array and aren't bracketed list return empty set."""
-        from frontmatter import read_frontmatter_tags
+        from cyberbrain.extractors.frontmatter import read_frontmatter_tags
         p = tmp_path / "note.md"
         p.write_text("---\ntags: just-a-plain-value\n---\nBody.", encoding="utf-8")
         result = read_frontmatter_tags(str(p))
@@ -432,13 +429,13 @@ class TestFrontmatterEdgeCases:
 
     def test_normalise_list_with_actual_list(self):
         """normalise_list() with a real Python list returns list[str]."""
-        from frontmatter import normalise_list
+        from cyberbrain.extractors.frontmatter import normalise_list
         result = normalise_list(["alpha", "beta", "gamma"])
         assert result == ["alpha", "beta", "gamma"]
 
     def test_read_frontmatter_returns_dict_for_valid_file(self, tmp_path):
         """read_frontmatter() reads a file and returns parsed frontmatter."""
-        from frontmatter import read_frontmatter
+        from cyberbrain.extractors.frontmatter import read_frontmatter
         p = tmp_path / "note.md"
         p.write_text("---\ntitle: Test\ntags: [a, b]\n---\nBody.", encoding="utf-8")
         result = read_frontmatter(str(p))
@@ -446,6 +443,6 @@ class TestFrontmatterEdgeCases:
 
     def test_read_frontmatter_returns_empty_for_missing_file(self, tmp_path):
         """read_frontmatter() returns {} when the file doesn't exist."""
-        from frontmatter import read_frontmatter
+        from cyberbrain.extractors.frontmatter import read_frontmatter
         result = read_frontmatter(str(tmp_path / "nonexistent.md"))
         assert result == {}

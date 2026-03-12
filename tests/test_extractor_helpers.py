@@ -23,23 +23,14 @@ import subprocess
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# sys.path setup — extractors/ must be on path for direct imports
-# ---------------------------------------------------------------------------
-
 REPO_ROOT = Path(__file__).parent.parent
-EXTRACTORS_DIR = REPO_ROOT / "extractors"
-
-for d in [str(EXTRACTORS_DIR), str(REPO_ROOT)]:
-    if d not in sys.path:
-        sys.path.insert(0, d)
 
 
 # ===========================================================================
 # config.py
 # ===========================================================================
 
-import config as config_mod  # noqa: E402
+import cyberbrain.extractors.config as config_mod
 
 
 class TestLoadGlobalConfig:
@@ -198,7 +189,7 @@ class TestLoadPrompt:
 # frontmatter.py
 # ===========================================================================
 
-import frontmatter as fm_mod  # noqa: E402
+import cyberbrain.extractors.frontmatter as fm_mod
 
 
 class TestParseFrontmatter:
@@ -317,7 +308,7 @@ class TestDeriveId:
 # vault.py
 # ===========================================================================
 
-import vault as vault_mod  # noqa: E402
+import cyberbrain.extractors.vault as vault_mod
 
 
 class TestParseValidTypesFromClaudeMd:
@@ -519,7 +510,7 @@ class TestBuildVaultTitlesSet:
         assert result == {"NoteA", "NoteB", "NoteC"}
 
     def test_returns_empty_on_oserror(self, tmp_path):
-        with patch("vault.Path.rglob", side_effect=OSError("no access")):
+        with patch("cyberbrain.extractors.vault.Path.rglob", side_effect=OSError("no access")):
             result = vault_mod.build_vault_titles_set(str(tmp_path))
         assert result == set()
 
@@ -777,7 +768,7 @@ if "backends" not in sys.modules:
 if "config" not in sys.modules:
     sys.modules["config"] = config_mod
 
-import extractor as extractor_mod  # noqa: E402
+import cyberbrain.extractors.extractor as extractor_mod
 
 
 class TestExtractBeats:
@@ -882,7 +873,7 @@ class TestExtractBeats:
 # transcript.py
 # ===========================================================================
 
-import transcript as transcript_mod  # noqa: E402
+import cyberbrain.extractors.transcript as transcript_mod
 
 
 class TestParseJsonlTranscript:

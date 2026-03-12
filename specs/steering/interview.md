@@ -145,3 +145,104 @@ A: Same as last cycle — parallel, sonnet, bypass permissions.
 - Fix cb_setup to not suggest domain-specific predicates that get normalized away
 - Re-execute WI-020 test D2 as final validation of manual capture mode fix
 - Parallel execution with sonnet model
+
+---
+## Refinement Interview — 2026-03-10
+
+**Context**: New requirements. User wants to replace the install.sh distribution mechanism with a Claude Code plugin, enabling in-Claude updates/versioning across multiple machines (personal + work) and eventual public distribution.
+
+**Q: Do the guiding principles still hold?**
+A: Yes, no changes.
+
+**Q: What problem is plugin distribution solving?**
+A: The installer (install.sh) is annoying. Wants an in-Claude solution for updates and versioning. Has a GitHub plugin repo to add cyberbrain to. Releases daily and wants latest version on multiple computers at all times.
+
+**Q: What is "the Claude Code portion"?**
+A: The MCP server is still important for Claude Desktop and other apps. That needs additional research to move outside of developer tools. Focus for this cycle: Claude Code distribution path.
+
+**Q: Plugin system capabilities and MCP bundling approach?**
+A: Research task. Can we ship a built-in MCP with the plugin? Should we support multiple deployment methods?
+
+**Q: Does install.sh need to be preserved?**
+A: Research task. Want to understand how other tools handle these issues — particularly basic-memory as a reference for the kind of tool cyberbrain aims to be.
+
+**Q: Distribution scope?**
+A: Both personal use (personal + work machines) and eventual public distribution.
+
+**Q: uv as runtime — acceptable?**
+A: Yes, if it makes the most sense in 2026. CLAUDE.md should be updated accordingly. Remove dead skills/ reference from plugin.json.
+
+**Decisions made:**
+- Remove dead `"skills"` field from plugin.json (no skills/ directory exists; MCP is the single interface)
+- Adopt uv for MCP server launch if research confirms it as the right approach
+- Two research tasks before implementation: plugin system capabilities (031), distribution patterns (032)
+- MCP distribution to Claude Desktop/Cursor/Zed: deferred, needs separate research
+- CLAUDE.md updated once uv approach confirmed by research (WI-033)
+- uv user guide filed to vault for review
+
+---
+## Refinement Interview — 2026-03-11
+
+**Context**: Post-review correction. Cycle 5 capstone review found 2 critical findings (namespace collision), 3 significant findings, 10 minor findings. The WI-033 implementation passed incremental review but is broken at runtime.
+
+**Q: Guiding principles still hold?**
+A: Yes, no changes.
+
+**Q: How to resolve the namespace collision?**
+A: Rename `mcp/` to `cyberbrain_mcp/` with proper `__init__.py` files (conventional package approach). No wrapping under a top-level `cyberbrain/` directory at repo root.
+
+**Q: Use src layout?**
+A: Yes, with proper packages. Move `mcp/`, `extractors/`, `prompts/` under `src/cybrain/`. Add `__init__.py` files. Use package-qualified imports throughout. Remove `sys.path` manipulation.
+
+**Q: How should hooks/scripts be handled?**
+A: Define entry points in pyproject.toml. Hooks call entry points instead of file paths. Non-Python files (hooks, scripts, install.sh) stay at repo root.
+
+**Q: Execution strategy?**
+A: Sequential. Single cohesive restructuring task that cannot be broken into testable pieces.
+
+**Decisions made:**
+- Adopt src layout: `mcp/` → `src/cybrain/mcp/`, `extractors/` → `src/cybrain/extractors/`, `prompts/` → `src/cybrain/prompts/`
+- Add `__init__.py` to make proper packages (`cyberbrain`, `cyberbrain.mcp`, `cyberbrain.extractors`)
+- Entry points: `cyberbrain-mcp = "cyberbrain.mcp.server:main"`
+- Remove `sys.path` manipulation from server.py and shared.py
+- All imports use `cyberbrain.*` namespace
+- Sequential execution (single work item)
+
+---
+## Refinement Interview — 2026-03-11 (Cycle 6)
+
+**Context**: Post-review correction. Cycle 5 capstone review found 2 critical findings (C1, C2) that block plugin distribution: namespace collision with PyPI `mcp` package and broken entry point in pyproject.toml.
+
+**Q: Guiding principles still hold?**
+A: Yes, no changes.
+
+**Q: Review findings — the critical findings block plugin distribution entirely. How to resolve?**
+A: Two options presented:
+1. Rename `mcp/` to `cyberbrain_mcp/` (minimal change)
+2. Wrap all packages under `cyberbrain/` namespace (cleaner organization)
+User chose option 2 (namespace wrapping) for cleaner structure.
+
+**Q: Namespace layout — standard src layout puts the package under `src/cybrain/`. This means tests and config files stay at repo root, not inside the package. Acceptable?**
+A: Yes, that's the standard pattern.
+
+**Q: Hooks and scripts — they currently call Python files directly. Should they become entry points?**
+A: Yes, add entry points for extract_beats and any other callable scripts. Hooks should call entry points, not file paths.
+
+**Q: extractors and prompts — should they also be proper packages?**
+A: Yes, add `__init__.py` to `extractors/` as well. Prompts stays as data files (markdown).
+
+**Q: What about the repo structure? Having a single `cyberbrain/` directory at the root seems redundant.**
+A: Use src layout — `src/cybrain/` — so tests, hooks, config files stay at repo root. This is the standard Python pattern.
+
+**Q: Execution strategy?**
+A: Sequential. This is a cohesive restructuring task that touches many files.
+
+**Decisions made:**
+- Restructure to src layout: `mcp/` → `src/cybrain/mcp/`, `extractors/` → `src/cybrain/extractors/`, `prompts/` → `src/cybrain/prompts/`
+- Add `__init__.py` files to make proper packages
+- Remove `sys.path` manipulation from server.py and shared.py
+- Update all imports to package-qualified (`from cyberbrain.mcp.tools import ...`)
+- Add entry points in pyproject.toml
+- Update hooks to call entry points
+- Update tests to use package imports
+- Sequential execution

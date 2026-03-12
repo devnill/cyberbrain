@@ -21,20 +21,14 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
-MCP_DIR = REPO_ROOT / "mcp"
-EXTRACTORS_DIR = REPO_ROOT / "extractors"
-
-for d in [str(MCP_DIR), str(EXTRACTORS_DIR), str(REPO_ROOT)]:
-    if d not in sys.path:
-        sys.path.insert(0, d)
 
 # conftest.py installs the shared extract_beats mock before this module is imported.
 # Clear any stale module cache so we get a fresh import.
-for _mod in ["shared", "tools.reindex"]:
+for _mod in ["cyberbrain.mcp.shared", "cyberbrain.mcp.tools.reindex"]:
     sys.modules.pop(_mod, None)
 
-import shared as _shared  # noqa: E402
-import tools.reindex as reindex_mod  # noqa: E402
+import cyberbrain.mcp.shared as _shared
+import cyberbrain.mcp.tools.reindex as reindex_mod
 from fastmcp.exceptions import ToolError  # noqa: E402
 
 
