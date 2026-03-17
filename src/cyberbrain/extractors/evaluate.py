@@ -404,7 +404,7 @@ def main():
     args = parser.parse_args()
 
     # Load base config
-    from config import resolve_config
+    from cyberbrain.extractors.config import resolve_config
     base_config = resolve_config(os.getcwd())
 
     # Read note files

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# DEPRECATED: Use `python -m build` or `uv build` from pyproject.toml instead.
+# This script packages the pre-WI-034 flat layout and is no longer correct.
+#
 # build.sh — Produce a release tarball for cyberbrain.
 #
 # Usage:

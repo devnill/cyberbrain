@@ -11,7 +11,8 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
-from cyberbrain.mcp.shared import _load_config, _parse_frontmatter, _index_paths, _load_tool_prompt as _load_prompt
+from cyberbrain.mcp.shared import _load_config, _index_paths, _load_tool_prompt as _load_prompt
+from cyberbrain.extractors.frontmatter import parse_frontmatter as _parse_frontmatter
 
 _DAILY_JOURNAL_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
 _BATCH_SIZE = 10
@@ -118,7 +119,11 @@ def _apply_frontmatter_update(
 ) -> bool:
     """Apply classification to the note's frontmatter. Returns True on success."""
     fm = _parse_frontmatter(content)
-    has_fm = content.strip().startswith("---")
+    # Check for actual frontmatter: starts with --- and has a closing ---
+    has_fm = content.strip().startswith("---") and content.find("\n---", 3) != -1
+    # Malformed: starts with --- but no closing ---
+    if content.strip().startswith("---") and not has_fm:
+        return False
 
     fields_to_set: dict = {}
 
@@ -145,9 +150,18 @@ def _apply_frontmatter_update(
 
     if has_fm:
         # Insert new fields before the closing ---
+        # Find the closing --- separator (not the opening one at position 0)
         fm_end = content.find("\n---", 3)
         if fm_end == -1:
-            return False
+            # Check if file ends with --- (malformed or empty frontmatter)
+            stripped_end = content.rstrip()
+            if stripped_end.endswith("---"):
+                # Find where the trailing --- starts
+                fm_end = content.rfind("---")
+                if fm_end <= 3:  # Must be after the opening ---
+                    return False
+            else:
+                return False
 
         lines_to_add = _format_fm_fields(fields_to_set)
         new_content = content[:fm_end] + "\n" + "\n".join(lines_to_add) + content[fm_end:]
@@ -211,7 +225,7 @@ def register(mcp: FastMCP) -> None:
         Processes up to 10 notes per LLM call; large vaults may take multiple calls.
         """
         from cyberbrain.extractors.backends import call_model, get_model_for_tool
-        from quality_gate import quality_gate as _quality_gate
+        from cyberbrain.extractors.quality_gate import quality_gate as _quality_gate
 
         config = _load_config()
         gate_enabled = config.get("quality_gate_enabled", True)

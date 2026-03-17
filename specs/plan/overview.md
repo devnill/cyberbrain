@@ -1,39 +1,57 @@
-# Refinement Cycle 6 — Namespace Collision Fix (src Layout)
+# Refinement Cycle 8 — Token-Efficient Testing
 
 ## What is Changing
 
-Restructuring the project from flat directory layout (`mcp/`, `extractors/`, `prompts/`) to src layout with a `cyberbrain` namespace package. This fixes the critical namespace collision with PyPI's `mcp` package discovered in the cycle 5 capstone review.
-
-Key changes:
-1. **Directory structure** — Move `mcp/`, `extractors/`, `prompts/` under `src/cybrain/`
-2. **Package structure** — Add `__init__.py` files to make proper packages
-3. **Imports** — Convert all imports to package-qualified (`from cyberbrain.mcp.tools import ...`)
-4. **Entry points** — Define console scripts in pyproject.toml
-5. **Hooks** — Update to call entry points instead of file paths
+Optimize the ideate cycle for lower token spend by implementing targeted testing. Instead of running all 1285 tests with verbose output on every change, run only tests affected by changed code with minimal output (pass/fail only), then escalate to detailed output only on failure.
 
 ## Triggering Context
 
-Cycle 5 capstone review found critical issues (C1, C2) that block plugin distribution:
-- pyproject.toml entry point `cyberbrain.mcp.server:main` references non-existent namespace
-- Internal `mcp/` directory collides with PyPI `mcp` package namespace
-- `uvx cyberbrain-mcp` or `pip install` would fail with import errors
-
-The incremental review passed because acceptance criteria were met, but functional correctness testing revealed the implementation is broken at runtime.
+User feedback during execution of prior cycles: running 1200+ tests with verbose output consumes excessive tokens. Need to preserve quality while minimizing token spend during development.
 
 ## Scope Boundary
 
-**In scope:** Directory restructuring, package creation, import migration, entry point configuration, hook updates, test import fixes, documentation updates.
+**In scope:**
+- Add pytest markers for test categorization (core, extended, slow)
+- Implement `--affected-only` pytest plugin with import-based test mapping
+- Configure default pytest for minimal output (quiet mode)
+- Create test wrapper script for two-pass execution
 
-**Not in scope:** Behavior changes, new features, architecture changes beyond the namespace fix.
-
-## Expected Impact
-
-- Plugin distribution via uvx/pip works correctly
-- `python -m cyberbrain.mcp.server` resolves correctly
-- All imports use `cyberbrain.*` namespace
-- Tests pass with proper package imports
-- No `sys.path` manipulation needed
+**Not in scope:**
+- Changes to actual test logic or assertions
+- Changes to production code
+- Changes to CI/CD configuration
 
 ## New Work Items
 
-034 (1 item). See `plan/work-items/034-restructure-to-src-layout.md` for details.
+048–051 (4 items). See `plan/work-items/` for details.
+
+## Execution Strategy
+
+**Mode:** Sequential
+**Review cadence:** Single comprehensive review after all items complete
+**Agent configuration:** Default models acceptable (testing infrastructure is straightforward)
+
+**Ordering:**
+1. WI-048 (markers) — Foundation for categorization
+2. WI-049 (affected-only plugin) — Core functionality
+3. WI-050 (quiet defaults) — Output configuration
+4. WI-051 (wrapper script) — Convenience wrapper
+
+Dependencies: WI-048 → WI-049 → WI-050/051 (parallel after 049)
+
+## Expected Impact
+
+| Metric | Before | After | Improvement |
+|--------|--------|-------|-------------|
+| Tests run per change | 1285 | 50-100 | 92-96% |
+| Lines of test output | 500+ | 1-3 | 99% |
+| Context window usage | Heavy | Minimal | ~95% |
+| Quality preservation | Full | Full | No loss |
+
+## Principles
+
+No changes. All existing guiding principles hold.
+
+## Architecture
+
+No changes to system architecture. Testing configuration only.

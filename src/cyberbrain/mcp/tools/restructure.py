@@ -389,8 +389,20 @@ def _embedding_hierarchical_clusters(
     sim_matrix = emb_normed @ emb_normed.T
     dist_matrix = 1.0 - sim_matrix
 
-    # Average-linkage agglomerative clustering (no scipy needed)
+    # Adaptive threshold from corpus statistics: adjusts to the vault's embedding
+    # distribution so that terse technical vaults and verbose narrative vaults both
+    # cluster appropriately. Formula: median - 0.5 * std, clamped to [0.15, 0.40].
     n = len(valid_notes)
+    off_diag = dist_matrix[np.triu_indices(n, k=1)]
+    if len(off_diag) > 2:
+        median_dist = float(np.median(off_diag))
+        std_dist = float(np.std(off_diag))
+        adaptive_threshold = max(0.15, min(0.40, median_dist - 0.5 * std_dist))
+    else:
+        adaptive_threshold = 0.30
+    distance_threshold = adaptive_threshold
+
+    # Average-linkage agglomerative clustering (no scipy needed)
     # Start: each note is its own cluster
     cluster_members: dict[int, list[int]] = {i: [i] for i in range(n)}
     active = set(range(n))
@@ -592,10 +604,12 @@ def _build_clusters(notes: list[dict], backend, min_cluster_size: int) -> list[l
                 continue
 
     # Build adjacency from strong edges only.
-    # A pair is adjacent if EITHER note found the other in >= 2 of its per-word searches.
+    # A pair is adjacent if BOTH notes found the other in >= 2 of their per-word searches
+    # (mutual edge requirement). This prevents over-merging through transitive closure
+    # caused by asymmetric word-search results where one side picks up spurious matches.
     for i in range(len(notes)):
         for j, w in edge_weight[i].items():
-            if w >= 2 or edge_weight[j].get(i, 0) >= 2:
+            if w >= 2 and edge_weight[j].get(i, 0) >= 2:
                 adjacency[i].add(j)
                 adjacency[j].add(i)
 
@@ -1196,7 +1210,7 @@ def _gate_decisions(decisions: list[dict], clusters: list[list[dict]],
         return []
 
     try:
-        from quality_gate import quality_gate
+        from cyberbrain.extractors.quality_gate import quality_gate
     except ImportError:
         return []
 
@@ -1286,7 +1300,7 @@ def _gate_generated_content(decision: dict, config: dict) -> dict | None:
         return None
 
     try:
-        from quality_gate import quality_gate
+        from cyberbrain.extractors.quality_gate import quality_gate
     except ImportError:
         return None
 

@@ -7,6 +7,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
+from cyberbrain.extractors import search_index
 from cyberbrain.mcp.shared import _load_config, _get_search_backend, _prune_index
 
 
@@ -43,9 +44,7 @@ def register(mcp: FastMCP) -> None:
             return "No search index available (grep backend active). Nothing to maintain."
 
         if rebuild:
-            if not hasattr(backend, "build_full_index"):
-                return "Active search backend does not support full rebuild."
-            backend.build_full_index(config)
+            search_index.build_full_index(config)
             return f"Search index fully rebuilt. Vault: {vault_path}"
 
         if prune:

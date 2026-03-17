@@ -44,7 +44,7 @@ NOT responsible for: note writing (vault module), MCP tool response formatting (
 
 ## Internal Design Notes
 
-- Files: `extractors/search_backends.py` (825 lines), `extractors/search_index.py` (121 lines)
+- Files: `src/cyberbrain/extractors/search_backends.py`, `src/cyberbrain/extractors/search_index.py`
 - SQLite schema: `notes` table, `notes_fts` virtual table (content-sync triggers), `relations` table
 - Default embedding model: `TaylorAI/bge-micro-v2` (384-dim, ~22.9 MB)
 - Optional deps: `fastembed`, `usearch` (for hybrid backend)

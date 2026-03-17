@@ -1,5 +1,5 @@
 """
-test_search_index.py — unit tests for extractors/search_index.py
+test_search_index.py — unit tests for src/cyberbrain/extractors/search_index.py
 
 Coverage:
 - _get_backend: vault_path missing, caching, ImportError graceful handling
@@ -50,7 +50,7 @@ class TestGetBackend:
         mock_backend = MagicMock()
         config = {"vault_path": str(tmp_path), "search_backend": "fts5"}
 
-        with patch("search_backends.get_search_backend", return_value=mock_backend) as mock_factory:
+        with patch("cyberbrain.extractors.search_backends.get_search_backend", return_value=mock_backend) as mock_factory:
             b1 = si._get_backend(config)
             b2 = si._get_backend(config)
 
@@ -65,7 +65,7 @@ class TestGetBackend:
         config1 = {"vault_path": str(tmp_path), "search_backend": "grep"}
         config2 = {"vault_path": str(tmp_path), "search_backend": "fts5"}
 
-        with patch("search_backends.get_search_backend", side_effect=[mock_backend_1, mock_backend_2]):
+        with patch("cyberbrain.extractors.search_backends.get_search_backend", side_effect=[mock_backend_1, mock_backend_2]):
             b1 = si._get_backend(config1)
             b2 = si._get_backend(config2)
 
@@ -74,7 +74,7 @@ class TestGetBackend:
     def test_returns_none_on_import_error(self, tmp_path):
         """If get_search_backend raises ImportError, returns None without propagating."""
         config = {"vault_path": str(tmp_path), "search_backend": "fts5"}
-        with patch("search_backends.get_search_backend", side_effect=ImportError("no module")):
+        with patch("cyberbrain.extractors.search_backends.get_search_backend", side_effect=ImportError("no module")):
             result = si._get_backend(config)
         assert result is None
 

@@ -59,7 +59,7 @@ NOT responsible for: LLM extraction logic (extraction module), search index mana
 
 ## Internal Design Notes
 
-- Files: `extractors/vault.py` (397 lines), `extractors/autofile.py` (311 lines), `extractors/run_log.py` (88 lines), `extractors/analyze_vault.py` (263 lines)
+- Files: `src/cyberbrain/extractors/vault.py`, `src/cyberbrain/extractors/autofile.py`, `src/cyberbrain/extractors/run_log.py`, `src/cyberbrain/extractors/analyze_vault.py`
 - `vault.py` handles both durable and working-memory routing in `resolve_output_dir()`
 - `autofile.py` folder listing is scoped: WM beats see only the WM folder tree; durable beats see vault root
 - `analyze_vault.py` is standalone (used only by cb_setup) and has its own `parse_frontmatter()` implementation

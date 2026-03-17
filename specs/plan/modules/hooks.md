@@ -14,7 +14,7 @@ NOT responsible for: extraction logic (extraction module), vault writing (vault 
 
 ## Requires
 
-- `extractors/extract_beats.py` (from: extraction) — The Python extractor CLI. Located via `$CLAUDE_PLUGIN_ROOT` or fallback to `~/.claude/cyberbrain/extractors/`.
+- `src/cyberbrain/extractors/extract_beats.py` (from: extraction) — The Python extractor CLI. Invoked via `uv run --directory $CLAUDE_PLUGIN_ROOT python -m cyberbrain.extractors.extract_beats` in plugin mode, or via the `cyberbrain-extract` entry point.
 - `python3` on PATH — For both JSON parsing (inline) and extractor invocation.
 - `~/.claude/logs/cb-extract.log` (from: vault/run_log) — Dedup log checked by SessionEnd hook.
 

@@ -35,6 +35,7 @@ dev = ["pytest>=7.0.0"]
 [project.scripts]
 cyberbrain-mcp = "cyberbrain.mcp.server:main"
 cyberbrain-extract = "cyberbrain.extractors.extract_beats:main"
+cyberbrain-reindex = "cyberbrain.extractors.search_index:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -44,4 +45,10 @@ build-backend = "hatchling.build"
 packages = ["src/cyberbrain"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "tests"]
+addopts = "--tb=no -q --no-header"
+markers = [
+    "core: Essential tests - always run in targeted mode",
+    "extended: Integration tests - run on full regression only",
+    "slow: Performance tests - run manually only",
+]

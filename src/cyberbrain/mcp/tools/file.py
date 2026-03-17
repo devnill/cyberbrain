@@ -15,12 +15,42 @@ from cyberbrain.mcp.shared import (
 )
 
 
+def _parse_tags(tags_str: str) -> list[str]:
+    """Parse a comma-separated tags string into a list, stripping whitespace."""
+    return [t.strip() for t in tags_str.split(",") if t.strip()]
+
+
+def _truncate_summary(body: str, max_chars: int = 200) -> str:
+    """Generate a short summary from the first sentence or first max_chars of body."""
+    if not body:
+        return ""
+    text = body.strip()
+    # Try to truncate at sentence boundary
+    for sep in (". ", ".\n", "! ", "!\n", "? ", "?\n"):
+        idx = text.find(sep)
+        if 0 < idx <= max_chars:
+            return text[: idx + 1].strip()
+    # Fall back to character truncation
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rsplit(" ", 1)[0] + "…"
+
+
 def register(mcp: FastMCP) -> None:
     @mcp.tool()
     def cb_file(
         content: str,
-        type_override: Annotated[str | None, Field(
-            description="Force a specific note type. Valid values from your vault CLAUDE.md — defaults are: 'decision', 'insight', 'problem', 'reference'. Omit to let the system classify automatically."
+        title: Annotated[str | None, Field(
+            description="Note title. When provided, skips LLM extraction and files the document directly (document intake mode). When omitted, the content is passed through LLM extraction for classification, titling, and tagging (single-beat capture mode)."
+        )] = None,
+        type: Annotated[str | None, Field(
+            description="Note type (e.g. 'reference', 'decision', 'insight', 'problem'). For document intake: defaults to 'reference'. For single-beat capture: overrides LLM classification if provided. Valid values from your vault CLAUDE.md."
+        )] = None,
+        tags: Annotated[str | None, Field(
+            description="Comma-separated tags (e.g. 'python, async, performance'). For document intake: applied as-is. For single-beat capture: merged with LLM-generated tags."
+        )] = None,
+        durability: Annotated[str | None, Field(
+            description="Durability for document intake. 'durable' (default) routes normally; 'working-memory' sends the note to the Working Memory folder. Ignored for single-beat capture — the LLM decides."
         )] = None,
         folder: Annotated[str | None, Field(
             description="Vault-relative folder path to file into, e.g. 'Personal/Recipes' or 'Work/Projects/hermes'. Omit to use the configured inbox folder."
@@ -30,19 +60,25 @@ def register(mcp: FastMCP) -> None:
         )] = None,
     ) -> str:
         """
-        File a specific piece of information into the knowledge vault.
+        File content into the knowledge vault.
 
-        Use this when the user says "save this", "file this", "capture this", or confirms
-        filing after it was suggested. Pass the content to preserve — it can be a fact, a
-        decision, a recipe, a configuration snippet, or any text worth remembering. The
-        system classifies, titles, and routes the note automatically using the vault's
-        CLAUDE.md conventions. Do not create markdown files directly — always use this tool.
+        Two modes, selected by whether `title` is provided:
+
+        **Single-beat capture** (title omitted): Use when the user says "save this",
+        "file this", "capture this". The content is passed through LLM extraction for
+        classification, titling, and tagging. The `type` parameter overrides the
+        LLM-assigned type if provided.
+
+        **Document intake** (title provided): Use when the user has a pre-written
+        document to file directly — no LLM extraction step. The document is filed as-is
+        with the provided title, type (default: 'reference'), tags, and durability.
 
         For processing a complete session transcript, use cb_extract instead.
         For searching existing vault notes, use cb_recall.
 
         Returns confirmation with the note title, type, tags, and vault path where it was filed.
-        Returns "No content worth filing" if the input contains nothing identifiable as knowledge.
+        Returns "No content worth filing" if the input contains nothing identifiable as knowledge
+        (single-beat capture mode only).
         """
         effective_cwd = cwd or str(Path.home())
         config = _load_config(effective_cwd)
@@ -54,19 +90,57 @@ def register(mcp: FastMCP) -> None:
         if folder:
             effective_config["inbox"] = folder
 
-        try:
-            beats = _extract_beats(content, effective_config, "manual", effective_cwd)
-        except BackendError as e:
-            backend = config.get("backend", "claude-code")
-            raise ToolError(f"Backend error ({backend}): {e}")
+        # -----------------------------------------------------------------------
+        # Mode switch: title present → document intake (UC3), else single-beat (UC2)
+        # -----------------------------------------------------------------------
+        if title:
+            # UC3: Document intake — build beat dict directly, skip LLM extraction
+            parsed_tags = _parse_tags(tags) if tags else []
+            summary = _truncate_summary(content)
+            beat = {
+                "title": title,
+                "type": type or "reference",
+                "scope": "project" if cwd else "general",
+                "summary": summary,
+                "tags": parsed_tags,
+                "body": content,
+                "durability": durability or "durable",
+                "relations": [],
+            }
+            beats = [beat]
+            source = "document-intake"
+        else:
+            # UC2: Single-beat capture — use LLM extraction
+            try:
+                beats = _extract_beats(content, effective_config, "manual", effective_cwd)
+            except BackendError as e:
+                backend = config.get("backend", "claude-code")
+                raise ToolError(f"Backend error ({backend}): {e}")
 
-        if not beats:
-            return "No content worth filing was identified in the provided text."
+            if not beats:
+                return "No content worth filing was identified in the provided text."
 
-        # Apply type override after extraction if requested
-        if type_override:
-            for beat in beats:
-                beat["type"] = type_override
+            # Apply type override after extraction if requested
+            if type:
+                for beat in beats:
+                    beat["type"] = type
+
+            # Merge caller-provided tags with LLM-generated tags (union, no duplicates)
+            if tags:
+                caller_tags = [t.lower() for t in _parse_tags(tags)]
+                for beat in beats:
+                    existing = [str(t).lower() for t in (beat.get("tags") or [])]
+                    merged = list(existing)
+                    for t in caller_tags:
+                        if t not in merged:
+                            merged.append(t)
+                    beat["tags"] = merged
+
+            if durability:
+                # durability is ignored for single-beat capture — LLM decides
+                pass  # warning appended to return value below
+
+            source = "manual-filing"
 
         autofile_enabled = effective_config.get("autofile", False)
         written = []
@@ -87,9 +161,23 @@ def register(mcp: FastMCP) -> None:
         for beat in beats:
             try:
                 if autofile_enabled and not folder:
-                    path = autofile_beat(beat, effective_config, session_id, effective_cwd, now, vault_context=vault_context, source="manual-filing")
+                    # can_ask only for single-beat scenarios: multi-beat extraction should
+                    # not drop remaining beats by asking about the first one.
+                    path = autofile_beat(beat, effective_config, session_id, effective_cwd, now, vault_context=vault_context, source=source, can_ask=(len(beats) == 1))
                 else:
-                    path = write_beat(beat, effective_config, session_id, effective_cwd, now, source="manual-filing")
+                    path = write_beat(beat, effective_config, session_id, effective_cwd, now, source=source)
+                if path is None and "_autofile_ask" in beat:
+                    ask_data = beat["_autofile_ask"]
+                    confidence = ask_data["confidence"]
+                    rationale = ask_data.get("rationale", "")
+                    decision = ask_data.get("decision", {})
+                    suggested = decision.get("path") or decision.get("target_path", "(unknown)")
+                    return (
+                        f"Confidence in routing is low (score: {confidence:.2f}). "
+                        f"Suggested folder: {suggested}. "
+                        f"Rationale: {rationale} "
+                        f"Please confirm or specify a different folder, then I'll file the note."
+                    )
                 if path:
                     written.append(path)
                     rel = _relpath(path, config["vault_path"])

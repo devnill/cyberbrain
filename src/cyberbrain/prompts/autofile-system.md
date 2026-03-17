@@ -29,11 +29,28 @@ Rules:
 - For "extend": the insertion should be a clean markdown section (## heading + content).
   Do not duplicate information already in the target note.
 - For "create": produce a complete note with YAML frontmatter and a well-structured body.
+- Use the vault_folder_examples section to understand what kind of content lives in each folder.
+  Match the beat's topic to the folder whose existing notes are most topically similar.
+  Do not create a new folder unless no existing folder's examples match the beat's topic.
+
+## Confidence scoring
+
+Include a `confidence` field (0.0 to 1.0) and a `rationale` field (1-2 sentences) in your response:
+
+- **0.9-1.0**: Obvious match. The beat clearly extends an existing note, or clearly belongs in a specific folder with no ambiguity.
+- **0.7-0.89**: Good match. The routing is reasonable but a different folder or action could also work.
+- **0.5-0.69**: Uncertain. Multiple folders or actions seem equally plausible. The beat may not fit cleanly into existing structure.
+- **0.0-0.49**: Low confidence. The vault structure doesn't have a clear home for this beat, or the beat's topic is ambiguous.
+
+Base your confidence on:
+1. How well the beat's topic matches the destination folder's existing notes
+2. Whether the related documents returned are genuinely about the same topic
+3. Whether the folder structure has an obvious home for this topic
 
 Return ONLY valid JSON. No explanation, no markdown fences. Schema:
 
 For extend:
-{"action": "extend", "target_path": "relative/path/from/vault/root.md", "insertion": "## Section\n\nContent"}
+{"action": "extend", "target_path": "relative/path/from/vault/root.md", "insertion": "## Section\n\nContent", "confidence": 0.85, "rationale": "..."}
 
 For create:
-{"action": "create", "path": "folder/Note Title.md", "content": "---\ntype: ...\n---\n\nBody"}
+{"action": "create", "path": "folder/Note Title.md", "content": "---\ntype: ...\n---\n\nBody", "confidence": 0.85, "rationale": "..."}

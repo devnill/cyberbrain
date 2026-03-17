@@ -9,7 +9,9 @@ CLAUDE_DIR="$HOME/.claude"
 CB_DIR="$CLAUDE_DIR/cyberbrain"
 
 NEW_VERSION="$(cat "$REPO_DIR/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "unknown")"
-INSTALLED_VERSION="$(cat "$CB_DIR/extractors/.cb-version" 2>/dev/null | tr -d '[:space:]' \
+# Legacy fallbacks for pre-WI-034 installs (extractors/ lived at root before src layout migration)
+INSTALLED_VERSION="$(cat "$CB_DIR/.cb-version" 2>/dev/null | tr -d '[:space:]' \
+  || cat "$CB_DIR/extractors/.cb-version" 2>/dev/null | tr -d '[:space:]' \
   || cat "$CLAUDE_DIR/extractors/.cb-version" 2>/dev/null | tr -d '[:space:]' \
   || echo "")"
 
@@ -52,6 +54,7 @@ mkdir -p "$CLAUDE_DIR/hooks"
 mkdir -p "$CB_DIR/extractors"
 mkdir -p "$CB_DIR/prompts"
 mkdir -p "$CB_DIR/mcp"
+mkdir -p "$CB_DIR/mcp/tools"
 echo "  $CLAUDE_DIR/hooks/"
 echo "  $CB_DIR/extractors/"
 echo "  $CB_DIR/prompts/"
@@ -70,21 +73,25 @@ echo "  [OK] hooks/pre-compact-extract.sh"
 cp "$REPO_DIR/hooks/session-end-extract.sh" "$CLAUDE_DIR/hooks/session-end-extract.sh"
 chmod +x "$CLAUDE_DIR/hooks/session-end-extract.sh"
 echo "  [OK] hooks/session-end-extract.sh"
+cp "$REPO_DIR/hooks/session-end-reindex.sh" "$CLAUDE_DIR/hooks/session-end-reindex.sh"
+chmod +x "$CLAUDE_DIR/hooks/session-end-reindex.sh"
+echo "  [OK] hooks/session-end-reindex.sh"
 
 # Extractor → cyberbrain/extractors/
-cp "$REPO_DIR/extractors/extract_beats.py"   "$CB_DIR/extractors/extract_beats.py"
-cp "$REPO_DIR/extractors/config.py"          "$CB_DIR/extractors/config.py"
-cp "$REPO_DIR/extractors/backends.py"        "$CB_DIR/extractors/backends.py"
-cp "$REPO_DIR/extractors/transcript.py"      "$CB_DIR/extractors/transcript.py"
-cp "$REPO_DIR/extractors/frontmatter.py"     "$CB_DIR/extractors/frontmatter.py"
-cp "$REPO_DIR/extractors/vault.py"           "$CB_DIR/extractors/vault.py"
-cp "$REPO_DIR/extractors/extractor.py"       "$CB_DIR/extractors/extractor.py"
-cp "$REPO_DIR/extractors/autofile.py"        "$CB_DIR/extractors/autofile.py"
-cp "$REPO_DIR/extractors/run_log.py"         "$CB_DIR/extractors/run_log.py"
-cp "$REPO_DIR/extractors/search_backends.py" "$CB_DIR/extractors/search_backends.py"
-cp "$REPO_DIR/extractors/search_index.py"    "$CB_DIR/extractors/search_index.py"
-cp "$REPO_DIR/extractors/analyze_vault.py"   "$CB_DIR/extractors/analyze_vault.py"
-cp "$REPO_DIR/extractors/requirements.txt"   "$CB_DIR/extractors/requirements.txt"
+cp "$REPO_DIR/src/cyberbrain/extractors/extract_beats.py"   "$CB_DIR/extractors/extract_beats.py"
+cp "$REPO_DIR/src/cyberbrain/extractors/config.py"          "$CB_DIR/extractors/config.py"
+cp "$REPO_DIR/src/cyberbrain/extractors/backends.py"        "$CB_DIR/extractors/backends.py"
+cp "$REPO_DIR/src/cyberbrain/extractors/transcript.py"      "$CB_DIR/extractors/transcript.py"
+cp "$REPO_DIR/src/cyberbrain/extractors/frontmatter.py"     "$CB_DIR/extractors/frontmatter.py"
+cp "$REPO_DIR/src/cyberbrain/extractors/vault.py"           "$CB_DIR/extractors/vault.py"
+cp "$REPO_DIR/src/cyberbrain/extractors/extractor.py"       "$CB_DIR/extractors/extractor.py"
+cp "$REPO_DIR/src/cyberbrain/extractors/autofile.py"        "$CB_DIR/extractors/autofile.py"
+cp "$REPO_DIR/src/cyberbrain/extractors/run_log.py"         "$CB_DIR/extractors/run_log.py"
+cp "$REPO_DIR/src/cyberbrain/extractors/search_backends.py" "$CB_DIR/extractors/search_backends.py"
+cp "$REPO_DIR/src/cyberbrain/extractors/search_index.py"    "$CB_DIR/extractors/search_index.py"
+cp "$REPO_DIR/src/cyberbrain/extractors/analyze_vault.py"   "$CB_DIR/extractors/analyze_vault.py"
+cp "$REPO_DIR/src/cyberbrain/extractors/quality_gate.py"   "$CB_DIR/extractors/quality_gate.py"
+cp "$REPO_DIR/src/cyberbrain/extractors/__init__.py"        "$CB_DIR/extractors/__init__.py"
 echo "  [OK] cyberbrain/extractors/extract_beats.py"
 echo "  [OK] cyberbrain/extractors/config.py"
 echo "  [OK] cyberbrain/extractors/backends.py"
@@ -97,31 +104,32 @@ echo "  [OK] cyberbrain/extractors/run_log.py"
 echo "  [OK] cyberbrain/extractors/search_backends.py"
 echo "  [OK] cyberbrain/extractors/search_index.py"
 echo "  [OK] cyberbrain/extractors/analyze_vault.py"
-echo "  [OK] cyberbrain/extractors/requirements.txt"
+echo "  [OK] cyberbrain/extractors/quality_gate.py"
+echo "  [OK] cyberbrain/extractors/__init__.py"
 
 # Prompts → cyberbrain/prompts/
-cp "$REPO_DIR/prompts/extract-beats-system.md" "$CB_DIR/prompts/extract-beats-system.md"
-cp "$REPO_DIR/prompts/extract-beats-user.md"   "$CB_DIR/prompts/extract-beats-user.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/extract-beats-system.md" "$CB_DIR/prompts/extract-beats-system.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/extract-beats-user.md"   "$CB_DIR/prompts/extract-beats-user.md"
 echo "  [OK] cyberbrain/prompts/extract-beats-system.md"
 echo "  [OK] cyberbrain/prompts/extract-beats-user.md"
-cp "$REPO_DIR/prompts/autofile-system.md" "$CB_DIR/prompts/autofile-system.md"
-cp "$REPO_DIR/prompts/autofile-user.md"   "$CB_DIR/prompts/autofile-user.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/autofile-system.md" "$CB_DIR/prompts/autofile-system.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/autofile-user.md"   "$CB_DIR/prompts/autofile-user.md"
 echo "  [OK] cyberbrain/prompts/autofile-system.md"
 echo "  [OK] cyberbrain/prompts/autofile-user.md"
-cp "$REPO_DIR/prompts/enrich-system.md" "$CB_DIR/prompts/enrich-system.md"
-cp "$REPO_DIR/prompts/enrich-user.md"   "$CB_DIR/prompts/enrich-user.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/enrich-system.md" "$CB_DIR/prompts/enrich-system.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/enrich-user.md"   "$CB_DIR/prompts/enrich-user.md"
 echo "  [OK] cyberbrain/prompts/enrich-system.md"
 echo "  [OK] cyberbrain/prompts/enrich-user.md"
-cp "$REPO_DIR/prompts/restructure-system.md"          "$CB_DIR/prompts/restructure-system.md"
-cp "$REPO_DIR/prompts/restructure-user.md"            "$CB_DIR/prompts/restructure-user.md"
-cp "$REPO_DIR/prompts/restructure-decide-system.md"   "$CB_DIR/prompts/restructure-decide-system.md"
-cp "$REPO_DIR/prompts/restructure-decide-user.md"     "$CB_DIR/prompts/restructure-decide-user.md"
-cp "$REPO_DIR/prompts/restructure-generate-system.md" "$CB_DIR/prompts/restructure-generate-system.md"
-cp "$REPO_DIR/prompts/restructure-generate-user.md"   "$CB_DIR/prompts/restructure-generate-user.md"
-cp "$REPO_DIR/prompts/restructure-audit-system.md"    "$CB_DIR/prompts/restructure-audit-system.md"
-cp "$REPO_DIR/prompts/restructure-audit-user.md"      "$CB_DIR/prompts/restructure-audit-user.md"
-cp "$REPO_DIR/prompts/restructure-group-system.md"    "$CB_DIR/prompts/restructure-group-system.md"
-cp "$REPO_DIR/prompts/restructure-group-user.md"      "$CB_DIR/prompts/restructure-group-user.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/restructure-system.md"          "$CB_DIR/prompts/restructure-system.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/restructure-user.md"            "$CB_DIR/prompts/restructure-user.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/restructure-decide-system.md"   "$CB_DIR/prompts/restructure-decide-system.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/restructure-decide-user.md"     "$CB_DIR/prompts/restructure-decide-user.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/restructure-generate-system.md" "$CB_DIR/prompts/restructure-generate-system.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/restructure-generate-user.md"   "$CB_DIR/prompts/restructure-generate-user.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/restructure-audit-system.md"    "$CB_DIR/prompts/restructure-audit-system.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/restructure-audit-user.md"      "$CB_DIR/prompts/restructure-audit-user.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/restructure-group-system.md"    "$CB_DIR/prompts/restructure-group-system.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/restructure-group-user.md"      "$CB_DIR/prompts/restructure-group-user.md"
 echo "  [OK] cyberbrain/prompts/restructure-system.md"
 echo "  [OK] cyberbrain/prompts/restructure-user.md"
 echo "  [OK] cyberbrain/prompts/restructure-decide-system.md"
@@ -132,21 +140,29 @@ echo "  [OK] cyberbrain/prompts/restructure-audit-system.md"
 echo "  [OK] cyberbrain/prompts/restructure-audit-user.md"
 echo "  [OK] cyberbrain/prompts/restructure-group-system.md"
 echo "  [OK] cyberbrain/prompts/restructure-group-user.md"
-cp "$REPO_DIR/prompts/review-system.md" "$CB_DIR/prompts/review-system.md"
-cp "$REPO_DIR/prompts/review-user.md"   "$CB_DIR/prompts/review-user.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/review-system.md" "$CB_DIR/prompts/review-system.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/review-user.md"   "$CB_DIR/prompts/review-user.md"
 echo "  [OK] cyberbrain/prompts/review-system.md"
 echo "  [OK] cyberbrain/prompts/review-user.md"
-cp "$REPO_DIR/prompts/claude-desktop-project.md" "$CB_DIR/prompts/claude-desktop-project.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/claude-desktop-project.md" "$CB_DIR/prompts/claude-desktop-project.md"
 echo "  [OK] cyberbrain/prompts/claude-desktop-project.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/evaluate-system.md"     "$CB_DIR/prompts/evaluate-system.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/quality-gate-system.md" "$CB_DIR/prompts/quality-gate-system.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/synthesize-system.md"   "$CB_DIR/prompts/synthesize-system.md"
+cp "$REPO_DIR/src/cyberbrain/prompts/synthesize-user.md"     "$CB_DIR/prompts/synthesize-user.md"
+echo "  [OK] cyberbrain/prompts/evaluate-system.md"
+echo "  [OK] cyberbrain/prompts/quality-gate-system.md"
+echo "  [OK] cyberbrain/prompts/synthesize-system.md"
+echo "  [OK] cyberbrain/prompts/synthesize-user.md"
 
 # MCP server package (recursive copy, excluding __pycache__)
-cp -r "$REPO_DIR/mcp/." "$CB_DIR/mcp/"
+cp -r "$REPO_DIR/src/cyberbrain/mcp/." "$CB_DIR/mcp/"
 find "$CB_DIR/mcp" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 echo "  [OK] cyberbrain/mcp/ (package)"
 
 # Write version stamp
-echo "$NEW_VERSION" > "$CB_DIR/extractors/.cb-version"
-echo "  [OK] cyberbrain/extractors/.cb-version (v${NEW_VERSION})"
+echo "$NEW_VERSION" > "$CB_DIR/.cb-version"
+echo "  [OK] cyberbrain/.cb-version (v${NEW_VERSION})"
 
 # ---------------------------------------------------------------------------
 # 3. Global config + vault path
@@ -227,7 +243,12 @@ DESIRED_SESSION_END = {
             'type': 'command',
             'command': '~/.claude/hooks/session-end-extract.sh',
             'timeout': 120,
-        }
+        },
+        {
+            'type': 'command',
+            'command': '~/.claude/hooks/session-end-reindex.sh',
+            'timeout': 10,
+        },
     ]
 }
 
@@ -265,26 +286,7 @@ cfg = json.load(open(path)) if os.path.exists(path) else {}
 print(cfg.get('backend', 'claude-code'))
 " 2>/dev/null || echo "claude-code")
 
-if [ "$BACKEND" = "bedrock" ]; then
-  echo "Installing Python dependencies (bedrock backend)..."
-  if python3 -m pip install -r "$CB_DIR/extractors/requirements.txt" -q; then
-    echo "  [OK] dependencies installed"
-  else
-    echo "  [WARN] pip install failed. Run: pip install anthropic pyyaml"
-  fi
-else
-  echo "  [skip] anthropic package not needed for backend=$BACKEND"
-fi
-
-# Always install pyyaml (cb-setup vault analyzer) and ruamel.yaml (KGE relation merge)
-echo "  Installing base Python dependencies (pyyaml, ruamel.yaml)..."
-if python3 -m pip install pyyaml "ruamel.yaml" -q 2>/dev/null; then
-  echo "  [OK] pyyaml + ruamel.yaml"
-else
-  echo "  [WARN] pip install failed. Run: pip install pyyaml ruamel.yaml"
-fi
-
-# Install MCP package into a dedicated venv (avoids system/conda Python conflicts)
+# Install the package and all dependencies into a dedicated venv (avoids system/conda Python conflicts)
 MCP_VENV="$CB_DIR/venv"
 MCP_PYTHON=""
 # Prefer Python 3.11/3.12 — mcp wheels are not yet available for Python 3.14+
@@ -299,28 +301,38 @@ if [ -n "$MCP_PYTHON" ]; then
   if [ ! -d "$MCP_VENV" ]; then
     "$MCP_PYTHON" -m venv "$MCP_VENV"
   fi
-  echo "  Installing fastmcp + mcp + ruamel.yaml into venv ($MCP_PYTHON)..."
-  if "$MCP_VENV/bin/pip" install "fastmcp>=3.0.0" mcp pyyaml "ruamel.yaml" -q; then
+  echo "  Installing cyberbrain package into venv ($MCP_PYTHON)..."
+  if "$MCP_VENV/bin/pip" install -e "$REPO_DIR" -q; then
     if "$MCP_VENV/bin/python3" -c "from fastmcp import FastMCP" 2>/dev/null; then
       echo "  [OK] fastmcp venv ready at $MCP_VENV"
     else
       echo "  [ERROR] FastMCP import failed after install — MCP server will not work."
-      echo "          Try: $MCP_PYTHON -m venv $MCP_VENV && $MCP_VENV/bin/pip install fastmcp>=3.0.0 mcp"
+      echo "          Try: $MCP_PYTHON -m venv $MCP_VENV && $MCP_VENV/bin/pip install -e $REPO_DIR"
     fi
   else
-    echo "  [ERROR] pip install fastmcp failed — see output above."
-    echo "          Try: $MCP_PYTHON -m venv $MCP_VENV && $MCP_VENV/bin/pip install fastmcp>=3.0.0 mcp"
+    echo "  [ERROR] pip install failed — see output above."
+    echo "          Try: $MCP_PYTHON -m venv $MCP_VENV && $MCP_VENV/bin/pip install -e $REPO_DIR"
+  fi
+
+  # Optional: bedrock backend (anthropic SDK)
+  if [ "$BACKEND" = "bedrock" ]; then
+    echo "  Installing bedrock extra (anthropic SDK)..."
+    if "$MCP_VENV/bin/pip" install -e "$REPO_DIR[bedrock]" -q; then
+      echo "  [OK] bedrock dependencies installed"
+    else
+      echo "  [WARN] bedrock extra install failed. Run: $MCP_VENV/bin/pip install -e $REPO_DIR[bedrock]"
+    fi
   fi
 
   # Optional: semantic search layer (fastembed + usearch)
   echo ""
   echo "  Optional semantic search dependencies (fastembed + usearch):"
-  if "$MCP_VENV/bin/pip" install "fastembed>=0.3" "usearch==2.23.0" -q 2>/dev/null; then
+  if "$MCP_VENV/bin/pip" install -e "$REPO_DIR[semantic]" -q 2>/dev/null; then
     echo "  [OK] fastembed + usearch installed — hybrid semantic search enabled"
   else
     echo "  [skip] fastembed/usearch not installed — BM25 keyword search will be used."
     echo "         To enable semantic search later:"
-    echo "           $MCP_VENV/bin/pip install fastembed usearch==2.23.0"
+    echo "           $MCP_VENV/bin/pip install -e $REPO_DIR[semantic]"
   fi
 else
   echo "  [WARN] Could not find a suitable Python for the MCP venv. Install python3 via Homebrew."
@@ -364,10 +376,9 @@ import json, sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
-server_path = sys.argv[2]
-venv_python = sys.argv[3]
+mcp_entry_point = sys.argv[2]
 
-ENTRY = {'command': venv_python, 'args': [server_path]}
+ENTRY = {'command': mcp_entry_point, 'args': []}
 
 if path.exists():
     try:
@@ -391,7 +402,7 @@ elif existing == ENTRY:
 else:
     print(f'  [OK] cyberbrain MCP server updated in Claude Desktop')
 print('  Restart Claude Desktop for the change to take effect.')
-" "$DESKTOP_CONFIG" "$CB_DIR/mcp/server.py" "${MCP_VENV:-}/bin/python3"
+" "$DESKTOP_CONFIG" "${MCP_VENV:-}/bin/cyberbrain-mcp"
 else
   echo "  [skip] Claude Desktop not found (macOS only)"
 fi
@@ -401,7 +412,11 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "Pruning stale search index entries..."
-python3 -c "
+PRUNE_PYTHON="${MCP_VENV:-}/bin/python3"
+if [ ! -x "$PRUNE_PYTHON" ]; then
+  PRUNE_PYTHON="python3"
+fi
+"$PRUNE_PYTHON" -c "
 import sys, json
 from pathlib import Path
 
@@ -422,8 +437,7 @@ if not Path(db_path).exists():
     print('  [skip] No search index found — skipping prune.')
     sys.exit(0)
 
-sys.path.insert(0, str(Path.home() / '.claude' / 'cyberbrain' / 'extractors'))
-from search_backends import FTS5Backend
+from cyberbrain.extractors.search_backends import FTS5Backend
 b = FTS5Backend(vault_path, db_path)
 pruned = b.prune_stale_notes()
 if pruned:

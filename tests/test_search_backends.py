@@ -1,5 +1,5 @@
 """
-test_search_backends.py — unit tests for extractors/search_backends.py
+test_search_backends.py — unit tests for src/cyberbrain/extractors/search_backends.py
 
 Coverage:
 - SearchResult dataclass
@@ -457,7 +457,7 @@ class TestGetSearchBackend:
 
     def test_auto_returns_hybrid_when_both_present(self, tmp_path):
         """'auto' with fastembed + usearch importable → HybridBackend."""
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
 
         db = str(tmp_path / "test.db")
         config = {
@@ -490,7 +490,7 @@ class TestHybridBackendFallback:
 
     def _make_hybrid(self, tmp_path):
         """Instantiate a HybridBackend without actually loading fastembed/usearch."""
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         return HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
 
@@ -531,7 +531,7 @@ class TestSmartConnectionsImport:
     """HybridBackend._try_import_smart_connections_index handles edge cases."""
 
     def _make_hybrid(self, tmp_path):
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
         return backend
@@ -571,7 +571,7 @@ class TestSmartConnectionsImport:
         ajson_content = f'"My Note.md": {{"path": "My Note.md", "embeddings": {{"TaylorAI/bge-micro-v2": {{"vec": {json.dumps(vec)}}}}}}}\n'
         (multi_dir / "my-note.ajson").write_text(ajson_content, encoding="utf-8")
 
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
 
@@ -593,7 +593,7 @@ class TestSmartConnectionsImport:
 
     def test_skips_duplicate_paths(self, tmp_path):
         """A path that already exists in _id_map is not imported again."""
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
 
@@ -619,7 +619,7 @@ class TestSmartConnectionsImport:
 
     def test_handles_malformed_ajson_lines(self, tmp_path):
         """Lines with bad JSON are skipped without raising."""
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
 
@@ -779,8 +779,8 @@ class TestHybridBackendFull:
 
     def _make_hybrid_with_mocks(self, tmp_path):
         """Build a HybridBackend with mock model and index."""
-        import numpy as np
-        from search_backends import HybridBackend
+        np = pytest.importorskip("numpy")
+        from cyberbrain.extractors.search_backends import HybridBackend
 
         db = str(tmp_path / "test.db")
         backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
@@ -802,7 +802,7 @@ class TestHybridBackendFull:
 
     def test_backend_name_includes_model(self, tmp_path):
         """backend_name() returns a string containing the model name."""
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
         assert "bge-micro" in backend.backend_name()
@@ -940,7 +940,7 @@ class TestHybridBackendFull:
         note = tmp_path / "Fused.md"
         note.write_text('---\nid: fused\ntitle: "Fused"\ntags: [fusion]\nsummary: "Test fusion"\n---\nBody.', encoding="utf-8")
 
-        from search_backends import SearchResult
+        from cyberbrain.extractors.search_backends import SearchResult
         bm25_result = SearchResult(path=str(note), title="Fused", score=1.0, backend="fts5")
 
         with patch.object(backend._fts5, "search", return_value=[bm25_result]):
@@ -963,7 +963,7 @@ class TestHybridBackendFull:
         note = tmp_path / "BM25Only.md"
         note.write_text('---\nid: bm\ntitle: BM25\ntags: [bm25]\nsummary: "BM25 only"\n---\nBody.', encoding="utf-8")
 
-        from search_backends import SearchResult
+        from cyberbrain.extractors.search_backends import SearchResult
         bm25_result = SearchResult(path=str(note), title="BM25", score=1.0, backend="fts5")
 
         with patch.object(backend._fts5, "search", return_value=[bm25_result]):
@@ -982,7 +982,7 @@ class TestSmartConnectionsAdditional:
     """Additional SmartConnections import scenarios."""
 
     def _make_hybrid(self, tmp_path):
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         return HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
 
@@ -1175,7 +1175,7 @@ class TestHybridBackendLoadAndBuild:
 
     def test_get_model_calls_fastembed(self, tmp_path):
         """_get_model() imports TextEmbedding from fastembed and creates the model."""
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
 
@@ -1191,7 +1191,7 @@ class TestHybridBackendLoadAndBuild:
 
     def test_get_model_cached_on_second_call(self, tmp_path):
         """_get_model() returns the same object on repeated calls."""
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
 
@@ -1203,7 +1203,7 @@ class TestHybridBackendLoadAndBuild:
 
     def test_load_or_create_index_creates_new_index(self, tmp_path):
         """_load_or_create_index() creates a fresh Index when no index file exists."""
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
 
@@ -1215,7 +1215,7 @@ class TestHybridBackendLoadAndBuild:
 
     def test_load_or_create_index_skips_when_already_loaded(self, tmp_path):
         """_load_or_create_index() returns immediately if _index is already set."""
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
 
@@ -1233,7 +1233,7 @@ class TestHybridBackendLoadAndBuild:
     def test_load_or_create_index_detects_model_mismatch(self, tmp_path, capsys):
         """_load_or_create_index() logs a warning and deletes the old index on model mismatch."""
         import json as jsonmod
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
 
@@ -1257,7 +1257,7 @@ class TestHybridBackendLoadAndBuild:
     def test_load_or_create_index_loads_existing_index(self, tmp_path):
         """_load_or_create_index() calls index.load() when an index file exists."""
         import json as jsonmod
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
 
@@ -1283,7 +1283,7 @@ class TestHybridBackendLoadAndBuild:
     def test_load_or_create_index_handles_load_failure(self, tmp_path, capsys):
         """_load_or_create_index() falls back to empty index when load() raises."""
         import json as jsonmod
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
 
@@ -1307,7 +1307,7 @@ class TestHybridBackendLoadAndBuild:
 
     def test_embed_note_with_tags_as_json_string(self, tmp_path):
         """_embed_note() handles tags stored as a JSON string (not a list)."""
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
 
@@ -1333,7 +1333,7 @@ class TestHybridBackendLoadAndBuild:
 
     def test_embed_note_with_unparseable_tags_string(self, tmp_path):
         """_embed_note() handles tags that are a non-JSON string."""
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
 
@@ -1357,7 +1357,7 @@ class TestHybridBackendLoadAndBuild:
 
     def test_build_index_full_pipeline(self, tmp_path, capsys):
         """HybridBackend.build_index() runs FTS5 + semantic indexing."""
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
 
@@ -1386,7 +1386,7 @@ class TestHybridBackendLoadAndBuild:
 
     def test_build_index_uses_smart_connections_when_available(self, tmp_path):
         """HybridBackend.build_index() returns early if SC import succeeds."""
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
 
@@ -1399,7 +1399,7 @@ class TestHybridBackendLoadAndBuild:
 
     def test_build_index_logs_embed_note_exception(self, tmp_path, capsys):
         """When _embed_note raises during build_index, exception is logged and build continues."""
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
 
@@ -1427,7 +1427,7 @@ class TestHybridBackendLoadAndBuild:
 
     def test_load_or_create_index_corrupt_manifest_falls_through(self, tmp_path):
         """When manifest.json contains invalid JSON, exception is caught and index is created fresh."""
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
 
@@ -1446,7 +1446,7 @@ class TestHybridBackendLoadAndBuild:
     def test_load_or_create_index_warmup_with_nonempty_id_map(self, tmp_path):
         """_load_or_create_index() runs a warmup search when id_map is non-empty after loading."""
         import json as jsonmod
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         backend = HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
 
@@ -1480,7 +1480,7 @@ class TestSmartConnectionsCoverageGaps:
     """Covers remaining SC import paths."""
 
     def _make_hybrid(self, tmp_path):
-        from search_backends import HybridBackend
+        from cyberbrain.extractors.search_backends import HybridBackend
         db = str(tmp_path / "test.db")
         return HybridBackend(str(tmp_path), db, "TaylorAI/bge-micro-v2")
 
@@ -1653,7 +1653,7 @@ class TestGetSearchBackendAutoSelection:
 
     def test_auto_returns_hybrid_when_both_available(self, tmp_path):
         """'auto' with fastembed and usearch available → HybridBackend."""
-        from search_backends import get_search_backend, HybridBackend
+        from cyberbrain.extractors.search_backends import get_search_backend, HybridBackend
 
         mock_fastembed = MagicMock()
         mock_usearch = MagicMock()
@@ -1672,7 +1672,7 @@ class TestGetSearchBackendAutoSelection:
 
     def test_hybrid_explicit_with_both_available(self, tmp_path):
         """'hybrid' preference with both packages available → HybridBackend."""
-        from search_backends import get_search_backend, HybridBackend
+        from cyberbrain.extractors.search_backends import get_search_backend, HybridBackend
 
         mock_fastembed = MagicMock()
         mock_usearch = MagicMock()
@@ -1691,7 +1691,7 @@ class TestGetSearchBackendAutoSelection:
 
     def test_auto_falls_back_to_fts5_when_fastembed_missing(self, tmp_path):
         """'auto' with fastembed unavailable → FTS5Backend (line 770-774 path)."""
-        from search_backends import get_search_backend, FTS5Backend
+        from cyberbrain.extractors.search_backends import get_search_backend, FTS5Backend
 
         config = {
             "vault_path": str(tmp_path),
@@ -1708,7 +1708,7 @@ class TestGetSearchBackendAutoSelection:
         """'auto' with fastembed available but usearch unavailable → FTS5Backend.
         Covers _has_usearch() ImportError path (lines 752-753) and _has_fastembed() return True (line 744).
         """
-        from search_backends import get_search_backend, FTS5Backend
+        from cyberbrain.extractors.search_backends import get_search_backend, FTS5Backend
 
         mock_fastembed = MagicMock()
 

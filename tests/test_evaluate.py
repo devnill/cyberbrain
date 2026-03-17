@@ -45,8 +45,10 @@ _mock_eb.resolve_config.return_value = {
     "model": "claude-haiku-4-5",
 }
 
+_orig_extract_beats = sys.modules.get("cyberbrain.extractors.extract_beats")
 if "cyberbrain.extractors.extract_beats" not in sys.modules:
     sys.modules["cyberbrain.extractors.extract_beats"] = _mock_eb
+_orig_frontmatter = sys.modules.get("cyberbrain.extractors.frontmatter")
 if "cyberbrain.extractors.frontmatter" not in sys.modules:
     sys.modules["cyberbrain.extractors.frontmatter"] = MagicMock()
 
@@ -86,7 +88,12 @@ from cyberbrain.extractors.evaluate import (
 )
 
 # Restore original modules so other test files get the real ones
-for _name, _orig in [("cyberbrain.extractors.backends", _orig_backends), ("cyberbrain.extractors.config", _orig_config)]:
+for _name, _orig in [
+    ("cyberbrain.extractors.backends", _orig_backends),
+    ("cyberbrain.extractors.config", _orig_config),
+    ("cyberbrain.extractors.frontmatter", _orig_frontmatter),
+    ("cyberbrain.extractors.extract_beats", _orig_extract_beats),
+]:
     if _orig is not None:
         sys.modules[_name] = _orig
     else:
@@ -182,8 +189,8 @@ class TestDiffComputation:
 
 
 class TestEvaluate:
-    @patch("evaluate.call_model")
-    @patch("evaluate.load_prompt")
+    @patch("cyberbrain.extractors.evaluate.call_model")
+    @patch("cyberbrain.extractors.evaluate.load_prompt")
     def test_enrich_two_variants(self, mock_load_prompt, mock_call_model):
         mock_load_prompt.return_value = "prompt {vault_type_context} {count} {notes_block}"
         mock_call_model.side_effect = [
@@ -209,8 +216,8 @@ class TestEvaluate:
         assert len(result.diffs) == 1  # one pairwise diff
         assert result.scores == []  # no judge
 
-    @patch("evaluate.call_model")
-    @patch("evaluate.load_prompt")
+    @patch("cyberbrain.extractors.evaluate.call_model")
+    @patch("cyberbrain.extractors.evaluate.load_prompt")
     def test_variant_error_captured(self, mock_load_prompt, mock_call_model):
         mock_load_prompt.return_value = "prompt {vault_type_context} {count} {notes_block}"
         mock_call_model.side_effect = [
@@ -231,8 +238,8 @@ class TestEvaluate:
         # No diff computed when one variant errored
         assert len(result.diffs) == 0
 
-    @patch("evaluate.call_model")
-    @patch("evaluate.load_prompt")
+    @patch("cyberbrain.extractors.evaluate.call_model")
+    @patch("cyberbrain.extractors.evaluate.load_prompt")
     def test_judge_scoring(self, mock_load_prompt, mock_call_model):
         # First two calls: variant operations; third call: judge
         mock_load_prompt.return_value = "prompt {vault_type_context} {count} {notes_block}"

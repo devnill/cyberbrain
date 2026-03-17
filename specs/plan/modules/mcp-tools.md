@@ -84,8 +84,7 @@ NOT responsible for: server lifecycle (mcp-server module), extractor core logic 
 
 ## Internal Design Notes
 
-- Files: `mcp/tools/{extract,file,recall,manage,setup,enrich,restructure,review,reindex}.py`
-- Total: ~4,367 lines across 9 files
-- `restructure.py` is 2,171 lines — contains multi-phase pipeline, 4 grouping strategies, JSON repair, consolidation log writing
+- Files: `src/cyberbrain/mcp/tools/{extract,file,recall,manage,setup,enrich,restructure,review,reindex}.py`
+- `restructure.py` is the largest tool file — contains multi-phase pipeline, 4 grouping strategies, JSON repair, consolidation log writing
 - Each tool file exports a single `register(mcp)` function
-- Prompt loading in MCP tools uses `shared._load_tool_prompt()` which checks `~/.claude/cyberbrain/prompts/` first, then dev-mode repo path
+- Prompt loading in MCP tools uses `shared._load_tool_prompt()` which checks `~/.claude/cyberbrain/prompts/` first, then falls back to the package-relative `src/cyberbrain/prompts/` path

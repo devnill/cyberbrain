@@ -1,5 +1,5 @@
 """
-test_reindex_tool.py — unit tests for mcp/tools/reindex.py
+test_reindex_tool.py — unit tests for src/cyberbrain/mcp/tools/reindex.py
 
 Covers:
 - No vault configured (empty or missing path) → ToolError
@@ -99,21 +99,14 @@ class TestCbReindexNoBackend:
 class TestCbReindexRebuild:
     def test_rebuild_calls_build_full_index(self, tmp_path):
         config = {"vault_path": str(tmp_path)}
-        backend = MagicMock(spec=["build_full_index"])
+        backend = MagicMock()
         with patch.object(reindex_mod, "_load_config", return_value=config), \
-             patch.object(reindex_mod, "_get_search_backend", return_value=backend):
+             patch.object(reindex_mod, "_get_search_backend", return_value=backend), \
+             patch.object(reindex_mod.search_index, "build_full_index") as mock_build:
             result = _cb_reindex()(rebuild=True)
-        backend.build_full_index.assert_called_once_with(config)
+        mock_build.assert_called_once_with(config)
         assert "fully rebuilt" in result
         assert str(tmp_path) in result
-
-    def test_rebuild_returns_unsupported_when_method_missing(self, tmp_path):
-        config = {"vault_path": str(tmp_path)}
-        backend = MagicMock(spec=[])  # no build_full_index attribute
-        with patch.object(reindex_mod, "_load_config", return_value=config), \
-             patch.object(reindex_mod, "_get_search_backend", return_value=backend):
-            result = _cb_reindex()(rebuild=True)
-        assert "does not support" in result
 
 
 # ---------------------------------------------------------------------------

@@ -44,7 +44,7 @@ NOT responsible for: vault writing (vault module), LLM communication (backends m
 
 ## Internal Design Notes
 
-- Files: `extractors/extractor.py` (72 lines), `extractors/transcript.py` (64 lines), `extractors/frontmatter.py` (97 lines), `extractors/extract_beats.py` (257 lines)
-- `extract_beats.py` is both a CLI script and an import hub — all external callers (MCP shared.py, import.py, tests) import via this file
+- Files: `src/cyberbrain/extractors/extractor.py`, `src/cyberbrain/extractors/transcript.py`, `src/cyberbrain/extractors/frontmatter.py`, `src/cyberbrain/extractors/extract_beats.py`
+- `extract_beats.py` is both a CLI script and an import hub — all external callers (MCP shared.py, import.py, tests) import via `cyberbrain.extractors.extract_beats`
 - Beat JSON schema: `{title, type, scope, summary, tags, body, durability, relations}`
 - The `trigger` parameter is passed through to the user prompt but not used for routing logic

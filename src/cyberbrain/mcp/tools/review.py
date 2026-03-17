@@ -222,7 +222,7 @@ def register(mcp: FastMCP) -> None:
         are classified as 'working-memory' durability.
         """
         from cyberbrain.extractors.backends import call_model, BackendError, get_model_for_tool
-        from quality_gate import quality_gate as _quality_gate
+        from cyberbrain.extractors.quality_gate import quality_gate as _quality_gate
 
         config = _load_config()
         gate_enabled = config.get("quality_gate_enabled", True)
@@ -331,7 +331,7 @@ def register(mcp: FastMCP) -> None:
                 gate_output = json.dumps(decision)
                 verdict = _quality_gate(gate_op, gate_input, gate_output, config)
                 if not verdict.passed:
-                    from quality_gate import Verdict as _Verdict
+                    from cyberbrain.extractors.quality_gate import Verdict as _Verdict
                     if verdict.verdict == _Verdict.UNCERTAIN:
                         # Uncertain — flag for confirmation but still report
                         gate_flagged.append((titles, action, rationale, verdict))

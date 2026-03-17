@@ -6,6 +6,7 @@ Coordination layer for cyberbrain's search index.
 Provides two public functions used by extract_beats.py:
   - update_search_index(note_path, metadata, config)  — called after each note write
   - build_full_index(config)                          — called to rebuild from scratch
+  - incremental_refresh(config, max_age_seconds)      — lazy incremental update
 
 The actual search implementations live in search_backends.py.
 This module handles backend lifecycle and graceful degradation.
@@ -20,11 +21,15 @@ precision than body embedding at a fraction of the cost.
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from cyberbrain.extractors.search_backends import SearchBackend
+
+_SCAN_MARKER_PATH = Path.home() / ".claude" / "cyberbrain" / ".index-scan-ts"
+_DEFAULT_REFRESH_INTERVAL = 3600  # seconds
 
 # Module-level backend cache: one backend instance per (vault_path, backend_key) pair.
 # Avoids re-loading the usearch index on every note write.
@@ -108,13 +113,96 @@ def active_backend_name(config: dict) -> str:
         return "unknown"
 
 
-if __name__ == "__main__":
+def incremental_refresh(config: dict, max_age_seconds: int | None = None) -> int:
+    """
+    If the last scan is older than max_age_seconds, walk the vault and re-index
+    files whose mtime is newer than last_scan_ts, then prune deleted entries.
+
+    Returns the number of notes re-indexed, or -1 if skipped (index is fresh
+    or no backend is available).
+
+    On first run (no marker file), last_scan_ts is treated as 0 so that all vault
+    files are indexed, bootstrapping the index without special-case logic.
+
+    Errors are caught and logged; a failed refresh never blocks the caller.
+    """
+    if max_age_seconds is None:
+        max_age_seconds = int(
+            config.get("index_refresh_interval", _DEFAULT_REFRESH_INTERVAL)
+        )
+
+    vault_path = config.get("vault_path", "")
+    if not vault_path or not Path(vault_path).exists():
+        return -1
+
+    # Read the marker timestamp
+    try:
+        if _SCAN_MARKER_PATH.exists():
+            last_scan_ts = float(_SCAN_MARKER_PATH.read_text().strip())
+        else:
+            last_scan_ts = 0.0
+    except Exception as e:
+        print(f"[search_index] Could not read scan marker: {e}", file=sys.stderr)
+        last_scan_ts = 0.0
+
+    now = time.time()
+
+    # Check if index is fresh enough to skip
+    if last_scan_ts > 0 and (now - last_scan_ts) < max_age_seconds:
+        return -1
+
+    backend = _get_backend(config)
+    if backend is None:
+        return -1
+
+    count = 0
+    try:
+        # Walk vault for files modified since last scan
+        for md_file in Path(vault_path).rglob("*.md"):
+            try:
+                if md_file.stat().st_mtime > last_scan_ts:
+                    backend.index_note(str(md_file), {})
+                    count += 1
+            except Exception as e:
+                print(
+                    f"[search_index] Could not index {md_file.name}: {e}",
+                    file=sys.stderr,
+                )
+
+        # Prune entries for deleted notes
+        if hasattr(backend, "prune_stale_notes"):
+            try:
+                backend.prune_stale_notes()
+            except Exception as e:
+                print(f"[search_index] Prune failed: {e}", file=sys.stderr)
+
+        # Update marker
+        _SCAN_MARKER_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _SCAN_MARKER_PATH.write_text(str(now))
+
+    except Exception as e:
+        print(f"[search_index] incremental_refresh failed: {e}", file=sys.stderr)
+        return -1
+
+    return count
+
+
+def main() -> None:
+    """Entry point for cyberbrain-reindex CLI and __main__ invocation."""
     import json
-    from pathlib import Path
 
     config_path = Path.home() / ".claude" / "cyberbrain" / "config.json"
     if not config_path.exists():
         print("No config found at ~/.claude/cyberbrain/config.json", file=sys.stderr)
         sys.exit(1)
     config = json.loads(config_path.read_text())
-    build_full_index(config)
+    # Force refresh regardless of age by passing max_age_seconds=0
+    count = incremental_refresh(config, max_age_seconds=0)
+    if count >= 0:
+        print(f"[search_index] Incremental refresh complete: {count} note(s) updated.", file=sys.stderr)
+    else:
+        print("[search_index] Refresh skipped (no backend or vault unavailable).", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()

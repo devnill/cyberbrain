@@ -401,7 +401,7 @@ class TestAnalyzeVaultMain:
 # ---------------------------------------------------------------------------
 
 class TestFrontmatterEdgeCases:
-    """Tests for extractors/frontmatter.py missing lines (28-29, 75, 81)."""
+    """Tests for src/cyberbrain/extractors/frontmatter.py missing lines (28-29, 75, 81)."""
 
     def test_parse_frontmatter_returns_empty_when_yaml_is_non_dict(self):
         """YAML that parses to a list (not a dict) returns {}."""

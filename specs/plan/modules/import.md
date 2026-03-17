@@ -17,7 +17,7 @@ NOT responsible for: extraction logic (extraction module), vault writing (vault 
 
 ## Requires
 
-- `extract_beats` module (from: extraction) — Imported from `~/.claude/cyberbrain/extractors/`. Uses `extract_beats()`, `write_beat()`, `autofile_beat()`, `resolve_config()`.
+- `cyberbrain.extractors.extract_beats` module (from: extraction) — Uses `extract_beats()`, `write_beat()`, `autofile_beat()`, `resolve_config()`.
 
 ## Boundary Rules
 
@@ -30,7 +30,7 @@ NOT responsible for: extraction logic (extraction module), vault writing (vault 
 ## Internal Design Notes
 
 - File: `scripts/import.py` (698 lines)
-- Imports `extract_beats` via `sys.path.insert` from the installed location, not the repo
+- Imports `cyberbrain.extractors.extract_beats` via package import; exits with a clear message if the package is not installed
 - State file is a JSON dict mapping conversation UUIDs to import timestamps
 - Claude Desktop format: nested JSON with `chat_messages` array
 - ChatGPT format: nested JSON with `mapping` dict containing message nodes

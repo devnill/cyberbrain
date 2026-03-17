@@ -1,5 +1,5 @@
 """
-test_recall_read_tools.py — tests for mcp/tools/recall.py
+test_recall_read_tools.py — tests for src/cyberbrain/mcp/tools/recall.py
 
 Covers the gaps not reached by test_mcp_server.py:
 - _find_note_by_title: FTS5 exact/prefix/miss/exception paths
@@ -11,7 +11,7 @@ Covers the gaps not reached by test_mcp_server.py:
 
 All vault I/O uses tmp_path. No real LLM calls.
 
-Critical patching note: tools/recall.py does `from shared import _load_config,
+Critical patching note: tools/recall.py does `from cyberbrain.mcp.shared import _load_config,
 _get_search_backend, ...` which creates LOCAL bindings in the tools.recall module.
 Patching must target tools.recall._load_config / tools.recall._get_search_backend,
 NOT shared._load_config / shared._get_search_backend.
@@ -119,7 +119,7 @@ def _make_fts5_db(tmp_path: Path, notes: list[dict]) -> str:
 
 
 def _make_search_result(path: str, **kwargs):
-    from search_backends import SearchResult
+    from cyberbrain.extractors.search_backends import SearchResult
     return SearchResult(
         path=path,
         title=kwargs.get("title", "Test Note"),
@@ -378,7 +378,7 @@ class TestCbRecallCardFormatting:
             }, body=f"## Note {i}\n\nUnique body content {i}.")
             notes.append(n)
 
-        from search_backends import SearchResult
+        from cyberbrain.extractors.search_backends import SearchResult
         results = [
             SearchResult(
                 path=str(n), title=f"Note {i}", summary=f"Summary of note {i}.",
@@ -410,7 +410,7 @@ class TestCbRecallCardFormatting:
             "summary": "Has related links.",
             "tags": ["test"],
         })
-        from search_backends import SearchResult
+        from cyberbrain.extractors.search_backends import SearchResult
         sr = SearchResult(
             path=str(note), title="Related Note", summary="Has related links.",
             tags=["test"], related=["JWT Auth", "Postgres Pool"],
@@ -619,7 +619,7 @@ class TestCbRecallSynthesis:
             }, body=f"## Note {i}\n\nBody content for note {i}.")
             notes.append(n)
 
-        from search_backends import SearchResult
+        from cyberbrain.extractors.search_backends import SearchResult
         results = [
             SearchResult(
                 path=str(n), title=f"Note {i}", summary=f"Summary of note {i}.",
@@ -648,9 +648,9 @@ class TestCbRecallSynthesis:
              patch.object(mod, "_get_search_backend", return_value=mock_backend), \
              patch.object(mod, "_load_prompt", return_value="prompt"), \
              patch.object(mod, "_call_claude_code_backend", return_value="Synthesized answer citing [Note 0]."), \
-             patch("tools.recall.quality_gate", return_value=mock_verdict, create=True):
+             patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=mock_verdict, create=True):
             # We need to patch the import inside the function
-            with patch.dict("sys.modules", {"quality_gate": MagicMock(
+            with patch.dict("sys.modules", {"cyberbrain.extractors.quality_gate": MagicMock(
                 quality_gate=MagicMock(return_value=mock_verdict),
                 Verdict=MagicMock(),
             )}):
@@ -691,7 +691,7 @@ class TestCbRecallSynthesis:
              patch.object(mod, "_get_search_backend", return_value=mock_backend), \
              patch.object(mod, "_load_prompt", return_value="prompt"), \
              patch.object(mod, "_call_claude_code_backend", return_value="Synthesis."), \
-             patch.dict("sys.modules", {"quality_gate": MagicMock(
+             patch.dict("sys.modules", {"cyberbrain.extractors.quality_gate": MagicMock(
                 quality_gate=MagicMock(return_value=mock_verdict),
                 Verdict=MagicMock(),
              )}):
@@ -731,7 +731,7 @@ class TestCbRecallSynthesis:
              patch.object(mod, "_get_search_backend", return_value=mock_backend), \
              patch.object(mod, "_load_prompt", return_value="prompt"), \
              patch.object(mod, "_call_claude_code_backend", return_value="Bad synthesis."), \
-             patch.dict("sys.modules", {"quality_gate": MagicMock(
+             patch.dict("sys.modules", {"cyberbrain.extractors.quality_gate": MagicMock(
                 quality_gate=MagicMock(return_value=mock_verdict),
                 Verdict=MagicMock(),
              )}):
@@ -752,7 +752,7 @@ class TestCbRecallSynthesis:
              patch.object(mod, "_get_search_backend", return_value=mock_backend), \
              patch.object(mod, "_load_prompt", return_value="prompt"), \
              patch.object(mod, "_call_claude_code_backend", return_value="Good synthesis."), \
-             patch.dict("sys.modules", {"quality_gate": None}):
+             patch.dict("sys.modules", {"cyberbrain.extractors.quality_gate": None}):
             # When sys.modules has None, import raises ImportError
             output = cb_recall(query="test content notes", synthesize=True)
 
@@ -780,7 +780,7 @@ class TestCbRecallSynthesis:
              patch.object(mod, "_get_search_backend", return_value=mock_backend), \
              patch.object(mod, "_load_prompt", side_effect=track_load_prompt), \
              patch.object(mod, "_call_claude_code_backend", return_value="Synthesis."), \
-             patch.dict("sys.modules", {"quality_gate": MagicMock(
+             patch.dict("sys.modules", {"cyberbrain.extractors.quality_gate": MagicMock(
                 quality_gate=MagicMock(return_value=mock_verdict),
                 Verdict=MagicMock(),
              )}):
@@ -800,7 +800,7 @@ class TestCbRecallSynthesis:
             "tags": ["test"],
         }, body=long_body)
 
-        from search_backends import SearchResult
+        from cyberbrain.extractors.search_backends import SearchResult
         sr = SearchResult(
             path=str(note), title="Long Note", summary="A long note.",
             tags=["test"], note_type="reference", date="2026-01-15",
@@ -827,7 +827,7 @@ class TestCbRecallSynthesis:
              patch.object(mod, "_get_search_backend", return_value=mock_backend), \
              patch.object(mod, "_load_prompt", return_value="{query}\n{note_count}\n{notes_block}"), \
              patch.object(mod, "_call_claude_code_backend", side_effect=capture_backend_call), \
-             patch.dict("sys.modules", {"quality_gate": MagicMock(
+             patch.dict("sys.modules", {"cyberbrain.extractors.quality_gate": MagicMock(
                 quality_gate=MagicMock(return_value=mock_verdict),
                 Verdict=MagicMock(),
              )}):
@@ -839,3 +839,209 @@ class TestCbRecallSynthesis:
         assert long_body not in user_msg
         # But the first 500 chars should
         assert "x" * 500 in user_msg
+
+
+# ===========================================================================
+# cb_read — multi-identifier and synthesize
+# ===========================================================================
+
+class TestCbReadMultiIdentifier:
+    """cb_read supports pipe-separated multiple identifiers."""
+
+    def test_single_identifier_unchanged_behavior(self, tmp_path):
+        """A single identifier without pipe returns full note content (backward compat)."""
+        vault = _make_vault(tmp_path)
+        _write_note(vault, "My Note.md", {
+            "title": "My Note",
+            "type": "reference",
+            "summary": "Test.",
+            "tags": [],
+        }, body="Body content here.")
+        config = _vault_config(vault)
+
+        mod = _get_recall_module()
+        _, cb_read = _register()
+        with patch.object(mod, "_load_config", return_value=config):
+            result = cb_read(identifier="My Note.md")
+
+        assert "My Note" in result
+        assert "Body content here" in result
+        assert "Source:" in result
+
+    def test_multi_identifier_returns_both_notes(self, tmp_path):
+        """Pipe-separated identifiers return all resolved notes concatenated."""
+        vault = _make_vault(tmp_path)
+        _write_note(vault, "NoteA.md", {"title": "Note A", "type": "insight", "summary": "A"}, body="Body of A.")
+        _write_note(vault, "NoteB.md", {"title": "Note B", "type": "reference", "summary": "B"}, body="Body of B.")
+        config = _vault_config(vault)
+
+        mod = _get_recall_module()
+        _, cb_read = _register()
+        with patch.object(mod, "_load_config", return_value=config):
+            result = cb_read(identifier="NoteA.md|NoteB.md")
+
+        assert "Note A" in result
+        assert "Note B" in result
+        assert "Body of A" in result
+        assert "Body of B" in result
+
+    def test_multi_identifier_partial_failure_returns_resolved_with_warning(self, tmp_path):
+        """When some identifiers fail to resolve, resolved notes are returned with a warning."""
+        vault = _make_vault(tmp_path)
+        _write_note(vault, "Good.md", {"title": "Good Note", "type": "insight", "summary": "ok"}, body="Good body.")
+        config = _vault_config(vault)
+
+        mod = _get_recall_module()
+        _, cb_read = _register()
+        with patch.object(mod, "_load_config", return_value=config), \
+             patch.object(mod, "_find_note_by_title", return_value=None):
+            result = cb_read(identifier="Good.md|nonexistent-note")
+
+        assert "Good Note" in result
+        assert "Good body" in result
+        assert "Could not resolve" in result
+
+    def test_multi_identifier_all_fail_raises_tool_error(self, tmp_path):
+        """When no identifiers resolve, ToolError is raised."""
+        from fastmcp.exceptions import ToolError
+        vault = _make_vault(tmp_path)
+        config = _vault_config(vault)
+
+        mod = _get_recall_module()
+        _, cb_read = _register()
+        with patch.object(mod, "_load_config", return_value=config), \
+             patch.object(mod, "_find_note_by_title", return_value=None):
+            with pytest.raises(ToolError, match="No notes found"):
+                cb_read(identifier="ghost1|ghost2")
+
+    def test_multi_identifier_body_truncated_when_not_synthesizing(self, tmp_path):
+        """Multi-note bodies are truncated at 2000 chars when synthesize=False."""
+        vault = _make_vault(tmp_path)
+        long_body = "z" * 3000
+        _write_note(vault, "Long.md", {"title": "Long Note", "type": "reference", "summary": "long"}, body=long_body)
+        _write_note(vault, "Short.md", {"title": "Short Note", "type": "reference", "summary": "short"}, body="Short body.")
+        config = _vault_config(vault)
+
+        mod = _get_recall_module()
+        _, cb_read = _register()
+        with patch.object(mod, "_load_config", return_value=config):
+            result = cb_read(identifier="Long.md|Short.md", synthesize=False)
+
+        # Full 3000-char body should not appear
+        assert long_body not in result
+        # Truncation notice should appear
+        assert "truncated" in result
+        # Short note should appear in full
+        assert "Short body" in result
+
+    def test_multi_identifier_pipe_limit_ten(self, tmp_path):
+        """Only the first 10 identifiers in a pipe-separated list are processed."""
+        vault = _make_vault(tmp_path)
+        for i in range(12):
+            _write_note(vault, f"Note{i}.md", {"title": f"Note {i}", "type": "insight", "summary": f"s{i}"}, body=f"Body {i}.")
+        config = _vault_config(vault)
+
+        mod = _get_recall_module()
+        _, cb_read = _register()
+        pipe_list = "|".join(f"Note{i}.md" for i in range(12))
+        with patch.object(mod, "_load_config", return_value=config):
+            result = cb_read(identifier=pipe_list)
+
+        # Notes 10 and 11 are beyond the limit and should not appear
+        assert "Body 10" not in result
+        assert "Body 11" not in result
+
+    def test_max_chars_per_note_custom_truncation(self, tmp_path):
+        """max_chars_per_note parameter controls truncation threshold."""
+        vault = _make_vault(tmp_path)
+        long_body = "a" * 500
+        _write_note(vault, "A.md", {"title": "Note A", "type": "insight", "summary": "a"}, body=long_body)
+        _write_note(vault, "B.md", {"title": "Note B", "type": "insight", "summary": "b"}, body="Short.")
+        config = _vault_config(vault)
+
+        mod = _get_recall_module()
+        _, cb_read = _register()
+        with patch.object(mod, "_load_config", return_value=config):
+            # Truncate at 100 chars — long_body (500) should be truncated
+            result = cb_read(identifier="A.md|B.md", synthesize=False, max_chars_per_note=100)
+
+        assert long_body not in result
+        assert "truncated" in result
+        assert "Short" in result
+
+    def test_max_chars_per_note_zero_no_truncation(self, tmp_path):
+        """max_chars_per_note=0 disables truncation."""
+        vault = _make_vault(tmp_path)
+        long_body = "b" * 3000
+        _write_note(vault, "Big.md", {"title": "Big Note", "type": "insight", "summary": "big"}, body=long_body)
+        _write_note(vault, "Small.md", {"title": "Small Note", "type": "insight", "summary": "small"}, body="Small.")
+        config = _vault_config(vault)
+
+        mod = _get_recall_module()
+        _, cb_read = _register()
+        with patch.object(mod, "_load_config", return_value=config):
+            result = cb_read(identifier="Big.md|Small.md", synthesize=False, max_chars_per_note=0)
+
+        # Full 3000-char body should appear when truncation is disabled
+        assert long_body in result
+        assert "truncated" not in result
+
+
+class TestCbReadSynthesize:
+    """cb_read synthesize=True merges multiple notes into a context block."""
+
+    def _make_mock_verdict(self, passed: bool = True) -> MagicMock:
+        v = MagicMock()
+        v.passed = passed
+        v.rationale = "ok" if passed else "failed"
+        return v
+
+    def test_single_note_synthesize_calls_synthesize_recall(self, tmp_path):
+        """synthesize=True on a single note invokes _synthesize_recall."""
+        vault = _make_vault(tmp_path)
+        _write_note(vault, "Solo.md", {"title": "Solo Note", "type": "insight", "summary": "s"}, body="Solo body content.")
+        config = _vault_config(vault)
+
+        mod = _get_recall_module()
+        _, cb_read = _register()
+        with patch.object(mod, "_load_config", return_value=config), \
+             patch.object(mod, "_synthesize_recall", return_value="Synthesized solo.") as mock_synth:
+            result = cb_read(identifier="Solo.md", synthesize=True)
+
+        mock_synth.assert_called_once()
+        assert result == "Synthesized solo."
+
+    def test_multi_note_synthesize_calls_synthesize_recall(self, tmp_path):
+        """synthesize=True on multiple notes invokes _synthesize_recall once with all notes."""
+        vault = _make_vault(tmp_path)
+        _write_note(vault, "N1.md", {"title": "Note 1", "type": "insight", "summary": "s1"}, body="Body 1.")
+        _write_note(vault, "N2.md", {"title": "Note 2", "type": "reference", "summary": "s2"}, body="Body 2.")
+        config = _vault_config(vault)
+
+        mod = _get_recall_module()
+        _, cb_read = _register()
+        with patch.object(mod, "_load_config", return_value=config), \
+             patch.object(mod, "_synthesize_recall", return_value="Synthesized both.") as mock_synth:
+            result = cb_read(identifier="N1.md|N2.md", synthesize=True, query="what do these cover?")
+
+        mock_synth.assert_called_once()
+        # Query is passed as the first arg to _synthesize_recall
+        call_args = mock_synth.call_args
+        assert "what do these cover?" in call_args[0][0]
+        assert result == "Synthesized both."
+
+    def test_synthesize_uses_generic_query_when_empty(self, tmp_path):
+        """When query is empty, a generic summary prompt is used."""
+        vault = _make_vault(tmp_path)
+        _write_note(vault, "M.md", {"title": "M", "type": "insight", "summary": "m"}, body="M body.")
+        config = _vault_config(vault)
+
+        mod = _get_recall_module()
+        _, cb_read = _register()
+        with patch.object(mod, "_load_config", return_value=config), \
+             patch.object(mod, "_synthesize_recall", return_value="Generic synthesis.") as mock_synth:
+            cb_read(identifier="M.md", synthesize=True, query="")
+
+        call_args = mock_synth.call_args
+        query_arg = call_args[0][0]
+        assert "Summarize" in query_arg or len(query_arg) > 0  # fallback used

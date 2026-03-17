@@ -35,4 +35,4 @@
 - **Decision**: `frontmatter.py` was created to consolidate duplicated parsing implementations. It is canonical but `shared.py`, `analyze_vault.py`, and `search_backends.py` each still contain their own implementations.
 - **Rationale**: Consolidation task was partially completed; full migration not yet done.
 - **Source**: specs/plan/architecture.md (Design Tension T4)
-- **Status**: settled (canonical source exists; dedup migration incomplete)
+- **Status**: resolved — WI-036 (cycle 002) fixed `search_backends.py` to use qualified imports. `shared.py` and `analyze_vault.py` were already delegating. All three files now use the canonical module. See curation/Q-3 (resolved).

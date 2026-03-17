@@ -1,19 +1,19 @@
 """
 test_mcp_server.py — unit tests for the cyberbrain MCP tools
 
-Updated for the modular package structure (mcp/tools/*.py, mcp/shared.py).
+Updated for the src layout package structure (src/cyberbrain/mcp/tools/*.py, src/cyberbrain/mcp/shared.py).
 Tool modules are imported directly; a FakeMCP captures registered functions
 without requiring FastMCP to be installed in the test environment.
 
 Patch targets are tool-module-level names (e.g. tools.extract._extract_beats)
-rather than server-module-level names, because `from shared import X` creates a
+rather than server-module-level names, because `from cyberbrain.mcp.shared import X` creates a
 binding in each tool module's own namespace.
 
 Coverage:
 - ToolError is raised (not returned) for all genuine failure cases
 - Successful-but-empty cases return strings, not ToolErrors
 - transcript_path is restricted to ~/.claude/projects/
-- Typed parameters (type_override, folder, cwd) work correctly
+- Typed parameters (type, title, tags, durability, folder, cwd) work correctly
 - cwd parameter flows through to config loading
 - max_results bounds are declared in the schema
 - Tool annotations are captured by register()
@@ -32,7 +32,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # ---------------------------------------------------------------------------
-# Setup: add mcp/ and extractors/ to sys.path, mock extract_beats before import
+# Setup: mock extract_beats before import (src layout — no sys.path manipulation needed)
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
@@ -54,14 +54,12 @@ _mock_eb.resolve_config.return_value = {
     "autofile": False,
     "daily_journal": False,
 }
-_mock_frontmatter = MagicMock()
-_mock_frontmatter.parse_frontmatter.return_value = {}
-
-# Register mocks before first import of shared (which does `from extract_beats import ...`)
-if "cyberbrain.extractors.extract_beats" not in sys.modules:
-    sys.modules["cyberbrain.extractors.extract_beats"] = _mock_eb
-if "cyberbrain.extractors.frontmatter" not in sys.modules:
-    sys.modules["cyberbrain.extractors.frontmatter"] = _mock_frontmatter
+# Save the real extract_beats module (if already imported by another test file)
+# then inject mock so that shared.py gets BackendError = Exception when imported.
+# After shared/tool modules are imported, restore the real module so that
+# patch("cyberbrain.extractors.extract_beats.X") targets the real module in other tests.
+_orig_extract_beats = sys.modules.get("cyberbrain.extractors.extract_beats")
+sys.modules["cyberbrain.extractors.extract_beats"] = _mock_eb
 
 # ---------------------------------------------------------------------------
 # FakeMCP: captures tool/resource/prompt registrations without requiring FastMCP
@@ -103,10 +101,23 @@ class FakeMCP:
 # Import tool modules and register with FakeMCP
 # ---------------------------------------------------------------------------
 
-# Clear any stale module cache entries from previous test runs in same process
+# Clear any stale module cache entries from previous test runs in same process.
+# Also clear package-level attribute caches — Python caches submodule imports as
+# attributes on the parent package, so popping sys.modules isn't enough; we must
+# also remove the stale attribute so the next import gets a fresh module.
 for _mod in ["cyberbrain.mcp.shared", "cyberbrain.mcp.tools.extract", "cyberbrain.mcp.tools.file",
              "cyberbrain.mcp.tools.recall", "cyberbrain.mcp.tools.manage", "cyberbrain.mcp.resources"]:
     sys.modules.pop(_mod, None)
+
+# Remove stale submodule attributes from the tools package object
+if "cyberbrain.mcp.tools" in sys.modules:
+    _tools_pkg = sys.modules["cyberbrain.mcp.tools"]
+    for _attr in ["extract", "file", "recall", "manage"]:
+        _tools_pkg.__dict__.pop(_attr, None)
+if "cyberbrain.mcp" in sys.modules:
+    _mcp_pkg = sys.modules["cyberbrain.mcp"]
+    _mcp_pkg.__dict__.pop("shared", None)
+    _mcp_pkg.__dict__.pop("resources", None)
 
 import cyberbrain.mcp.shared as _shared
 from cyberbrain.mcp.tools import extract as _extract_mod
@@ -114,6 +125,12 @@ from cyberbrain.mcp.tools import file as _file_mod
 from cyberbrain.mcp.tools import recall as _recall_mod
 from cyberbrain.mcp.tools import manage as _manage_mod
 import cyberbrain.mcp.resources as _resources_mod
+
+# Restore the original extract_beats module so patch() targets work in other test files
+if _orig_extract_beats is not None:
+    sys.modules["cyberbrain.extractors.extract_beats"] = _orig_extract_beats
+else:
+    sys.modules.pop("cyberbrain.extractors.extract_beats", None)
 
 fake_mcp = FakeMCP()
 _extract_mod.register(fake_mcp)
@@ -152,6 +169,7 @@ BASE_CONFIG = {
     "model": "claude-haiku-4-5",
     "autofile": False,
     "daily_journal": False,
+    "quality_gate_enabled": False,
 }
 
 
@@ -324,9 +342,9 @@ class TestCbExtractSuccess:
 # ===========================================================================
 
 class TestCbFileTypedParams:
-    """cb_file takes explicit type_override, folder, and cwd parameters."""
+    """cb_file takes explicit type, folder, and cwd parameters."""
 
-    def test_type_override_is_applied_after_extraction(self, mock_config, tmp_path):
+    def test_type_is_applied_after_extraction(self, mock_config, tmp_path):
         vault = tmp_path / "vault"
         vault.mkdir(exist_ok=True)
         (vault / "AI" / "Claude-Sessions").mkdir(parents=True, exist_ok=True)
@@ -344,7 +362,7 @@ class TestCbFileTypedParams:
         with patch.object(_file_mod, "_load_config", return_value=config):
             with patch.object(_file_mod, "_extract_beats", return_value=[original_beat]):
                 with patch.object(_file_mod, "write_beat", side_effect=fake_write):
-                    cb_file(content="Some insight content", type_override="decision")
+                    cb_file(content="Some insight content", type="decision")
 
         assert len(captured_beats) == 1
         assert captured_beats[0]["type"] == "decision"
@@ -389,11 +407,15 @@ class TestCbFileTypedParams:
         assert "No content worth filing" in result
 
     def test_instructions_param_no_longer_exists(self):
-        """cb_file no longer accepts an 'instructions' parameter."""
+        """cb_file no longer accepts an 'instructions' or 'type_override' parameter."""
         import inspect
         sig = inspect.signature(cb_file)
         assert "instructions" not in sig.parameters
-        assert "type_override" in sig.parameters
+        assert "type_override" not in sig.parameters
+        assert "type" in sig.parameters
+        assert "title" in sig.parameters
+        assert "tags" in sig.parameters
+        assert "durability" in sig.parameters
         assert "folder" in sig.parameters
         assert "cwd" in sig.parameters
 
@@ -611,7 +633,7 @@ class TestCbRecallSearchBackend:
             vault, "JWT Auth.md",
             '---\ntitle: "JWT Auth"\ntype: decision\ntags: []\nrelated: []\nsummary: "JWT auth summary"\ndate: 2026-01-01\n---\n\n## Body\n\nContent.',
         )
-        from search_backends import SearchResult
+        from cyberbrain.extractors.search_backends import SearchResult
         mock_result = SearchResult(path=str(note), title="JWT Auth", summary="JWT auth summary",
                                    score=1.5, backend="fts5", note_type="decision")
         mock_backend = MagicMock()
@@ -660,7 +682,7 @@ class TestCbRecallSearchBackend:
             vault, "JWT Auth.md",
             '---\ntitle: "JWT Auth"\ntype: decision\ntags: []\nrelated: []\nsummary: "Summary"\ndate: 2026-01-01\n---\n\n## Body\n\nContent.',
         )
-        from search_backends import SearchResult
+        from cyberbrain.extractors.search_backends import SearchResult
         mock_result = SearchResult(path=str(note), title="JWT Auth", summary="Summary",
                                    score=1.5, backend="fts5", note_type="decision")
         mock_backend = MagicMock()
@@ -680,7 +702,7 @@ class TestCbRecallSearchBackend:
             vault, "JWT Auth.md",
             '---\ntitle: "JWT Auth"\ntype: decision\ntags: []\nrelated: []\nsummary: "Summary"\ndate: 2026-01-01\n---\n\n## Body\n\nContent.',
         )
-        from search_backends import SearchResult
+        from cyberbrain.extractors.search_backends import SearchResult
         mock_result = SearchResult(path=str(note), title="JWT Auth", summary="Summary",
                                    score=1.5, backend="fts5", note_type="decision", related=[])
         mock_backend = MagicMock()
@@ -711,7 +733,7 @@ class TestCbRecallSynthesize:
             '---\ntitle: "JWT Auth"\ntype: decision\ntags: []\nrelated: []\nsummary: "Summary"\ndate: 2026-01-01\n---\n\n## Body\n\nContent.',
             encoding="utf-8",
         )
-        from search_backends import SearchResult
+        from cyberbrain.extractors.search_backends import SearchResult
         mock_result = SearchResult(path=str(note), title="JWT Auth", summary="Summary",
                                    score=1.5, backend="fts5", note_type="decision")
         mock_backend = MagicMock()
@@ -1328,7 +1350,7 @@ class TestCbStatusAdditionalCoverage:
         mock_backend.build_full_index = MagicMock()
         mock_sb.get_search_backend.return_value = mock_backend
         import sys
-        with patch.dict(sys.modules, {"search_backends": mock_sb}):
+        with patch.dict(sys.modules, {"cyberbrain.extractors.search_backends": mock_sb}):
             cb_configure(vault_path=str(new_vault))
             # Give daemon thread a brief moment to execute
             import time

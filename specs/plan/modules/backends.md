@@ -35,7 +35,7 @@ NOT responsible for: prompt loading, response parsing, beat extraction logic.
 
 ## Internal Design Notes
 
-- File: `extractors/backends.py` (261 lines)
+- File: `src/cyberbrain/extractors/backends.py`
 - `bedrock` imports `anthropic` lazily — not required at module load time
 - `ollama` uses `urllib` (stdlib) — no HTTP library dependency
 - `claude-code` timeout is configurable via `config["claude_timeout"]` (default 120s)

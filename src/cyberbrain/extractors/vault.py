@@ -345,6 +345,11 @@ def write_beat(beat: dict, config: dict, session_id: str, cwd: str, now: datetim
     if durability == "working-memory":
         wm_fields = "\n" + _wm_frontmatter_fields(beat, config, now)
 
+    uncertain_routing_field = ""
+    if "_autofile_low_confidence" in beat:
+        confidence_val = beat["_autofile_low_confidence"]
+        uncertain_routing_field = f"\ncb_uncertain_routing: {confidence_val:.2f}"
+
     # Use json.dumps for string fields to safely handle quotes and special chars.
     # JSON string syntax is valid YAML scalar syntax.
     front_matter = f"""---
@@ -361,7 +366,7 @@ related: {json.dumps(related_wikilinks)}
 status: completed
 summary: {json.dumps(summary)}
 cb_source: {source}
-cb_created: {date_str}{wm_fields}
+cb_created: {date_str}{wm_fields}{uncertain_routing_field}
 ---"""
 
     relations_section = ""
@@ -376,21 +381,18 @@ cb_created: {date_str}{wm_fields}
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(content)
 
-    # Update search index (FTS5/hybrid) post-write; non-fatal on failure
-    try:
-        from search_index import update_search_index
-        update_search_index(str(output_path), {
-            "id": beat_id,
-            "title": title,
-            "summary": summary,
-            "tags": tags,
-            "related": related_wikilinks,
-            "type": beat_type,
-            "scope": scope,
-            "project": project_name,
-            "date": date_str,
-        }, config)
-    except ImportError:
-        pass  # search_index.py not yet installed; silent skip
+    # Update search index (FTS5/hybrid) post-write
+    from cyberbrain.extractors.search_index import update_search_index
+    update_search_index(str(output_path), {
+        "id": beat_id,
+        "title": title,
+        "summary": summary,
+        "tags": tags,
+        "related": related_wikilinks,
+        "type": beat_type,
+        "scope": scope,
+        "project": project_name,
+        "date": date_str,
+    }, config)
 
     return output_path

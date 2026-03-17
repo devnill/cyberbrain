@@ -60,6 +60,11 @@ if "cyberbrain.extractors.extract_beats" not in sys.modules:
     _shared_mock_eb.autofile_beat = MagicMock()
     _shared_mock_eb.write_journal_entry = MagicMock()
     _shared_mock_eb._call_claude_code = MagicMock(return_value="synthesis result")
+    # Add __spec__ to avoid breaking runpy.run_module in tests that use it
+    import importlib.util
+    _shared_mock_eb.__spec__ = importlib.util.spec_from_loader("cyberbrain.extractors.extract_beats", loader=None)
+    _shared_mock_eb.__spec__.origin = str(REPO_ROOT / "src" / "cyberbrain" / "extractors" / "extract_beats.py")
+    _shared_mock_eb.__file__ = str(REPO_ROOT / "src" / "cyberbrain" / "extractors" / "extract_beats.py")
     sys.modules["cyberbrain.extractors.extract_beats"] = _shared_mock_eb
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -210,3 +215,42 @@ def mock_search_result():
         return SearchResult(path=path, title=title, score=score, **kwargs)
 
     return _make
+
+
+# ---------------------------------------------------------------------------
+# --affected-only: run only tests touched by recently changed source files
+# ---------------------------------------------------------------------------
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--affected-only",
+        action="store_true",
+        default=False,
+        help="Run only tests affected by changed files",
+    )
+
+
+def pytest_configure(config):
+    if config.getoption("--affected-only", default=False):
+        import subprocess
+        from _dependency_map import TestMapper
+
+        # Get changed files from git
+        result = subprocess.run(
+            ["git", "diff", "--name-only", "HEAD~1"],
+            capture_output=True, text=True
+        )
+        changed = {Path(f) for f in result.stdout.splitlines() if f.endswith(".py")}
+
+        # Map to tests
+        mapper = TestMapper()
+        mapper.build()
+
+        affected = set()
+        for src in changed:
+            affected.update(mapper.get_tests_for(src))
+
+        if affected:
+            config.args = sorted(affected)
+            config.option.verbose = 0
+            config.option.tbstyle = "no"

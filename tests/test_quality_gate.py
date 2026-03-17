@@ -1,4 +1,4 @@
-"""Tests for extractors/quality_gate.py — LLM-as-judge quality gate."""
+"""Tests for src/cyberbrain/extractors/quality_gate.py — LLM-as-judge quality gate."""
 
 import json
 import sys

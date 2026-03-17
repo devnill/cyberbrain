@@ -6,8 +6,10 @@ Intelligent beat filing using LLM judgment for vault placement.
 
 import json
 import os
+import random
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from cyberbrain.extractors.backends import BackendError, call_model
@@ -147,9 +149,86 @@ def _merge_relations_into_note(note_path: Path, new_relations: list) -> None:
         print(f"[extract_beats] Could not write relation merge: {e}", file=sys.stderr)
 
 
+def _build_folder_examples(vault_path: str, search_results: list,
+                            max_folders: int = 8, notes_per_folder: int = 2) -> str:
+    """Build a formatted block of sample notes from candidate vault folders.
+
+    For each candidate folder (top-level directories prioritised by search hit coverage),
+    samples up to `notes_per_folder` notes: the most-recently-modified note and one
+    additional note chosen deterministically by seeding random with the folder name.
+    Folders with no notes are silently skipped.
+    """
+    vault = Path(vault_path)
+
+    # Identify top-level folders that appear in search results (priority candidates)
+    result_folders: set[str] = set()
+    for path in search_results:
+        try:
+            rel = Path(path).relative_to(vault)
+        except ValueError:
+            continue
+        if len(rel.parts) > 1:
+            result_folders.add(rel.parts[0])
+
+    # Collect all top-level non-hidden folders, prioritising those with search hits
+    try:
+        all_dirs = sorted(
+            (d for d in vault.iterdir() if d.is_dir() and not d.name.startswith(".")),
+            key=lambda d: (d.name not in result_folders, d.name),
+        )[:max_folders]
+    except OSError:
+        return "(no folder examples available)"
+
+    lines: list[str] = []
+    for folder in all_dirs:
+        try:
+            # Limit depth to avoid expensive rglob on huge vaults
+            md_files = sorted(
+                (p for p in folder.rglob("*.md") if p.is_file()),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+        except OSError:
+            continue
+        if not md_files:
+            continue
+
+        samples = [md_files[0]]  # most recent
+        if notes_per_folder >= 2 and len(md_files) > 1:
+            # Deterministic second sample keyed on folder name
+            samples.append(random.Random(hash(folder.name)).choice(md_files[1:]))
+
+        folder_rel = str(folder.relative_to(vault))
+        lines.append(f"### {folder_rel}/ ({len(samples)} sample notes)\n")
+        for sample in samples:
+            try:
+                fm = parse_frontmatter(sample.read_text(encoding="utf-8", errors="replace"))
+            except OSError:
+                continue
+            title = fm.get("title") or sample.stem
+            note_type = fm.get("type", "unknown")
+            tags = fm.get("tags", [])
+            summary = str(fm.get("summary", ""))[:200]
+            try:
+                mtime = datetime.fromtimestamp(sample.stat().st_mtime).strftime("%Y-%m-%d")
+            except OSError:
+                mtime = "unknown"
+            lines.append(f"**{title}** ({mtime})")
+            lines.append(f"type: {note_type} | tags: {tags}")
+            lines.append(f"Summary: {summary}\n")
+
+    return "\n".join(lines) if lines else "(no folder examples available)"
+
+
 def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
-                  vault_context: str | None = None, source: str = "hook-extraction") -> Path | None:
-    """File a beat intelligently into the vault using LLM judgment."""
+                  vault_context: str | None = None, source: str = "hook-extraction",
+                  can_ask: bool = False) -> Path | None:
+    """File a beat intelligently into the vault using LLM judgment.
+
+    can_ask: if True, "ask" uncertainty behavior returns None (caller surfaces the question).
+    If False (default), "ask" behavior falls back to inbox routing — safe for non-interactive
+    paths like hooks and cb_extract where there is no user to prompt.
+    """
     vault_path = config["vault_path"]
 
     # Load vault filing context from CLAUDE.md if not pre-cached by caller
@@ -195,12 +274,18 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
     except OSError:
         vault_folders = ""
 
+    # Build folder examples for context injection
+    notes_per_folder = int(config.get("autofile_history_samples", 2))
+    folder_examples = _build_folder_examples(vault_path, related_paths,
+                                             notes_per_folder=notes_per_folder)
+
     system_prompt = load_prompt("autofile-system.md")
     user_message = load_prompt("autofile-user.md").format_map({
         "beat_json": json.dumps(beat, indent=2),
         "related_docs": "\n\n---\n\n".join(related_docs) if related_docs else "(none found)",
         "vault_context": vault_context,
         "vault_folders": vault_folders or "(empty)",
+        "folder_examples": folder_examples,
     })
 
     print(f"[extract_beats] autofile: using model for filing decision", file=sys.stderr)
@@ -222,6 +307,36 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
     except json.JSONDecodeError as e:
         print(f"[extract_beats] autofile: bad JSON from model: {e}", file=sys.stderr)
         return write_beat(beat, config, session_id, cwd, now)
+
+    # --- Confidence-based routing ---
+    confidence = decision.get("confidence", 0.5)
+    if not isinstance(confidence, (int, float)):
+        confidence = 0.5
+    confidence = float(confidence)
+    rationale = decision.get("rationale", "")
+
+    uncertain_threshold = float(config.get("uncertain_filing_threshold", 0.5))
+    uncertain_behavior = config.get("uncertain_filing_behavior", "inbox")
+
+    if confidence < uncertain_threshold:
+        print(
+            f"[extract_beats] autofile: low confidence ({confidence:.2f} < {uncertain_threshold:.2f}), "
+            f"uncertain_filing_behavior={uncertain_behavior!r}: {rationale}",
+            file=sys.stderr,
+        )
+        if uncertain_behavior == "ask" and can_ask:
+            # Signal that user confirmation is needed — caller surfaces the question.
+            beat["_autofile_ask"] = {
+                "confidence": confidence,
+                "rationale": rationale,
+                "decision": decision,
+            }
+            return None
+        else:
+            # Non-interactive context (can_ask=False) or behavior="inbox": route to inbox.
+            # Set sentinel so write_beat emits cb_uncertain_routing in frontmatter.
+            beat["_autofile_low_confidence"] = confidence
+            return write_beat(beat, config, session_id, cwd, now, source=source)
 
     action = decision.get("action")
     vault = Path(vault_path)

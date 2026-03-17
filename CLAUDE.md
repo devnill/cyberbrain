@@ -21,7 +21,7 @@ Read `specs/plan/overview.md` for current focus. The `specs/` directory uses the
 
 A knowledge capture and retrieval system for LLM interactions. It automatically extracts durable knowledge ("beats") from Claude sessions and stores them as structured Obsidian markdown notes, making that knowledge searchable and injectable into future sessions.
 
-The system exposes an MCP server with ten tools (`cb_extract`, `cb_file`, `cb_recall`, `cb_read`, `cb_setup`, `cb_enrich`, `cb_configure`, `cb_status`, `cb_restructure`, `cb_review`, `cb_reindex`), a PreCompact hook for automatic capture, and CLI import scripts for Claude and ChatGPT data exports. The MCP server is the single interface — no slash command skills.
+The system exposes an MCP server with eleven tools (`cb_extract`, `cb_file`, `cb_recall`, `cb_read`, `cb_setup`, `cb_enrich`, `cb_configure`, `cb_status`, `cb_restructure`, `cb_review`, `cb_reindex`), a PreCompact hook for automatic capture, and CLI import scripts for Claude and ChatGPT data exports. The MCP server is the single interface — no slash command skills.
 
 ---
 
@@ -73,7 +73,7 @@ bash uninstall.sh [--yes]  # uninstall
 
 ### Validate the extractor directly:
 ```bash
-python3 extractors/extract_beats.py \
+python3 src/cyberbrain/extractors/extract_beats.py \
   --transcript <path-to-jsonl> \
   --session-id test-session \
   --trigger manual \
@@ -88,7 +88,7 @@ echo '{"transcript_path": "/path/to/transcript.jsonl", "session_id": "test-123",
   bash hooks/pre-compact-extract.sh
 ```
 
-**Hot reload:** The hook and `extract_beats.py` reload on each invocation. MCP server changes require restarting Claude Desktop.
+**Hot reload:** The hook and `src/cyberbrain/extractors/extract_beats.py` reload on each invocation. MCP server changes require restarting Claude Desktop.
 
 ---
 
@@ -99,7 +99,7 @@ echo '{"transcript_path": "/path/to/transcript.jsonl", "session_id": "test-123",
 ```
 Claude Code session
   → PreCompact event fires hooks/pre-compact-extract.sh
-  → invokes extractors/extract_beats.py with transcript path
+  → invokes src/cyberbrain/extractors/extract_beats.py with transcript path
   → calls LLM (via configured backend) to extract beats as JSON
   → writes .md files to Obsidian vault
 ```
@@ -114,28 +114,28 @@ Beat routing:
 | File | Purpose |
 |---|---|
 | `hooks/pre-compact-extract.sh` | PreCompact hook; reads hook context JSON from stdin, strips nested-session env vars, calls extractor; always exits 0 |
-| `extractors/extract_beats.py` | Core engine; parses JSONL/text transcripts, calls LLM backend, writes vault notes, daily journal |
-| `extractors/backends.py` | LLM backend implementations (claude-code, bedrock, ollama); env var stripping; subprocess hardening |
-| `extractors/analyze_vault.py` | Vault structure analyzer used by `cb_setup`; produces JSON report |
-| `prompts/extract-beats-system.md` / `extract-beats-user.md` | Extraction LLM prompts — edit to change extraction behavior |
-| `prompts/autofile-system.md` / `autofile-user.md` | Autofile routing prompts |
-| `prompts/enrich-system.md` / `enrich-user.md` | Batch enrichment prompts — support `{vault_type_context}` injection |
-| `mcp/server.py` | FastMCP v3 server for Claude Desktop; registers all tools; runs in `~/.claude/cyberbrain/venv/` |
-| `mcp/tools/extract.py` | `cb_extract` tool |
-| `mcp/tools/file.py` | `cb_file` tool |
-| `mcp/tools/recall.py` | `cb_recall` + `cb_read` tools |
-| `mcp/tools/setup.py` | `cb_setup` tool — two-phase vault analysis and CLAUDE.md generation |
-| `mcp/tools/enrich.py` | `cb_enrich` tool — batch frontmatter enrichment |
-| `mcp/tools/manage.py` | `cb_configure` + `cb_status` tools |
-| `mcp/tools/restructure.py` | `cb_restructure` tool — split large notes, merge related clusters, create hub pages, and move clusters into subfolders |
-| `mcp/tools/review.py` | `cb_review` tool — working memory review (promote/extend/delete) |
-| `prompts/restructure-system.md` / `restructure-user.md` | Restructure LLM prompts (split + merge) |
-| `prompts/restructure-decide-system.md` / `restructure-decide-user.md` | Restructure decision prompts — action selection for clusters and large notes |
-| `prompts/restructure-generate-system.md` / `restructure-generate-user.md` | Restructure content generation prompts |
-| `prompts/restructure-audit-system.md` / `restructure-audit-user.md` | Restructure audit prompts — topical fit and quality checks |
-| `prompts/restructure-group-system.md` / `restructure-group-user.md` | Restructure grouping prompts — LLM-driven semantic clustering |
-| `mcp/tools/reindex.py` | `cb_reindex` tool — prune stale index entries or full rebuild |
-| `prompts/review-system.md` / `review-user.md` | Working memory review LLM prompts |
+| `src/cyberbrain/extractors/extract_beats.py` | Core engine; parses JSONL/text transcripts, calls LLM backend, writes vault notes, daily journal |
+| `src/cyberbrain/extractors/backends.py` | LLM backend implementations (claude-code, bedrock, ollama); env var stripping; subprocess hardening |
+| `src/cyberbrain/extractors/analyze_vault.py` | Vault structure analyzer used by `cb_setup`; produces JSON report |
+| `src/cyberbrain/prompts/extract-beats-system.md` / `extract-beats-user.md` | Extraction LLM prompts — edit to change extraction behavior |
+| `src/cyberbrain/prompts/autofile-system.md` / `autofile-user.md` | Autofile routing prompts |
+| `src/cyberbrain/prompts/enrich-system.md` / `enrich-user.md` | Batch enrichment prompts — support `{vault_type_context}` injection |
+| `src/cyberbrain/mcp/server.py` | FastMCP server entry point; registers all tools |
+| `src/cyberbrain/mcp/tools/extract.py` | `cb_extract` tool |
+| `src/cyberbrain/mcp/tools/file.py` | `cb_file` tool — `content`, `title` (mode switch: omit for LLM extraction, provide for direct document intake), `type`, `tags`, `durability`, `folder`, `cwd` |
+| `src/cyberbrain/mcp/tools/recall.py` | `cb_recall` + `cb_read` tools — `cb_read` accepts pipe-separated `identifier` (up to 10), `synthesize: bool`, `query: str`, `max_chars_per_note: int` (default 2000, 0 = no truncation) |
+| `src/cyberbrain/mcp/tools/setup.py` | `cb_setup` tool — two-phase vault analysis and CLAUDE.md generation |
+| `src/cyberbrain/mcp/tools/enrich.py` | `cb_enrich` tool — batch frontmatter enrichment |
+| `src/cyberbrain/mcp/tools/manage.py` | `cb_configure` + `cb_status` tools |
+| `src/cyberbrain/mcp/tools/restructure.py` | `cb_restructure` tool — split large notes, merge related clusters, create hub pages, and move clusters into subfolders |
+| `src/cyberbrain/mcp/tools/review.py` | `cb_review` tool — working memory review (promote/extend/delete) |
+| `src/cyberbrain/prompts/restructure-system.md` / `restructure-user.md` | Restructure LLM prompts (split + merge) |
+| `src/cyberbrain/prompts/restructure-decide-system.md` / `restructure-decide-user.md` | Restructure decision prompts — action selection for clusters and large notes |
+| `src/cyberbrain/prompts/restructure-generate-system.md` / `restructure-generate-user.md` | Restructure content generation prompts |
+| `src/cyberbrain/prompts/restructure-audit-system.md` / `restructure-audit-user.md` | Restructure audit prompts — topical fit and quality checks |
+| `src/cyberbrain/prompts/restructure-group-system.md` / `restructure-group-user.md` | Restructure grouping prompts — LLM-driven semantic clustering |
+| `src/cyberbrain/mcp/tools/reindex.py` | `cb_reindex` tool — prune stale index entries or full rebuild |
+| `src/cyberbrain/prompts/review-system.md` / `review-user.md` | Working memory review LLM prompts |
 | `scripts/import.py` | Unified import for Claude Desktop and ChatGPT data exports |
 | `tests/` | Test suite — unit and integration tests with mocked LLM calls |
 
@@ -209,11 +209,11 @@ When `claude -p` is spawned as a subprocess, these inherited env vars cause hang
 
 The `claude-code` backend strips all five unconditionally and uses `start_new_session=True` to fully detach from the parent process group. The subprocess also runs from a neutral working directory (`~/.claude/cyberbrain/`) that has no CLAUDE.md, preventing project config injection.
 
-**Architectural constraint:** All vault writes go through `extract_beats.py` or `import.py`. This ensures path validation, logging, and error fallback are consistently enforced in Python. MCP tools never write vault files directly.
+**Architectural constraint:** All vault writes go through `src/cyberbrain/extractors/extract_beats.py` or `scripts/import.py`. This ensures path validation, logging, and error fallback are consistently enforced in Python. MCP tools never write vault files directly.
 
-**Filename character constraint:** Beat titles (used as vault filenames) must not contain `#`, `[`, `]`, or `^`. These characters are valid on the filesystem but break Obsidian wikilink resolution — Obsidian uses `#` as a heading anchor separator and `^` as a block reference marker inside link syntax. The `make_filename()` function in `extract_beats.py` strips them, and the extraction and autofile prompts instruct the LLM not to generate them. When writing prompts or testing, verify titles avoid these characters (e.g. use "CSharp" not "C#").
+**Filename character constraint:** Beat titles (used as vault filenames) must not contain `#`, `[`, `]`, or `^`. These characters are valid on the filesystem but break Obsidian wikilink resolution — Obsidian uses `#` as a heading anchor separator and `^` as a block reference marker inside link syntax. The `make_filename()` function in `src/cyberbrain/extractors/vault.py` strips them, and the extraction and autofile prompts instruct the LLM not to generate them. When writing prompts or testing, verify titles avoid these characters (e.g. use "CSharp" not "C#").
 
-**Soft delete (trash):** All vault note deletions go through `_move_to_trash()` in `mcp/shared.py`. Notes are moved to the `trash_folder` (default `.trash`, relative to vault root) instead of being permanently deleted. The vault-relative folder structure is preserved inside the trash folder. If a file already exists at the destination, a numeric suffix (`_1`, `_2`, ...) is appended to avoid clobbering. Obsidian ignores dotfolders by default, so `.trash` is invisible in the vault UI.
+**Soft delete (trash):** All vault note deletions go through `_move_to_trash()` in `src/cyberbrain/mcp/shared.py`. Notes are moved to the `trash_folder` (default `.trash`, relative to vault root) instead of being permanently deleted. The vault-relative folder structure is preserved inside the trash folder. If a file already exists at the destination, a numeric suffix (`_1`, `_2`, ...) is appended to avoid clobbering. Obsidian ignores dotfolders by default, so `.trash` is invisible in the vault UI.
 
 **Restructure grouping strategies:** `cb_restructure` in `folder_hub` mode supports pluggable clustering via the `grouping` parameter:
 - `auto` (default) — embedding hierarchical clustering with LLM fallback if no embeddings available
@@ -227,7 +227,7 @@ Grouping results are cached at `~/.claude/cyberbrain/.restructure-groups-cache.j
 
 ### MCP Interface
 
-The MCP server (`mcp/`) is the single interface for both Claude Desktop and Claude Code. It runs as a separate process (stdio transport) — architecturally isolated from the user's main Claude session. All LLM inference for extraction, enrichment, and setup happens in `claude -p` subprocess calls spawned from the MCP server process, not from the user's session.
+The MCP server (`src/cyberbrain/mcp/`) is the single interface for both Claude Desktop and Claude Code. It runs as a separate process (stdio transport) — architecturally isolated from the user's main Claude session. All LLM inference for extraction, enrichment, and setup happens in `claude -p` subprocess calls spawned from the MCP server process, not from the user's session.
 
 ```
 Claude Code / Claude Desktop (process A — user session, expensive model)
@@ -282,4 +282,4 @@ bash uninstall.sh      # uninstall
 - Claude Desktop MCP registration
 - Python dependency installation
 
-The release tarball includes hooks, extractors, prompts, and the MCP server.
+The package includes hooks, `src/cyberbrain/extractors/`, `src/cyberbrain/prompts/`, and `src/cyberbrain/mcp/`.

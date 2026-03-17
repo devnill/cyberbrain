@@ -20,3 +20,17 @@
 - **Impact**: Without graph expansion, semantic links between notes depend entirely on embedding similarity, which may miss structural relationships (causality, supersession, contradiction).
 - **Status**: open
 - **Reexamination trigger**: After retrieval quality is empirically measured; or if users report missing relevant notes that are structurally related but semantically distant.
+
+## Q-4: WI-045 (automatic indexing) not started
+- **Question**: Has the lazy reindex on `cb_recall` plus SessionEnd hook approach (D-6) been implemented?
+- **Source**: archive/cycles/002/decision-log.md (OQ3); archive/cycles/002/summary.md (Proposed Refinement Plan)
+- **Impact**: Users must manually run `cb_reindex` to keep search index current after vault changes. Stale index produces degraded recall results without any warning.
+- **Status**: open
+- **Reexamination trigger**: Technical investigation of src/cyberbrain/mcp/tools/recall.py and SessionEnd hook for lazy reindex logic.
+
+## Q-5: WI-046 (implement retrieval interface) not started
+- **Question**: Has the `cb_read` multi-identifier, `synthesize`, and `max_chars_per_note` interface (D-7) been implemented?
+- **Source**: archive/cycles/002/decision-log.md (OQ4); archive/cycles/002/summary.md (Proposed Refinement Plan)
+- **Impact**: The design-approved retrieval interface remains a design document only. The current `cb_read` does not support multi-note reads or synthesis.
+- **Status**: open
+- **Reexamination trigger**: Technical investigation of src/cyberbrain/mcp/tools/recall.py against the WI-041 design spec.

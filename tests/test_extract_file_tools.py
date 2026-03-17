@@ -1,5 +1,5 @@
 """
-test_extract_file_tools.py — tests for mcp/tools/extract.py and mcp/tools/file.py
+test_extract_file_tools.py — tests for src/cyberbrain/mcp/tools/extract.py and src/cyberbrain/mcp/tools/file.py
 
 Covers gaps not reached by test_mcp_server.py:
 - extract.py: transcript outside ~/.claude/projects/ -> ToolError
@@ -599,14 +599,14 @@ class TestCbFileNoContent:
 
 
 # ===========================================================================
-# cb_file — type_override
+# cb_file — type parameter (UC2: type override after extraction)
 # ===========================================================================
 
 class TestCbFileTypeOverride:
-    """type_override forces the beat type after extraction."""
+    """type forces the beat type after extraction (UC2: single-beat capture)."""
 
-    def test_type_override_applied_to_all_beats(self, tmp_path):
-        """All extracted beats have their type overridden when type_override is given."""
+    def test_type_applied_to_all_beats(self, tmp_path):
+        """All extracted beats have their type overridden when type is given."""
         vault = tmp_path / "vault"
         vault.mkdir()
         config = _base_config(vault)
@@ -627,10 +627,309 @@ class TestCbFileTypeOverride:
         with patch.object(mod, "_load_config", return_value=config):
             with patch.object(mod, "_extract_beats", return_value=[beat]):
                 with patch.object(mod, "write_beat", side_effect=capture_write):
-                    cb_file(content="some content", type_override="reference")
+                    cb_file(content="some content", type="reference")
 
         assert len(captured_beats) == 1
         assert captured_beats[0]["type"] == "reference"
+
+    def test_tags_merged_with_llm_tags(self, tmp_path):
+        """Tags provided via the tags parameter are merged with LLM-generated tags."""
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        config = _base_config(vault)
+
+        beat = dict(SAMPLE_BEAT)  # tags: ["postgres", "performance"]
+        fake_path = vault / "AI/Claude-Sessions/Use Connection Pooling.md"
+        fake_path.parent.mkdir(parents=True, exist_ok=True)
+        fake_path.touch()
+
+        mod = _get_file_module()
+        cb_file = _register_file()
+        captured_beats = []
+
+        def capture_write(b, *args, **kwargs):
+            captured_beats.append(dict(b))
+            return fake_path
+
+        with patch.object(mod, "_load_config", return_value=config):
+            with patch.object(mod, "_extract_beats", return_value=[beat]):
+                with patch.object(mod, "write_beat", side_effect=capture_write):
+                    cb_file(content="some content", tags="python, async")
+
+        assert len(captured_beats) == 1
+        result_tags = captured_beats[0]["tags"]
+        assert "postgres" in result_tags   # from LLM
+        assert "performance" in result_tags  # from LLM
+        assert "python" in result_tags     # from caller
+        assert "async" in result_tags      # from caller
+
+
+# ===========================================================================
+# cb_file — document intake (UC3)
+# ===========================================================================
+
+class TestCbFileDocumentIntake:
+    """cb_file with title provided: document intake mode (UC3)."""
+
+    def test_with_title_skips_llm_extraction(self, tmp_path):
+        """When title is provided, _extract_beats is never called."""
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        config = _base_config(vault)
+
+        fake_path = vault / "AI/Claude-Sessions/My Research Report.md"
+        fake_path.parent.mkdir(parents=True, exist_ok=True)
+        fake_path.touch()
+
+        mod = _get_file_module()
+        cb_file = _register_file()
+        mock_extract = MagicMock(return_value=[SAMPLE_BEAT])
+        mock_write = MagicMock(return_value=fake_path)
+
+        with patch.object(mod, "_load_config", return_value=config):
+            with patch.object(mod, "_extract_beats", mock_extract):
+                with patch.object(mod, "write_beat", mock_write):
+                    cb_file(
+                        content="This is my research report body.",
+                        title="My Research Report",
+                    )
+
+        mock_extract.assert_not_called()
+        mock_write.assert_called_once()
+
+    def test_with_title_and_type_uses_provided_type(self, tmp_path):
+        """Document intake uses the provided type (not defaulting to reference)."""
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        config = _base_config(vault)
+
+        fake_path = vault / "AI/Claude-Sessions/Meeting Notes.md"
+        fake_path.parent.mkdir(parents=True, exist_ok=True)
+        fake_path.touch()
+
+        mod = _get_file_module()
+        cb_file = _register_file()
+        captured_beats = []
+
+        def capture_write(b, *args, **kwargs):
+            captured_beats.append(dict(b))
+            return fake_path
+
+        with patch.object(mod, "_load_config", return_value=config):
+            with patch.object(mod, "_extract_beats", MagicMock()):
+                with patch.object(mod, "write_beat", side_effect=capture_write):
+                    cb_file(
+                        content="Discussed Q3 goals.",
+                        title="Meeting Notes",
+                        type="decision",
+                    )
+
+        assert len(captured_beats) == 1
+        assert captured_beats[0]["type"] == "decision"
+
+    def test_with_title_defaults_type_to_reference(self, tmp_path):
+        """Document intake defaults type to 'reference' when type is not provided."""
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        config = _base_config(vault)
+
+        fake_path = vault / "AI/Claude-Sessions/API Docs.md"
+        fake_path.parent.mkdir(parents=True, exist_ok=True)
+        fake_path.touch()
+
+        mod = _get_file_module()
+        cb_file = _register_file()
+        captured_beats = []
+
+        def capture_write(b, *args, **kwargs):
+            captured_beats.append(dict(b))
+            return fake_path
+
+        with patch.object(mod, "_load_config", return_value=config):
+            with patch.object(mod, "_extract_beats", MagicMock()):
+                with patch.object(mod, "write_beat", side_effect=capture_write):
+                    cb_file(
+                        content="Detailed API reference for the authentication module.",
+                        title="API Docs",
+                    )
+
+        assert len(captured_beats) == 1
+        assert captured_beats[0]["type"] == "reference"
+
+    def test_with_title_and_tags_applies_tags(self, tmp_path):
+        """Document intake applies provided tags directly."""
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        config = _base_config(vault)
+
+        fake_path = vault / "AI/Claude-Sessions/Rust Notes.md"
+        fake_path.parent.mkdir(parents=True, exist_ok=True)
+        fake_path.touch()
+
+        mod = _get_file_module()
+        cb_file = _register_file()
+        captured_beats = []
+
+        def capture_write(b, *args, **kwargs):
+            captured_beats.append(dict(b))
+            return fake_path
+
+        with patch.object(mod, "_load_config", return_value=config):
+            with patch.object(mod, "_extract_beats", MagicMock()):
+                with patch.object(mod, "write_beat", side_effect=capture_write):
+                    cb_file(
+                        content="Notes on Rust ownership model.",
+                        title="Rust Notes",
+                        tags="rust, ownership, memory",
+                    )
+
+        assert len(captured_beats) == 1
+        assert "rust" in captured_beats[0]["tags"]
+        assert "ownership" in captured_beats[0]["tags"]
+        assert "memory" in captured_beats[0]["tags"]
+
+    def test_with_title_and_durability_working_memory(self, tmp_path):
+        """Document intake with durability='working-memory' sets the beat durability."""
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        config = _base_config(vault)
+
+        fake_path = vault / "AI/Claude-Sessions/Temp Notes.md"
+        fake_path.parent.mkdir(parents=True, exist_ok=True)
+        fake_path.touch()
+
+        mod = _get_file_module()
+        cb_file = _register_file()
+        captured_beats = []
+
+        def capture_write(b, *args, **kwargs):
+            captured_beats.append(dict(b))
+            return fake_path
+
+        with patch.object(mod, "_load_config", return_value=config):
+            with patch.object(mod, "_extract_beats", MagicMock()):
+                with patch.object(mod, "write_beat", side_effect=capture_write):
+                    cb_file(
+                        content="Temporary workaround notes.",
+                        title="Temp Notes",
+                        durability="working-memory",
+                    )
+
+        assert len(captured_beats) == 1
+        assert captured_beats[0]["durability"] == "working-memory"
+
+    def test_with_title_defaults_durability_to_durable(self, tmp_path):
+        """Document intake defaults durability to 'durable'."""
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        config = _base_config(vault)
+
+        fake_path = vault / "AI/Claude-Sessions/Perm Doc.md"
+        fake_path.parent.mkdir(parents=True, exist_ok=True)
+        fake_path.touch()
+
+        mod = _get_file_module()
+        cb_file = _register_file()
+        captured_beats = []
+
+        def capture_write(b, *args, **kwargs):
+            captured_beats.append(dict(b))
+            return fake_path
+
+        with patch.object(mod, "_load_config", return_value=config):
+            with patch.object(mod, "_extract_beats", MagicMock()):
+                with patch.object(mod, "write_beat", side_effect=capture_write):
+                    cb_file(
+                        content="A permanent document.",
+                        title="Perm Doc",
+                    )
+
+        assert len(captured_beats) == 1
+        assert captured_beats[0]["durability"] == "durable"
+
+    def test_with_title_and_folder_uses_write_beat(self, tmp_path):
+        """Document intake with explicit folder uses write_beat (not autofile_beat)."""
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        config = _base_config(vault, autofile=True)
+
+        fake_path = vault / "Work/Projects/Project Report.md"
+        fake_path.parent.mkdir(parents=True, exist_ok=True)
+        fake_path.touch()
+
+        mod = _get_file_module()
+        cb_file = _register_file()
+        mock_autofile = MagicMock(return_value=None)
+        mock_write = MagicMock(return_value=fake_path)
+
+        with patch.object(mod, "_load_config", return_value=config):
+            with patch.object(mod, "_extract_beats", MagicMock()):
+                with patch.object(mod, "autofile_beat", mock_autofile):
+                    with patch.object(mod, "write_beat", mock_write):
+                        cb_file(
+                            content="Project report body.",
+                            title="Project Report",
+                            folder="Work/Projects",
+                        )
+
+        mock_autofile.assert_not_called()
+        mock_write.assert_called_once()
+
+    def test_with_title_uses_document_intake_source(self, tmp_path):
+        """Document intake passes source='document-intake' to write_beat."""
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        config = _base_config(vault)
+
+        fake_path = vault / "AI/Claude-Sessions/Some Doc.md"
+        fake_path.parent.mkdir(parents=True, exist_ok=True)
+        fake_path.touch()
+
+        mod = _get_file_module()
+        cb_file = _register_file()
+        captured_kwargs = []
+
+        def capture_write(b, *args, **kwargs):
+            captured_kwargs.append(kwargs)
+            return fake_path
+
+        with patch.object(mod, "_load_config", return_value=config):
+            with patch.object(mod, "_extract_beats", MagicMock()):
+                with patch.object(mod, "write_beat", side_effect=capture_write):
+                    cb_file(
+                        content="Some document content.",
+                        title="Some Doc",
+                    )
+
+        assert len(captured_kwargs) == 1
+        assert captured_kwargs[0].get("source") == "document-intake"
+
+    def test_with_title_autofile_enabled_calls_autofile_beat(self, tmp_path):
+        """Document intake with autofile=True and no folder calls autofile_beat."""
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        config = _base_config(vault, autofile=True)
+
+        fake_path = vault / "AI/Claude-Sessions/Auto Filed Doc.md"
+        fake_path.parent.mkdir(parents=True, exist_ok=True)
+        fake_path.touch()
+
+        mod = _get_file_module()
+        cb_file = _register_file()
+        mock_autofile = MagicMock(return_value=fake_path)
+        mock_write = MagicMock(return_value=None)
+
+        with patch.object(mod, "_load_config", return_value=config):
+            with patch.object(mod, "_extract_beats", MagicMock()):
+                with patch.object(mod, "autofile_beat", mock_autofile):
+                    with patch.object(mod, "write_beat", mock_write):
+                        cb_file(
+                            content="A document for autofile.",
+                            title="Auto Filed Doc",
+                        )
+
+        mock_autofile.assert_called_once()
+        mock_write.assert_not_called()
 
 
 # ===========================================================================
@@ -776,3 +1075,43 @@ class TestCbFileAdditional:
         call_kwargs = mock_autofile.call_args[1]
         assert "vault_context" in call_kwargs
         assert "Vault Guide" in call_kwargs["vault_context"]
+
+
+class TestCbFileAutofileAsk:
+    """cb_file returns clarification prompt when autofile signals low-confidence ask."""
+
+    def test_autofile_ask_returns_clarification_message(self, tmp_path):
+        """When autofile_beat returns None with _autofile_ask set, cb_file returns clarification."""
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        config = {
+            "vault_path": str(vault),
+            "inbox": "AI/Claude-Sessions",
+            "backend": "claude-code",
+            "autofile": True,
+            "daily_journal": False,
+            "uncertain_filing_behavior": "ask",
+            "uncertain_filing_threshold": 0.5,
+        }
+
+        def mock_autofile_with_ask(beat, *args, **kwargs):
+            # Simulate low-confidence ask: set sentinel and return None
+            beat["_autofile_ask"] = {
+                "confidence": 0.3,
+                "rationale": "Ambiguous topic",
+                "decision": {"path": "Projects/maybe-here"},
+            }
+            return None
+
+        mod = _get_file_module()
+        cb_file = _register_file()
+
+        with patch.object(mod, "_load_config", return_value=config):
+            with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT.copy()]):
+                with patch.object(mod, "autofile_beat", side_effect=mock_autofile_with_ask):
+                    result = cb_file(content="Some content to file.")
+
+        assert "Confidence in routing is low" in result
+        assert "0.30" in result
+        assert "Projects/maybe-here" in result
+        assert "Please confirm" in result

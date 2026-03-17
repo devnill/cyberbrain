@@ -30,3 +30,15 @@
 - **Rationale**: Not recorded. This is an acknowledged design tension (T6), not a deliberate decision.
 - **Source**: specs/plan/architecture.md (Design Tension T6)
 - **Status**: settled (tension acknowledged, not yet resolved)
+
+## D-6: Auto-indexing strategy — lazy reindex on cb_recall plus SessionEnd hook complement
+- **Decision**: Recommended approach (WI-039 research): trigger index rebuild lazily on `cb_recall` invocation, complemented by a SessionEnd hook. No persistent daemon. Research recorded at specs/steering/research/auto-indexing-strategy.md.
+- **Rationale**: Lazy reindex on the retrieval path catches stale index entries at the point they matter. SessionEnd hook provides a background complement without blocking any user operation. A persistent daemon was evaluated and rejected as incompatible with GP-6 (lean architecture).
+- **Source**: specs/archive/cycles/002/decision-log.md (DL8); specs/steering/research/auto-indexing-strategy.md
+- **Status**: provisional (research complete; WI-045 implementation not started as of cycle 002)
+
+## D-7: cb_read extended with multi-identifier, synthesize, and max_chars_per_note parameters
+- **Decision**: `cb_read` gains: pipe `|` delimited multi-identifier support (up to 10 identifiers), `synthesize: bool` parameter, and `max_chars_per_note: int` (default 2000, 0 = no truncation). Empty-query synthesis uses a fallback message. Pipe `|` is the delimiter because it does not appear in Obsidian filenames.
+- **Rationale**: Design approved in WI-041. `max_chars_per_note` was changed from hardcoded to an explicit parameter at user request. Net tool count remains 11.
+- **Source**: specs/archive/cycles/002/decision-log.md (DL10); specs/plan/retrieval-interface-design.md
+- **Status**: provisional (design approved; WI-046 implementation not started as of cycle 002)

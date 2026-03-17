@@ -1568,7 +1568,9 @@ class TestMain:
 
     def test_main_extractor_not_found_exits(self, tmp_path):
         """_import_extract_beats exits with sys.exit(1) when extractor is missing."""
-        with patch.object(kg_import, "EXTRACTORS_DIR", tmp_path / "nonexistent"), \
+        # Force the import to fail by blocking the module in sys.modules (None = blocked).
+        # Without this, the full test suite has the real module cached and the import succeeds.
+        with patch.dict(sys.modules, {"cyberbrain.extractors.extract_beats": None}), \
              patch("sys.argv", ["import.py", "--export", "/dev/null", "--format", "claude"]):
             with pytest.raises(SystemExit):
                 kg_import._import_extract_beats()

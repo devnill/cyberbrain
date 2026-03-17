@@ -123,6 +123,11 @@ YAML example with realistic values, body structure guidance)
 10. Extending the Ontology (criteria for when to add types/tags — and when to resist)
 11. Quality and Maintenance Rules (filing quality standards, good summary criteria)
 12. Claude-Specific Behaviors (how Claude should behave when filing/recalling/enriching)
+    - Tool set: 11 tools — cb_extract, cb_file, cb_recall, cb_read, cb_configure, cb_status, cb_setup, cb_enrich, cb_restructure, cb_review, cb_reindex
+    - cb_file: document intake mode (title provided) vs single-beat capture (title omitted)
+    - cb_read: accepts pipe-separated identifiers (up to 10), synthesize parameter for multi-note context
+    - cb_enrich: batch enrichment for notes missing metadata
+    - Config keys: uncertain_filing_behavior (inbox|ask, default inbox), uncertain_filing_threshold (0.0-1.0, default 0.5)
 13. Known Issues / Migration Notes (ONLY if significant anti-patterns found)
 
 Knowledge Graph Principles section must include these ideas (adapt, do not copy verbatim):

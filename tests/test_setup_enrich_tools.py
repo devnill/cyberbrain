@@ -40,17 +40,18 @@ _mock_eb.resolve_config.return_value = {
     "autofile": False,
     "daily_journal": False,
 }
+# Add __spec__ and __file__ to mock to avoid breaking runpy.run_module in other tests
+import importlib.util
+_mock_eb.__spec__ = importlib.util.spec_from_loader("cyberbrain.extractors.extract_beats", loader=None)
+_mock_eb.__spec__.origin = str(REPO_ROOT / "src" / "cyberbrain" / "extractors" / "extract_beats.py")
+_mock_eb.__file__ = str(REPO_ROOT / "src" / "cyberbrain" / "extractors" / "extract_beats.py")
 
-if "cyberbrain.extractors.extract_beats" not in sys.modules:
-    sys.modules["cyberbrain.extractors.extract_beats"] = _mock_eb
-if "cyberbrain.extractors.frontmatter" not in sys.modules:
-    sys.modules["cyberbrain.extractors.frontmatter"] = MagicMock()
+# Note: We don't install the mock at module level anymore.
+# The mock is installed by the fixture when needed.
 
-# Pre-install a mock quality_gate module so the real one (which imports from
-# backends at module level) is never loaded during tests.
-if "cyberbrain.extractors.quality_gate" not in sys.modules:
-    _mock_qg = MagicMock()
-    sys.modules["cyberbrain.extractors.quality_gate"] = _mock_qg
+# Create a mock quality_gate module for tests that need it.
+# The fixture will handle installing and restoring this mock.
+_mock_qg = MagicMock()
 
 # ---------------------------------------------------------------------------
 # FakeMCP (same as test_mcp_server.py)
@@ -72,9 +73,15 @@ class FakeMCP:
 # Import and register tools
 # ---------------------------------------------------------------------------
 
+# Store the real extract_beats module before installing the mock
+_real_extract_beats_for_teardown = sys.modules.get("cyberbrain.extractors.extract_beats")
+
 # Clear stale module cache entries
-for _mod in ["cyberbrain.mcp.shared", "cyberbrain.mcp.tools.setup", "cyberbrain.mcp.tools.enrich", "cyberbrain.extractors.backends"]:
+for _mod in ["cyberbrain.mcp.shared", "cyberbrain.mcp.tools.setup", "cyberbrain.mcp.tools.enrich", "cyberbrain.mcp.tools.recall", "cyberbrain.extractors.backends", "cyberbrain.extractors.frontmatter", "cyberbrain.extractors.extract_beats"]:
     sys.modules.pop(_mod, None)
+
+# Re-install mock extract_beats after popping to ensure it's used
+sys.modules["cyberbrain.extractors.extract_beats"] = _mock_eb
 
 import cyberbrain.mcp.shared as _shared
 from cyberbrain.mcp.tools import setup as _setup_mod
@@ -119,6 +126,51 @@ def write_note(vault: Path, rel_path: str, content: str) -> Path:
     return path
 
 
+@pytest.fixture(autouse=True)
+def refresh_enrich_module():
+    """Re-import enrich module to ensure cb_enrich is bound to the latest version.
+
+    This is needed because test_auto_indexing.py pops cyberbrain.mcp.tools.enrich
+    from sys.modules, which causes cb_enrich to be bound to a stale function.
+    """
+    global cb_enrich, cb_setup, _enrich_mod, _setup_mod, _shared
+    # Store the current state before modifying
+    _current_extract_beats = sys.modules.get("cyberbrain.extractors.extract_beats")
+    _current_quality_gate = sys.modules.get("cyberbrain.extractors.quality_gate")
+    # Clear stale module cache entries
+    for _mod in ["cyberbrain.mcp.shared", "cyberbrain.mcp.tools.setup", "cyberbrain.mcp.tools.enrich"]:
+        sys.modules.pop(_mod, None)
+    # Install mock extract_beats to prevent real LLM calls during tests
+    sys.modules["cyberbrain.extractors.extract_beats"] = _mock_eb
+    # Install mock quality_gate for test_setup_enrich_tools tests
+    sys.modules["cyberbrain.extractors.quality_gate"] = _mock_qg
+    # Re-import modules
+    import cyberbrain.mcp.shared as _shared
+    from cyberbrain.mcp.tools import setup as _setup_mod
+    from cyberbrain.mcp.tools import enrich as _enrich_mod
+    # Manually add to sys.modules to ensure it's there
+    sys.modules["cyberbrain.mcp.tools.enrich"] = _enrich_mod
+    sys.modules["cyberbrain.mcp.tools.setup"] = _setup_mod
+    sys.modules["cyberbrain.mcp.shared"] = _shared
+    # Re-register tools
+    _fake_mcp = FakeMCP()
+    _setup_mod.register(_fake_mcp)
+    _enrich_mod.register(_fake_mcp)
+    # Re-bind cb_enrich and cb_setup
+    cb_enrich = _fake_mcp._tools["cb_enrich"]["fn"]
+    cb_setup = _fake_mcp._tools["cb_setup"]["fn"]
+    yield
+    # Restore the previous state after tests
+    if _current_extract_beats is not None:
+        sys.modules["cyberbrain.extractors.extract_beats"] = _current_extract_beats
+    else:
+        sys.modules.pop("cyberbrain.extractors.extract_beats", None)
+    if _current_quality_gate is not None:
+        sys.modules["cyberbrain.extractors.quality_gate"] = _current_quality_gate
+    else:
+        sys.modules.pop("cyberbrain.extractors.quality_gate", None)
+
+
 # ---------------------------------------------------------------------------
 # cb_setup — configuration errors
 # ---------------------------------------------------------------------------
@@ -129,14 +181,14 @@ class TestCbSetupConfigErrors:
 
     def test_raises_when_no_vault_configured(self):
         """ToolError when vault_path is not set and config has no vault_path."""
-        with patch("shared._resolve_config", return_value={"vault_path": ""}):
+        with patch("cyberbrain.mcp.tools.setup._load_config", return_value={"vault_path": ""}):
             with pytest.raises(ToolError, match="No vault path"):
                 cb_setup()
 
     def test_raises_when_vault_path_does_not_exist(self, tmp_path):
         """ToolError when the vault directory doesn't exist on disk."""
         nonexistent = str(tmp_path / "no-such-vault")
-        with patch("shared._resolve_config", return_value=_vault_config(nonexistent)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=_vault_config(nonexistent)):
             with pytest.raises(ToolError, match="does not exist"):
                 cb_setup(vault_path=nonexistent)
 
@@ -146,10 +198,10 @@ class TestCbSetupConfigErrors:
         This allows cb_setup to analyze a vault other than the one in config.
         """
         config = _vault_config(str(tmp_path / "other-vault"))
-        with patch("shared._resolve_config", return_value=config):
-            with patch("tools.setup._run_analyzer", return_value={"total_notes": 0}):
-                with patch("tools.setup._read_note_samples", return_value=""):
-                    with patch("backends.call_model", return_value='{"archetype": "developer", "questions": []}'):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=config):
+            with patch("cyberbrain.mcp.tools.setup._run_analyzer", return_value={"total_notes": 0}):
+                with patch("cyberbrain.mcp.tools.setup._read_note_samples", return_value=""):
+                    with patch("cyberbrain.extractors.backends.call_model", return_value='{"archetype": "developer", "questions": []}'):
                         # vault_path arg points to tmp_path which exists
                         result = cb_setup(vault_path=str(tmp_path))
         # Should not raise — the argument path was used
@@ -204,10 +256,10 @@ tags: [jwt, auth]
                 {"id": "q1", "question": "What is this vault primarily used for?"}
             ],
         }
-        with patch("shared._resolve_config", return_value=self._phase1_config(vault)):
-            with patch("tools.setup._run_analyzer", return_value={"total_notes": 2, "links": {}}):
-                with patch("tools.setup._read_note_samples", return_value="sample content"):
-                    with patch("backends.call_model", return_value=json.dumps(analysis)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._phase1_config(vault)):
+            with patch("cyberbrain.mcp.tools.setup._run_analyzer", return_value={"total_notes": 2, "links": {}}):
+                with patch("cyberbrain.mcp.tools.setup._read_note_samples", return_value="sample content"):
+                    with patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(analysis)):
                         result = cb_setup(vault_path=str(vault))
 
         parsed = json.loads(result)
@@ -220,10 +272,10 @@ tags: [jwt, auth]
         analysis = {"archetype": "developer", "questions": []}
         fenced = f"```json\n{json.dumps(analysis)}\n```"
 
-        with patch("shared._resolve_config", return_value=self._phase1_config(vault)):
-            with patch("tools.setup._run_analyzer", return_value={"total_notes": 0, "links": {}}):
-                with patch("tools.setup._read_note_samples", return_value=""):
-                    with patch("backends.call_model", return_value=fenced):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._phase1_config(vault)):
+            with patch("cyberbrain.mcp.tools.setup._run_analyzer", return_value={"total_notes": 0, "links": {}}):
+                with patch("cyberbrain.mcp.tools.setup._read_note_samples", return_value=""):
+                    with patch("cyberbrain.extractors.backends.call_model", return_value=fenced):
                         result = cb_setup(vault_path=str(vault))
 
         parsed = json.loads(result)
@@ -231,10 +283,10 @@ tags: [jwt, auth]
 
     def test_returns_raw_output_when_model_returns_non_json(self, vault):
         """If the model returns non-JSON, the raw output is returned (graceful degradation)."""
-        with patch("shared._resolve_config", return_value=self._phase1_config(vault)):
-            with patch("tools.setup._run_analyzer", return_value={"total_notes": 0, "links": {}}):
-                with patch("tools.setup._read_note_samples", return_value=""):
-                    with patch("backends.call_model", return_value="Sorry, I cannot analyze this."):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._phase1_config(vault)):
+            with patch("cyberbrain.mcp.tools.setup._run_analyzer", return_value={"total_notes": 0, "links": {}}):
+                with patch("cyberbrain.mcp.tools.setup._read_note_samples", return_value=""):
+                    with patch("cyberbrain.extractors.backends.call_model", return_value="Sorry, I cannot analyze this."):
                         result = cb_setup(vault_path=str(vault))
 
         assert "Sorry" in result
@@ -249,30 +301,30 @@ tags: [jwt, auth]
             prompt_args["user"] = user_message
             return '{"archetype": "developer", "questions": []}'
 
-        with patch("shared._resolve_config", return_value=self._phase1_config(vault)):
-            with patch("tools.setup._run_analyzer", return_value={"total_notes": 0, "links": {}}):
-                with patch("tools.setup._read_note_samples", return_value=""):
-                    with patch("backends.call_model", side_effect=capture_call):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._phase1_config(vault)):
+            with patch("cyberbrain.mcp.tools.setup._run_analyzer", return_value={"total_notes": 0, "links": {}}):
+                with patch("cyberbrain.mcp.tools.setup._read_note_samples", return_value=""):
+                    with patch("cyberbrain.extractors.backends.call_model", side_effect=capture_call):
                         cb_setup(vault_path=str(vault))
 
         assert "CLAUDE.md" in prompt_args.get("user", "") or "Vault Instructions" in prompt_args.get("user", "")
 
     def test_gracefully_handles_analyzer_failure(self, vault):
         """If analyze_vault throws, cb_setup continues with the error report."""
-        with patch("shared._resolve_config", return_value=self._phase1_config(vault)):
-            with patch("tools.setup._run_analyzer", return_value={"error": "pyyaml not installed", "total_notes": 0}):
-                with patch("tools.setup._read_note_samples", return_value=""):
-                    with patch("backends.call_model", return_value='{"archetype": "developer", "questions": []}'):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._phase1_config(vault)):
+            with patch("cyberbrain.mcp.tools.setup._run_analyzer", return_value={"error": "pyyaml not installed", "total_notes": 0}):
+                with patch("cyberbrain.mcp.tools.setup._read_note_samples", return_value=""):
+                    with patch("cyberbrain.extractors.backends.call_model", return_value='{"archetype": "developer", "questions": []}'):
                         result = cb_setup(vault_path=str(vault))
 
         assert "developer" in result
 
     def test_raises_tool_error_on_backend_error(self, vault):
         """If the backend raises an exception, ToolError is raised."""
-        with patch("shared._resolve_config", return_value=self._phase1_config(vault)):
-            with patch("tools.setup._run_analyzer", return_value={"total_notes": 0, "links": {}}):
-                with patch("tools.setup._read_note_samples", return_value=""):
-                    with patch("backends.call_model", side_effect=Exception("Connection refused")):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._phase1_config(vault)):
+            with patch("cyberbrain.mcp.tools.setup._run_analyzer", return_value={"total_notes": 0, "links": {}}):
+                with patch("cyberbrain.mcp.tools.setup._read_note_samples", return_value=""):
+                    with patch("cyberbrain.extractors.backends.call_model", side_effect=Exception("Connection refused")):
                         with pytest.raises(ToolError, match="Phase 1"):
                             cb_setup(vault_path=str(vault))
 
@@ -316,10 +368,10 @@ class TestCbSetupPhase2:
 
     def test_returns_preview_when_write_false(self, vault):
         """Phase 2 with write=False returns the content but does not write the file."""
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("tools.setup._run_analyzer", return_value={"total_notes": 0, "links": {}}):
-                with patch("tools.setup._read_note_samples", return_value=""):
-                    with patch("backends.call_model", return_value=self._claude_md_content):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.mcp.tools.setup._run_analyzer", return_value={"total_notes": 0, "links": {}}):
+                with patch("cyberbrain.mcp.tools.setup._read_note_samples", return_value=""):
+                    with patch("cyberbrain.extractors.backends.call_model", return_value=self._claude_md_content):
                         result = cb_setup(
                             vault_path=str(vault),
                             answers=self._answers,
@@ -332,10 +384,10 @@ class TestCbSetupPhase2:
 
     def test_dry_run_returns_content_without_writing(self, vault):
         """dry_run=True shows the content but never writes."""
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("tools.setup._run_analyzer", return_value={"total_notes": 0, "links": {}}):
-                with patch("tools.setup._read_note_samples", return_value=""):
-                    with patch("backends.call_model", return_value=self._claude_md_content):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.mcp.tools.setup._run_analyzer", return_value={"total_notes": 0, "links": {}}):
+                with patch("cyberbrain.mcp.tools.setup._read_note_samples", return_value=""):
+                    with patch("cyberbrain.extractors.backends.call_model", return_value=self._claude_md_content):
                         result = cb_setup(
                             vault_path=str(vault),
                             answers=self._answers,
@@ -349,10 +401,10 @@ class TestCbSetupPhase2:
 
     def test_writes_claude_md_when_write_true(self, vault):
         """Phase 2 with write=True creates CLAUDE.md at the vault root."""
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("tools.setup._run_analyzer", return_value={"total_notes": 0, "links": {}}):
-                with patch("tools.setup._read_note_samples", return_value=""):
-                    with patch("backends.call_model", return_value=self._claude_md_content):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.mcp.tools.setup._run_analyzer", return_value={"total_notes": 0, "links": {}}):
+                with patch("cyberbrain.mcp.tools.setup._read_note_samples", return_value=""):
+                    with patch("cyberbrain.extractors.backends.call_model", return_value=self._claude_md_content):
                         result = cb_setup(
                             vault_path=str(vault),
                             answers=self._answers,
@@ -374,20 +426,20 @@ class TestCbSetupPhase2:
             prompt_args["user"] = user_message
             return '{"archetype": "developer", "questions": []}'
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("tools.setup._run_analyzer", return_value={"total_notes": 0, "links": {}}):
-                with patch("tools.setup._read_note_samples", return_value=""):
-                    with patch("backends.call_model", side_effect=capture):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.mcp.tools.setup._run_analyzer", return_value={"total_notes": 0, "links": {}}):
+                with patch("cyberbrain.mcp.tools.setup._read_note_samples", return_value=""):
+                    with patch("cyberbrain.extractors.backends.call_model", side_effect=capture):
                         cb_setup(vault_path=str(vault), types="concept,note,resource")
 
         assert "concept,note,resource" in prompt_args.get("user", "")
 
     def test_raises_tool_error_on_generation_failure(self, vault):
         """If the backend fails in Phase 2, ToolError is raised."""
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("tools.setup._run_analyzer", return_value={"total_notes": 0, "links": {}}):
-                with patch("tools.setup._read_note_samples", return_value=""):
-                    with patch("backends.call_model", side_effect=Exception("Rate limit")):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.mcp.tools.setup._run_analyzer", return_value={"total_notes": 0, "links": {}}):
+                with patch("cyberbrain.mcp.tools.setup._read_note_samples", return_value=""):
+                    with patch("cyberbrain.extractors.backends.call_model", side_effect=Exception("Rate limit")):
                         with pytest.raises(ToolError, match="Phase 2"):
                             cb_setup(vault_path=str(vault), answers=self._answers, write=True)
 
@@ -416,7 +468,7 @@ class TestCbEnrichCandidateDetection:
         """A note with no frontmatter block is flagged for enrichment."""
         write_note(vault, "No Frontmatter.md", "# Just a heading\n\nBody text.")
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
             result = cb_enrich(dry_run=True)
 
         assert "No Frontmatter.md" in result
@@ -432,7 +484,7 @@ tags: [testing]
 
 Body.
 """)
-        with patch("shared._resolve_config", return_value=self._config(vault)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
             result = cb_enrich(dry_run=True)
 
         assert "Typed Note.md" in result
@@ -457,7 +509,7 @@ tags: [testing]
 
 Body.
 """)
-        with patch("shared._resolve_config", return_value=self._config(vault)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
             result = cb_enrich(dry_run=True)
 
         assert "Bad Type.md" in result
@@ -473,7 +525,7 @@ tags: [python, api]
 
 Body.
 """)
-        with patch("shared._resolve_config", return_value=self._config(vault)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
             result = cb_enrich(dry_run=True)
 
         assert "No Summary.md" in result
@@ -488,7 +540,7 @@ summary: Chose FastAPI over Flask.
 
 Body.
 """)
-        with patch("shared._resolve_config", return_value=self._config(vault)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
             result = cb_enrich(dry_run=True)
 
         assert "No Tags.md" in result
@@ -504,7 +556,7 @@ tags: [fastapi, python, backend]
 
 Body.
 """)
-        with patch("shared._resolve_config", return_value=self._config(vault)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
             result = cb_enrich(dry_run=True)
 
         assert "Would enrich 0" in result
@@ -513,7 +565,14 @@ Body.
         """Notes matching YYYY-MM-DD.md are skipped."""
         write_note(vault, "2026-03-05.md", "# Daily Journal\n\nToday I...")
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
+        import sys
+        print(f"DEBUG: _enrich_mod = {_enrich_mod}", file=sys.stderr)
+        print(f"DEBUG: sys.modules['cyberbrain.mcp.tools.enrich'] = {sys.modules.get('cyberbrain.mcp.tools.enrich')}", file=sys.stderr)
+        print(f"DEBUG: _enrich_mod is sys.modules['cyberbrain.mcp.tools.enrich'] = {_enrich_mod is sys.modules.get('cyberbrain.mcp.tools.enrich')}", file=sys.stderr)
+        print(f"DEBUG: _enrich_mod._load_config = {_enrich_mod._load_config}", file=sys.stderr)
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)) as mock_load:
+            print(f"DEBUG: mock_load = {mock_load}", file=sys.stderr)
+            print(f"DEBUG: _enrich_mod._load_config after patch = {_enrich_mod._load_config}", file=sys.stderr)
             result = cb_enrich(dry_run=True)
 
         # Daily journal should be skipped, not enriched
@@ -525,7 +584,7 @@ Body.
 # Decision Template
 [Fill in decision here]
 """)
-        with patch("shared._resolve_config", return_value=self._config(vault)):
+        with patch.object(_enrich_mod, "_load_config", return_value=self._config(vault)):
             result = cb_enrich(dry_run=True)
 
         assert "Would enrich 0" in result
@@ -540,7 +599,7 @@ type: moc
 
 # Index
 """)
-        with patch("shared._resolve_config", return_value=self._config(vault)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
             result = cb_enrich(dry_run=True)
 
         assert "Would enrich 0" in result
@@ -550,7 +609,7 @@ type: moc
         for i in range(5):
             write_note(vault, f"Note {i}.md", f"# Note {i}\n\nNo frontmatter.")
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
             result = cb_enrich(dry_run=True, limit=2)
 
         assert "Would enrich 2" in result
@@ -566,12 +625,12 @@ type: moc
         new_note = write_note(vault, "New Note.md", "# New\n\nNo frontmatter.")
         # new_note already has current mtime
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
             result = cb_enrich(dry_run=True, since="2020-01-01")
 
         # Both old and new notes should be included (epoch is before 2020)
         # But since epoch (1970) is before 2020, let's use a future date to filter
-        with patch("shared._resolve_config", return_value=self._config(vault)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
             result_filtered = cb_enrich(dry_run=True, since="2030-01-01")
 
         # No notes modified after 2030 exist
@@ -603,17 +662,17 @@ Body.
         return _vault_config(str(vault))
 
     def test_dry_run_shows_dry_run_header(self, vault):
-        with patch("shared._resolve_config", return_value=self._config(vault)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
             result = cb_enrich(dry_run=True)
         assert "[DRY RUN]" in result
 
     def test_dry_run_shows_valid_types(self, vault):
-        with patch("shared._resolve_config", return_value=self._config(vault)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
             result = cb_enrich(dry_run=True)
         assert "Valid types:" in result
 
     def test_dry_run_no_files_written_message(self, vault):
-        with patch("shared._resolve_config", return_value=self._config(vault)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
             result = cb_enrich(dry_run=True)
         assert "No files were modified" in result
 
@@ -629,7 +688,7 @@ tags: [python, fastapi]
 ---
 Body.
 """)
-        with patch("shared._resolve_config", return_value=_vault_config(str(v))):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=_vault_config(str(v))):
             result = cb_enrich(dry_run=True)
 
         assert "All notes already have required metadata" in result
@@ -674,8 +733,8 @@ class TestCbEnrichNormalMode:
             "skip_reason": "",
         }]
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("backends.call_model", return_value=json.dumps(classification)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(classification)):
                 result = cb_enrich()
 
         content = note_path.read_text()
@@ -710,8 +769,8 @@ class TestCbEnrichNormalMode:
             "skip_reason": "",
         }]
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("backends.call_model", return_value=json.dumps(classification)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(classification)):
                 cb_enrich()
 
         content = note_path.read_text()
@@ -741,8 +800,8 @@ class TestCbEnrichNormalMode:
             "skip_reason": "",
         }]
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("backends.call_model", return_value=json.dumps(classification)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(classification)):
                 cb_enrich(overwrite=True)
 
         content = note_path.read_text()
@@ -763,8 +822,8 @@ class TestCbEnrichNormalMode:
             "skip_reason": "meeting notes cannot be classified",
         }]
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("backends.call_model", return_value=json.dumps(classification)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(classification)):
                 result = cb_enrich()
 
         assert "Enriched:     0" in result
@@ -773,8 +832,8 @@ class TestCbEnrichNormalMode:
         """If the model returns invalid JSON, the batch is recorded as errors."""
         write_note(vault, "Unclassifiable.md", "# Note\n\nNo frontmatter.")
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("backends.call_model", return_value="not valid json {{{{"):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.extractors.backends.call_model", return_value="not valid json {{{{"):
                 result = cb_enrich()
 
         assert "Errors:       1" in result
@@ -795,8 +854,8 @@ class TestCbEnrichNormalMode:
             "skip_reason": "",
         }]
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("backends.call_model", return_value=json.dumps(classification)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(classification)):
                 result = cb_enrich()
 
         # 1 enriched + 2 errors (or similar, depending on batch logic)
@@ -804,7 +863,7 @@ class TestCbEnrichNormalMode:
 
     def test_raises_tool_error_when_vault_not_configured(self):
         """ToolError when vault_path is missing from config."""
-        with patch("shared._resolve_config", return_value={"vault_path": ""}):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value={"vault_path": ""}):
             with pytest.raises(ToolError, match="No vault configured"):
                 cb_enrich()
 
@@ -812,7 +871,7 @@ class TestCbEnrichNormalMode:
         """ToolError for a since= value that is not a valid ISO date."""
         v = tmp_path / "v"
         v.mkdir()
-        with patch("shared._resolve_config", return_value=_vault_config(str(v))):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=_vault_config(str(v))):
             with pytest.raises(ToolError, match="Invalid date"):
                 cb_enrich(since="not-a-date")
 
@@ -833,8 +892,8 @@ class TestCbEnrichNormalMode:
             "skip_reason": "",
         }]
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("backends.call_model", return_value=json.dumps(classification)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(classification)):
                 result = cb_enrich(folder="AI/Notes")
 
         # Only 1 note scanned (the one in AI/Notes/)
@@ -879,9 +938,9 @@ class TestCbEnrichQualityGate:
         fail_verdict.rationale = "Type 'problem' does not match tutorial content"
         fail_verdict.confidence = 0.3
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("backends.call_model", return_value=json.dumps(classification)):
-                with patch("quality_gate.quality_gate", return_value=fail_verdict):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(classification)):
+                with patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=fail_verdict):
                     result = cb_enrich()
 
         assert "Gate blocked: 1" in result
@@ -909,9 +968,9 @@ class TestCbEnrichQualityGate:
         pass_verdict.passed = True
         pass_verdict.confidence = 0.9
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("backends.call_model", return_value=json.dumps(classification)):
-                with patch("quality_gate.quality_gate", return_value=pass_verdict):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(classification)):
+                with patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=pass_verdict):
                     result = cb_enrich()
 
         assert "Enriched:     1" in result
@@ -931,10 +990,10 @@ class TestCbEnrichQualityGate:
             "skip": False,
         }]
 
-        with patch("shared._resolve_config", return_value=self._config(vault, gate_enabled=False)):
-            with patch("backends.call_model", return_value=json.dumps(classification)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault, gate_enabled=False)):
+            with patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(classification)):
                 # quality_gate should NOT be called at all
-                with patch("quality_gate.quality_gate", side_effect=AssertionError("should not be called")) as mock_gate:
+                with patch("cyberbrain.extractors.quality_gate.quality_gate", side_effect=AssertionError("should not be called")) as mock_gate:
                     result = cb_enrich()
 
         assert "Enriched:     1" in result
@@ -968,9 +1027,9 @@ class TestCbEnrichQualityGate:
                 return pass_verdict
             return fail_verdict
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("backends.call_model", return_value=json.dumps(classification)):
-                with patch("quality_gate.quality_gate", side_effect=gate_side_effect):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(classification)):
+                with patch("cyberbrain.extractors.quality_gate.quality_gate", side_effect=gate_side_effect):
                     result = cb_enrich()
 
         assert "Enriched:     1" in result
@@ -992,9 +1051,9 @@ class TestCbEnrichQualityGate:
         fail_verdict.rationale = "Summary does not match content"
         fail_verdict.confidence = 0.3
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("backends.call_model", return_value=json.dumps(classification)):
-                with patch("quality_gate.quality_gate", return_value=fail_verdict):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(classification)):
+                with patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=fail_verdict):
                     result = cb_enrich()
 
         assert "Blocked by quality gate" in result
@@ -1010,7 +1069,7 @@ class TestApplyFrontmatterUpdate:
     """Unit tests for the _apply_frontmatter_update helper function."""
 
     def test_prepends_complete_frontmatter_when_none_exists(self, tmp_path):
-        from tools.enrich import _apply_frontmatter_update
+        from cyberbrain.mcp.tools.enrich import _apply_frontmatter_update
         path = tmp_path / "no-fm.md"
         path.write_text("# Title\n\nBody.\n")
 
@@ -1019,7 +1078,11 @@ class TestApplyFrontmatterUpdate:
             "summary": "A useful insight.",
             "tags": ["testing", "python"],
         }
+        print(f"\nDEBUG: Before call, path exists: {path.exists()}")
+        print(f"DEBUG: Before call, content: {repr(path.read_text())}")
         success = _apply_frontmatter_update(path, path.read_text(), cls, overwrite=False)
+        print(f"DEBUG: success returned: {success}")
+        print(f"DEBUG: After call, content: {repr(path.read_text())}")
 
         assert success
         content = path.read_text()
@@ -1029,7 +1092,7 @@ class TestApplyFrontmatterUpdate:
         assert "testing" in content
 
     def test_inserts_fields_before_closing_separator(self, tmp_path):
-        from tools.enrich import _apply_frontmatter_update
+        from cyberbrain.mcp.tools.enrich import _apply_frontmatter_update
         path = tmp_path / "partial.md"
         path.write_text("---\ntitle: My Note\n---\n\nBody.\n")
 
@@ -1046,7 +1109,7 @@ class TestApplyFrontmatterUpdate:
         assert body_idx > closing_idx
 
     def test_does_not_overwrite_existing_type_without_flag(self, tmp_path):
-        from tools.enrich import _apply_frontmatter_update
+        from cyberbrain.mcp.tools.enrich import _apply_frontmatter_update
         path = tmp_path / "typed.md"
         path.write_text("---\ntype: decision\n---\n\nBody.\n")
 
@@ -1058,7 +1121,7 @@ class TestApplyFrontmatterUpdate:
         assert "type: insight" not in content
 
     def test_overwrites_existing_type_with_flag(self, tmp_path):
-        from tools.enrich import _apply_frontmatter_update
+        from cyberbrain.mcp.tools.enrich import _apply_frontmatter_update
         path = tmp_path / "typed.md"
         path.write_text("---\ntype: decision\n---\n\nBody.\n")
 
@@ -1070,7 +1133,7 @@ class TestApplyFrontmatterUpdate:
 
     def test_returns_false_for_malformed_frontmatter(self, tmp_path):
         """If the frontmatter closing --- is missing, the update fails gracefully."""
-        from tools.enrich import _apply_frontmatter_update
+        from cyberbrain.mcp.tools.enrich import _apply_frontmatter_update
         path = tmp_path / "malformed.md"
         path.write_text("---\ntype: decision\n# No closing separator")
 
@@ -1082,7 +1145,7 @@ class TestApplyFrontmatterUpdate:
 
     def test_escapes_double_quotes_in_summary(self, tmp_path):
         """Double quotes in summary values are escaped to produce valid YAML."""
-        from tools.enrich import _apply_frontmatter_update
+        from cyberbrain.mcp.tools.enrich import _apply_frontmatter_update
         path = tmp_path / "quotes.md"
         path.write_text("---\n---\n\nBody.\n")
 
@@ -1094,7 +1157,7 @@ class TestApplyFrontmatterUpdate:
 
     def test_returns_true_early_when_fields_to_set_is_empty(self, tmp_path):
         """Line 153: when nothing needs setting, returns True without touching the file."""
-        from tools.enrich import _apply_frontmatter_update
+        from cyberbrain.mcp.tools.enrich import _apply_frontmatter_update
         path = tmp_path / "complete.md"
         path.write_text("---\ntype: decision\nsummary: Done.\ntags: [python]\n---\n\nBody.\n")
         original_mtime = path.stat().st_mtime
@@ -1110,7 +1173,7 @@ class TestApplyFrontmatterUpdate:
 
     def test_returns_false_when_no_closing_separator(self, tmp_path):
         """Line 158: fm_end == -1 when there's no closing --- returns False."""
-        from tools.enrich import _apply_frontmatter_update
+        from cyberbrain.mcp.tools.enrich import _apply_frontmatter_update
         path = tmp_path / "broken.md"
         # Has opening --- but no closing ---
         path.write_text("---\ntype: decision\nno closing separator here")
@@ -1123,12 +1186,12 @@ class TestApplyFrontmatterUpdate:
 
     def test_returns_false_on_write_oserror(self, tmp_path):
         """Lines 177-178: OSError during write_text returns False."""
-        from tools.enrich import _apply_frontmatter_update
+        from cyberbrain.mcp.tools.enrich import _apply_frontmatter_update
         path = tmp_path / "unwriteable.md"
         path.write_text("# No frontmatter\n\nBody.\n")
 
         cls = {"type": "reference", "summary": "Summary.", "tags": ["tag"]}
-        with patch.object(path.__class__, "write_text", side_effect=OSError("disk full")):
+        with patch("pathlib.Path.write_text", side_effect=OSError("disk full")):
             result = _apply_frontmatter_update(path, path.read_text(), cls, overwrite=False)
 
         assert result is False
@@ -1154,7 +1217,7 @@ class TestCbEnrichAdditionalCoverage:
     def test_raises_tool_error_when_vault_does_not_exist(self, tmp_path):
         """Line 234: ToolError when vault_path is configured but dir does not exist."""
         nonexistent = str(tmp_path / "ghost-vault")
-        with patch("shared._resolve_config", return_value=_vault_config(nonexistent)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=_vault_config(nonexistent)):
             with pytest.raises(ToolError, match="does not exist"):
                 cb_enrich()
 
@@ -1167,7 +1230,7 @@ class TestCbEnrichAdditionalCoverage:
 
         write_note(vault, "New.md", "# New\n\nNo frontmatter.")
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
             # Filter to future date — excludes everything
             result = cb_enrich(dry_run=True, since="2099-01-01")
 
@@ -1177,8 +1240,8 @@ class TestCbEnrichAdditionalCoverage:
         """Lines 341-344: malformed JSON from model adds all batch notes to errors."""
         write_note(vault, "Unparseable.md", "# Note\n\nNo frontmatter.")
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("backends.call_model", return_value="not valid json {{{{"):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.extractors.backends.call_model", return_value="not valid json {{{{"):
                 result = cb_enrich()
 
         assert "Errors:" in result
@@ -1188,8 +1251,8 @@ class TestCbEnrichAdditionalCoverage:
         """Lines 347-349: exception from call_model adds all batch notes to errors."""
         write_note(vault, "ErrorNote.md", "# Note\n\nNo frontmatter.")
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("backends.call_model", side_effect=RuntimeError("model down")):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.extractors.backends.call_model", side_effect=RuntimeError("model down")):
                 result = cb_enrich()
 
         assert "Errors:" in result
@@ -1199,9 +1262,9 @@ class TestCbEnrichAdditionalCoverage:
         note = write_note(vault, "FailWrite.md", "# Note\n\nNo frontmatter.")
 
         classification = [{"type": "reference", "summary": "Summary.", "tags": ["tag"], "skip": False}]
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("backends.call_model", return_value=json.dumps(classification)):
-                with patch("tools.enrich._apply_frontmatter_update", return_value=False):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(classification)):
+                with patch("cyberbrain.mcp.tools.enrich._apply_frontmatter_update", return_value=False):
                     result = cb_enrich()
 
         assert "frontmatter update failed" in result or "Errors:" in result
@@ -1217,7 +1280,7 @@ class TestGetValidTypes:
 
     def test_returns_defaults_when_claude_md_has_fewer_than_2_types(self, tmp_path):
         """Lines 47-52: fewer than 2 type matches in CLAUDE.md → returns default types."""
-        from tools.enrich import _get_valid_types
+        from cyberbrain.mcp.tools.enrich import _get_valid_types
         vault = tmp_path / "vault"
         vault.mkdir()
         # CLAUDE.md with only one type: line
@@ -1230,7 +1293,7 @@ class TestGetValidTypes:
 
     def test_returns_types_from_claude_md_when_2_or_more_match(self, tmp_path):
         """Lines 47-52: 2+ matches → returns deduplicated list from CLAUDE.md."""
-        from tools.enrich import _get_valid_types
+        from cyberbrain.mcp.tools.enrich import _get_valid_types
         vault = tmp_path / "vault"
         vault.mkdir()
         (vault / "CLAUDE.md").write_text(
@@ -1250,7 +1313,7 @@ class TestNeedsEnrichmentEdgeCases:
 
     def test_comma_separated_tags_string_is_recognised(self):
         """Line 90: tags stored as a comma-separated string are parsed correctly."""
-        from tools.enrich import _needs_enrichment
+        from cyberbrain.mcp.tools.enrich import _needs_enrichment
         content = "---\ntype: decision\nsummary: Test summary.\ntags: fastapi, python\n---\nBody."
         needs, reason = _needs_enrichment(content, ["decision", "insight"])
         assert needs is False
@@ -1258,7 +1321,7 @@ class TestNeedsEnrichmentEdgeCases:
 
     def test_empty_frontmatter_dict_returns_needs_enrichment(self):
         """Line 102: frontmatter block parses to empty dict → treated as no frontmatter."""
-        from tools.enrich import _needs_enrichment
+        from cyberbrain.mcp.tools.enrich import _needs_enrichment
         # Valid YAML but yields an empty dict (just ---)
         content = "---\n---\n\nBody text here."
         needs, reason = _needs_enrichment(content, ["decision", "insight"])
@@ -1266,7 +1329,7 @@ class TestNeedsEnrichmentEdgeCases:
 
     def test_invalid_type_returns_needs_enrichment(self):
         """Line 116: type present but not in valid_types list → flagged."""
-        from tools.enrich import _needs_enrichment
+        from cyberbrain.mcp.tools.enrich import _needs_enrichment
         content = "---\ntype: work-notes\nsummary: Summary.\ntags: [testing]\n---\nBody."
         needs, reason = _needs_enrichment(content, ["decision", "insight"])
         assert needs is True
@@ -1274,7 +1337,7 @@ class TestNeedsEnrichmentEdgeCases:
 
     def test_missing_summary_returns_needs_enrichment(self):
         """Line 118: type is valid, tags present, but no summary → flagged."""
-        from tools.enrich import _needs_enrichment
+        from cyberbrain.mcp.tools.enrich import _needs_enrichment
         content = "---\ntype: decision\ntags: [python]\n---\nBody."
         needs, reason = _needs_enrichment(content, ["decision", "insight"])
         assert needs is True
@@ -1282,7 +1345,7 @@ class TestNeedsEnrichmentEdgeCases:
 
     def test_all_generic_tags_returns_needs_enrichment(self):
         """Line 124: all tags are trivially generic (personal, work, etc.) → flagged."""
-        from tools.enrich import _needs_enrichment
+        from cyberbrain.mcp.tools.enrich import _needs_enrichment
         content = "---\ntype: decision\nsummary: Summary.\ntags: [personal, work]\n---\nBody."
         needs, reason = _needs_enrichment(content, ["decision", "insight"])
         assert needs is True
@@ -1299,23 +1362,23 @@ class TestLoadPrompt:
 
     def test_load_prompt_uses_installed_path_when_it_exists(self, tmp_path):
         """Returns content from installed prompts dir when file exists."""
-        from shared import _load_tool_prompt
+        from cyberbrain.mcp.shared import _load_tool_prompt
         fake_installed = tmp_path / "prompts"
         fake_installed.mkdir()
         prompt_file = fake_installed / "enrich-system.md"
         prompt_file.write_text("# Installed prompt\n")
 
-        with patch("shared._PROMPTS_DIR", fake_installed):
+        with patch("cyberbrain.mcp.shared._PROMPTS_DIR_PRIMARY", fake_installed):
             result = _load_tool_prompt("enrich-system.md")
 
         assert result == "# Installed prompt\n"
 
     def test_load_prompt_raises_tool_error_simple(self, tmp_path):
         """ToolError raised when installed dir doesn't exist and dev path missing."""
-        from shared import _load_tool_prompt
+        from cyberbrain.mcp.shared import _load_tool_prompt
         nonexistent = tmp_path / "no-such-prompts"
 
-        with patch("shared._PROMPTS_DIR", nonexistent):
+        with patch("cyberbrain.mcp.shared._PROMPTS_DIR_PRIMARY", nonexistent):
             with pytest.raises(ToolError, match="not found"):
                 _load_tool_prompt("this-file-does-not-exist-anywhere.md")
 
@@ -1339,11 +1402,11 @@ class TestCbSetupAdditionalCoverage:
 
     def test_run_analyzer_exception_returns_error_dict(self, vault):
         """Lines 17-21: when analyze_vault raises, _run_analyzer returns error dict."""
-        from tools.setup import _run_analyzer
+        from cyberbrain.mcp.tools.setup import _run_analyzer
         # analyze_vault is imported inline inside _run_analyzer; patch the module
         mock_av = MagicMock()
         mock_av.analyze_vault.side_effect = ValueError("No notes found")
-        with patch.dict(sys.modules, {"analyze_vault": mock_av}):
+        with patch.dict(sys.modules, {"cyberbrain.extractors.analyze_vault": mock_av}):
             result = _run_analyzer(vault)
         assert "error" in result
         assert "No notes found" in result["error"]
@@ -1353,9 +1416,9 @@ class TestCbSetupAdditionalCoverage:
         """Lines 17-21 via cb_setup: ValueError from analyze_vault doesn't crash Phase 1."""
         mock_av = MagicMock()
         mock_av.analyze_vault.side_effect = ValueError("No notes found")
-        with patch("shared._resolve_config", return_value=self._config(vault)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
             with patch.dict(sys.modules, {"analyze_vault": mock_av}):
-                with patch("backends.call_model", return_value='{"archetype": "developer", "questions": []}'):
+                with patch("cyberbrain.extractors.backends.call_model", return_value='{"archetype": "developer", "questions": []}'):
                     result = cb_setup(vault_path=str(vault))
         assert isinstance(result, str)
         # Should not raise — error dict is passed through to model
@@ -1364,7 +1427,7 @@ class TestCbSetupAdditionalCoverage:
 
     def test_read_note_samples_returns_content_string(self, vault):
         """Lines 26-50: _read_note_samples reads vault notes and returns joined content."""
-        from tools.setup import _read_note_samples
+        from cyberbrain.mcp.tools.setup import _read_note_samples
         (vault / "Note A.md").write_text("---\ntype: decision\n---\nBody of Note A.")
         (vault / "Note B.md").write_text("---\ntype: insight\n---\nBody of Note B.")
         md_files = list(vault.glob("*.md"))
@@ -1375,7 +1438,7 @@ class TestCbSetupAdditionalCoverage:
 
     def test_read_note_samples_prioritises_hub_nodes(self, vault):
         """Lines 37-39: hub nodes are read first in the selected sample."""
-        from tools.setup import _read_note_samples
+        from cyberbrain.mcp.tools.setup import _read_note_samples
         (vault / "Hub Note.md").write_text("# Hub Note content")
         (vault / "Regular.md").write_text("# Regular content")
         md_files = list(vault.glob("*.md"))
@@ -1395,9 +1458,9 @@ class TestCbSetupAdditionalCoverage:
 
         mock_av = MagicMock()
         mock_av.analyze_vault.side_effect = ValueError("no yaml")
-        with patch("shared._resolve_config", return_value=self._config(vault)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
             with patch.dict(sys.modules, {"analyze_vault": mock_av}):
-                with patch("backends.call_model", side_effect=capture_call):
+                with patch("cyberbrain.extractors.backends.call_model", side_effect=capture_call):
                     cb_setup(vault_path=str(vault))
 
         assert "Sample Note.md" in captured.get("user", "") or "Important content" in captured.get("user", "")
@@ -1413,41 +1476,41 @@ class TestSharedSearchBackend:
 
     def setup_method(self):
         """Reset the cached backend before each test."""
-        import shared as _s
+        import cyberbrain.mcp.shared as _s
         _s._search_backend = None
 
     def teardown_method(self):
         """Reset backend cache after each test."""
-        import shared as _s
+        import cyberbrain.mcp.shared as _s
         _s._search_backend = None
 
     def test_returns_none_when_search_backends_import_fails(self):
         """Lines 39-42: import failure returns None instead of raising."""
-        import shared as _s
+        import cyberbrain.mcp.shared as _s
         _s._search_backend = None
-        with patch.dict(sys.modules, {"search_backends": None}):
+        with patch.dict(sys.modules, {"cyberbrain.extractors.search_backends": None}):
             result = _s._get_search_backend({"vault_path": "/some/path"})
         assert result is None
 
     def test_returns_backend_when_import_succeeds(self):
         """Lines 39-41: successful import returns the backend object."""
-        import shared as _s
+        import cyberbrain.mcp.shared as _s
         _s._search_backend = None
         mock_backend = MagicMock()
         mock_sb_module = MagicMock()
         mock_sb_module.get_search_backend.return_value = mock_backend
-        with patch.dict(sys.modules, {"search_backends": mock_sb_module}):
+        with patch.dict(sys.modules, {"cyberbrain.extractors.search_backends": mock_sb_module}):
             result = _s._get_search_backend({"vault_path": "/some/path"})
         assert result is mock_backend
 
     def test_caches_backend_on_second_call(self):
         """Lines 37-43: second call returns the same cached object without re-importing."""
-        import shared as _s
+        import cyberbrain.mcp.shared as _s
         _s._search_backend = None
         mock_backend = MagicMock()
         mock_sb_module = MagicMock()
         mock_sb_module.get_search_backend.return_value = mock_backend
-        with patch.dict(sys.modules, {"search_backends": mock_sb_module}):
+        with patch.dict(sys.modules, {"cyberbrain.extractors.search_backends": mock_sb_module}):
             r1 = _s._get_search_backend({"vault_path": "/some/path"})
             r2 = _s._get_search_backend({"vault_path": "/some/path"})
         assert r1 is r2
@@ -1465,7 +1528,7 @@ class TestShouldSkipEdgeCases:
 
     def test_skips_note_with_type_journal(self, tmp_path):
         """Line 90: notes with type: journal in frontmatter are skipped."""
-        from tools.enrich import _should_skip
+        from cyberbrain.mcp.tools.enrich import _should_skip
         vault = tmp_path / "vault"
         vault.mkdir()
         path = vault / "Daily.md"
@@ -1474,7 +1537,7 @@ class TestShouldSkipEdgeCases:
 
     def test_skips_note_with_type_moc(self, tmp_path):
         """Line 90: notes with type: moc in frontmatter are skipped."""
-        from tools.enrich import _should_skip
+        from cyberbrain.mcp.tools.enrich import _should_skip
         vault = tmp_path / "vault"
         vault.mkdir()
         path = vault / "Index.md"
@@ -1492,7 +1555,7 @@ class TestNeedsEnrichmentNonListTags:
 
     def test_numeric_tags_treated_as_empty(self):
         """Line 118: tags value that is neither str nor list → treated as empty."""
-        from tools.enrich import _needs_enrichment
+        from cyberbrain.mcp.tools.enrich import _needs_enrichment
         # YAML parses `tags: 42` as int
         content = "---\ntype: decision\nsummary: A summary.\ntags: 42\n---\nBody."
         needs, reason = _needs_enrichment(content, ["decision", "insight"])
@@ -1510,7 +1573,7 @@ class TestApplyFrontmatterUpdateStrTags:
 
     def test_overwrites_comma_string_tags_when_overwrite_true(self, tmp_path):
         """Line 153: existing str tags are split correctly before overwrite check."""
-        from tools.enrich import _apply_frontmatter_update
+        from cyberbrain.mcp.tools.enrich import _apply_frontmatter_update
         path = tmp_path / "str-tags.md"
         # tags stored as comma-separated string
         path.write_text("---\ntype: decision\nsummary: Old.\ntags: old-tag, another\n---\n\nBody.\n")
@@ -1553,7 +1616,7 @@ class TestCbEnrichMoreEdgeCases:
                 raise OSError("permission denied")
             return original_read_text(self, **kwargs)
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
             with patch.object(Path, "read_text", patched_read_text):
                 result = cb_enrich(dry_run=True)
 
@@ -1563,8 +1626,8 @@ class TestCbEnrichMoreEdgeCases:
         """Lines 347-349: model returns valid JSON but not a list → all batch notes errored."""
         write_note(vault, "NonList.md", "# Note\n\nNo frontmatter.")
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("backends.call_model", return_value='{"result": "not a list"}'):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.extractors.backends.call_model", return_value='{"result": "not a list"}'):
                 result = cb_enrich()
 
         assert "Errors:" in result
@@ -1579,7 +1642,7 @@ tags: [python, fastapi]
 ---
 Body.
 """)
-        with patch("shared._resolve_config", return_value=self._config(vault)):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
             result = cb_enrich()
 
         assert "All notes already have required metadata" in result
@@ -1606,7 +1669,7 @@ class TestCbSetupMoreCoverage:
 
     def test_read_note_samples_50_to_200_notes(self, vault):
         """Lines 29-30: 50-199 notes → sample_count = 30."""
-        from tools.setup import _read_note_samples
+        from cyberbrain.mcp.tools.setup import _read_note_samples
         # Create 60 notes
         for i in range(60):
             (vault / f"Note{i:03d}.md").write_text(f"# Note {i}\n\nContent {i}.")
@@ -1618,7 +1681,7 @@ class TestCbSetupMoreCoverage:
 
     def test_read_note_samples_200_to_500_notes(self, vault):
         """Lines 31-32: 200-499 notes → sample_count = 45."""
-        from tools.setup import _read_note_samples
+        from cyberbrain.mcp.tools.setup import _read_note_samples
         # Create 250 notes (but only 30 are read due to token cap)
         for i in range(250):
             (vault / f"Note{i:04d}.md").write_text(f"# Note {i}")
@@ -1629,7 +1692,7 @@ class TestCbSetupMoreCoverage:
 
     def test_read_note_samples_500_plus_notes(self, vault):
         """Lines 33-34: 500+ notes → sample_count = 70."""
-        from tools.setup import _read_note_samples
+        from cyberbrain.mcp.tools.setup import _read_note_samples
         # Create 520 notes
         for i in range(520):
             (vault / f"Note{i:04d}.md").write_text(f"# Note {i}")
@@ -1640,7 +1703,7 @@ class TestCbSetupMoreCoverage:
 
     def test_read_note_samples_skips_unreadable_files(self, vault):
         """Lines 47-48: OSError reading a note file is caught and skipped."""
-        from tools.setup import _read_note_samples
+        from cyberbrain.mcp.tools.setup import _read_note_samples
         (vault / "Good.md").write_text("# Good note\n\nContent.")
         (vault / "Bad.md").write_text("# Bad note")
 
@@ -1663,10 +1726,10 @@ class TestCbSetupMoreCoverage:
         answers = json.dumps({"q1": "Technical notes."})
         claude_md_content = "# Vault Overview\n\nContent.\n"
 
-        with patch("shared._resolve_config", return_value=self._config(vault)):
-            with patch("tools.setup._run_analyzer", return_value={"total_notes": 0, "links": {}}):
-                with patch("tools.setup._read_note_samples", return_value=""):
-                    with patch("backends.call_model", return_value=claude_md_content):
+        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)):
+            with patch("cyberbrain.mcp.tools.setup._run_analyzer", return_value={"total_notes": 0, "links": {}}):
+                with patch("cyberbrain.mcp.tools.setup._read_note_samples", return_value=""):
+                    with patch("cyberbrain.extractors.backends.call_model", return_value=claude_md_content):
                         with patch.object(Path, "write_text", side_effect=OSError("read-only fs")):
                             with pytest.raises(ToolError, match="Failed to write CLAUDE.md"):
                                 cb_setup(vault_path=str(vault), answers=answers, write=True)

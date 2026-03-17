@@ -37,8 +37,8 @@ NOT responsible for: individual tool logic (mcp-tools module), extractor interna
 
 ## Boundary Rules
 
-- `server.py` is run as a script, not a package — uses `sys.path.insert` for flat imports.
-- `shared.py` inserts `~/.claude/cyberbrain/extractors` into `sys.path` at module level — hard dependency on installed extractor.
+- `server.py` is run as `python -m cyberbrain.mcp.server` via the package entry point.
+- `shared.py` imports from `cyberbrain.extractors.*` — requires the package to be installed or `src/` on `sys.path`.
 - `_get_search_backend()` is a module-level singleton with no invalidation mechanism.
 - `_move_to_trash()` uses `Path.rename()` — same-filesystem move only (vault and trash must be on same volume).
 - Trash folder defaults to `.trash` (dotfolder, invisible to Obsidian by default).
@@ -46,7 +46,6 @@ NOT responsible for: individual tool logic (mcp-tools module), extractor interna
 
 ## Internal Design Notes
 
-- Files: `mcp/server.py` (41 lines), `mcp/shared.py` (127 lines), `mcp/resources.py` (137 lines)
+- Files: `src/cyberbrain/mcp/server.py`, `src/cyberbrain/mcp/shared.py`, `src/cyberbrain/mcp/resources.py`
 - Registration pattern: each tool/resource module exposes `register(mcp: FastMCP) -> None`
-- Import strategy: `sys.path.insert(0, str(_MCP_DIR))` makes `shared`, `tools.*`, `resources` importable as flat modules
-- No naming conflict with the `mcp` pip package because the `mcp/` directory has no `mcp/` subdirectory
+- Modules are imported as `cyberbrain.mcp.shared`, `cyberbrain.mcp.tools.*`, `cyberbrain.mcp.resources` via the standard package layout

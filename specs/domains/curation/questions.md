@@ -18,5 +18,6 @@
 - **Question**: Three files (`shared.py`, `analyze_vault.py`, `search_backends.py`) still contain their own frontmatter parsing implementations despite `frontmatter.py` being canonical. Should all be migrated?
 - **Source**: specs/plan/architecture.md (Design Tension T4)
 - **Impact**: Parsing behavior can diverge silently between callers. Bugs fixed in `frontmatter.py` may not propagate to the other implementations.
-- **Status**: open
-- **Reexamination trigger**: Any frontmatter parsing bug or when touching any of the three files with duplicate implementations.
+- **Status**: resolved
+- **Resolution**: WI-036 fixed `search_backends.py` to use `from cyberbrain.extractors.frontmatter import ...` directly, removing the always-failing try/except fallback. `shared.py` and `analyze_vault.py` were already delegating to `frontmatter.py` (confirmed in spec-adherence D4 evidence). All three files now use the canonical module.
+- **Resolved in**: cycle 002

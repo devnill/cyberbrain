@@ -2,15 +2,15 @@
 test_extractor_helpers.py — unit tests for extractor helper modules
 
 Covers:
-- extractors/config.py: load_global_config, find_project_config, resolve_config, load_prompt
-- extractors/frontmatter.py: parse_frontmatter, read_frontmatter, read_frontmatter_tags,
+- src/cyberbrain/extractors/config.py: load_global_config, find_project_config, resolve_config, load_prompt
+- src/cyberbrain/extractors/frontmatter.py: parse_frontmatter, read_frontmatter, read_frontmatter_tags,
                              normalise_list, derive_id
-- extractors/vault.py: parse_valid_types_from_claude_md, read_vault_claude_md, get_valid_types,
+- src/cyberbrain/extractors/vault.py: parse_valid_types_from_claude_md, read_vault_claude_md, get_valid_types,
                        make_filename, _is_within_vault, resolve_output_dir, build_vault_titles_set,
                        resolve_relations, search_vault, inject_provenance, _wm_frontmatter_fields,
                        write_beat
-- extractors/extractor.py: extract_beats
-- extractors/transcript.py: parse_jsonl_transcript, _extract_text_blocks
+- src/cyberbrain/extractors/extractor.py: extract_beats
+- src/cyberbrain/extractors/transcript.py: parse_jsonl_transcript, _extract_text_blocks
 """
 
 import json

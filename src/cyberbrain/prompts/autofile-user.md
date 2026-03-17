@@ -11,3 +11,7 @@
 </vault_conventions>
 
 Vault folder structure: {vault_folders}
+
+<vault_folder_examples>
+{folder_examples}
+</vault_folder_examples>

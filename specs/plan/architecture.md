@@ -79,24 +79,24 @@
 | Component | Files | Responsibility |
 |-----------|-------|----------------|
 | **Hooks** | `hooks/pre-compact-extract.sh`, `hooks/session-end-extract.sh`, `hooks/hooks.json` | Lifecycle event handlers that trigger automatic extraction |
-| **Extractor entry** | `extractors/extract_beats.py` | CLI entry point; re-exports all extractor submodules; orchestrates extraction pipeline |
-| **LLM extraction** | `extractors/extractor.py` | Calls LLM backend with transcript + prompts; parses JSON response |
-| **Backends** | `extractors/backends.py` | Three LLM backend implementations (claude-code, bedrock, ollama) |
-| **Transcript parsing** | `extractors/transcript.py` | Parses JSONL transcripts into plain-text conversation format |
-| **Vault I/O** | `extractors/vault.py` | Beat writing, output routing, relation resolution, filename generation, type validation |
-| **Autofile** | `extractors/autofile.py` | LLM-driven filing decisions (create vs extend); collision handling |
-| **Frontmatter** | `extractors/frontmatter.py` | Canonical YAML frontmatter parsing and normalisation |
-| **Config** | `extractors/config.py` | Two-level config loading (global + project); prompt file loading |
-| **Run log** | `extractors/run_log.py` | Deduplication log, structured runs log, daily journal writing |
-| **Vault analyzer** | `extractors/analyze_vault.py` | Vault structure analysis for cb_setup (directories, frontmatter, tags, wikilinks) |
-| **Search backends** | `extractors/search_backends.py` | Pluggable search: GrepBackend, FTS5Backend, HybridBackend; RRF fusion |
-| **Search index** | `extractors/search_index.py` | Coordination layer: incremental updates, full rebuild, backend lifecycle |
-| **Quality gate** | `extractors/quality_gate.py` | LLM-as-judge quality gate for curation tool output validation |
-| **MCP server** | `mcp/server.py` | FastMCP entry point; imports and registers all tool/resource modules |
-| **MCP shared** | `mcp/shared.py` | Bridge between MCP tools and extractor layer; config helpers; trash/index helpers |
-| **MCP resources** | `mcp/resources.py` | `cyberbrain://guide` resource; `orient` and `recall` prompts |
-| **MCP tools** | `mcp/tools/{extract,file,recall,manage,setup,enrich,restructure,review,reindex}.py` | 11 MCP tools |
-| **Prompts** | `prompts/*.md` (23 files) | LLM prompt templates for extraction, autofile, enrichment, restructure, review, synthesis, quality gate, evaluation |
+| **Extractor entry** | `src/cyberbrain/extractors/extract_beats.py` | CLI entry point; re-exports all extractor submodules; orchestrates extraction pipeline |
+| **LLM extraction** | `src/cyberbrain/extractors/extractor.py` | Calls LLM backend with transcript + prompts; parses JSON response |
+| **Backends** | `src/cyberbrain/extractors/backends.py` | Three LLM backend implementations (claude-code, bedrock, ollama) |
+| **Transcript parsing** | `src/cyberbrain/extractors/transcript.py` | Parses JSONL transcripts into plain-text conversation format |
+| **Vault I/O** | `src/cyberbrain/extractors/vault.py` | Beat writing, output routing, relation resolution, filename generation, type validation |
+| **Autofile** | `src/cyberbrain/extractors/autofile.py` | LLM-driven filing decisions (create vs extend); collision handling |
+| **Frontmatter** | `src/cyberbrain/extractors/frontmatter.py` | Canonical YAML frontmatter parsing and normalisation |
+| **Config** | `src/cyberbrain/extractors/config.py` | Two-level config loading (global + project); prompt file loading |
+| **Run log** | `src/cyberbrain/extractors/run_log.py` | Deduplication log, structured runs log, daily journal writing |
+| **Vault analyzer** | `src/cyberbrain/extractors/analyze_vault.py` | Vault structure analysis for cb_setup (directories, frontmatter, tags, wikilinks) |
+| **Search backends** | `src/cyberbrain/extractors/search_backends.py` | Pluggable search: GrepBackend, FTS5Backend, HybridBackend; RRF fusion |
+| **Search index** | `src/cyberbrain/extractors/search_index.py` | Coordination layer: incremental updates, full rebuild, backend lifecycle |
+| **Quality gate** | `src/cyberbrain/extractors/quality_gate.py` | LLM-as-judge quality gate for curation tool output validation |
+| **MCP server** | `src/cyberbrain/mcp/server.py` | FastMCP entry point; imports and registers all tool/resource modules |
+| **MCP shared** | `src/cyberbrain/mcp/shared.py` | Bridge between MCP tools and extractor layer; config helpers; trash/index helpers |
+| **MCP resources** | `src/cyberbrain/mcp/resources.py` | `cyberbrain://guide` resource; `orient` and `recall` prompts |
+| **MCP tools** | `src/cyberbrain/mcp/tools/{extract,file,recall,manage,setup,enrich,restructure,review,reindex}.py` | 11 MCP tools |
+| **Prompts** | `src/cyberbrain/prompts/*.md` (23 files) | LLM prompt templates for extraction, autofile, enrichment, restructure, review, synthesis, quality gate, evaluation |
 | **Import script** | `scripts/import.py` | Batch import of Claude Desktop and ChatGPT data exports |
 
 ---
@@ -109,7 +109,7 @@
 Claude Code session
   → PreCompact event fires
   → hooks/pre-compact-extract.sh reads hook context JSON from stdin
-  → Invokes extractors/extract_beats.py with --transcript, --session-id, --trigger, --cwd
+  → Invokes src/cyberbrain/extractors/extract_beats.py with --transcript, --session-id, --trigger, --cwd
   → config.py loads global + project config
   → transcript.py parses JSONL to plain text
   → extractor.py reads vault CLAUDE.md, loads prompts, calls LLM via backends.py
@@ -130,7 +130,7 @@ SessionEnd hook follows the same path but runs detached (nohup) and checks dedup
 
 ```
 User invokes cb_file or cb_extract via Claude Desktop/Code
-  → MCP tool in mcp/tools/{file,extract}.py
+  → MCP tool in src/cyberbrain/mcp/tools/{file,extract}.py
   → shared.py bridges to extractor layer
   → Same pipeline as automatic capture
 ```
@@ -139,7 +139,7 @@ User invokes cb_file or cb_extract via Claude Desktop/Code
 
 ```
 User invokes cb_recall via MCP
-  → mcp/tools/recall.py
+  → src/cyberbrain/mcp/tools/recall.py
   → shared.py _get_search_backend() returns cached backend (lazy init)
   → Backend.search() executes:
       ├── grep: subprocess grep per term, rank by hit count + mtime
@@ -253,7 +253,7 @@ Claude Code / Claude Desktop (Process A — user session)
 
 ### Prompt Loading
 
-Prompts live in `prompts/` (23 markdown files). Loaded by `config.load_prompt(filename)` in the extractor layer, or `shared._load_tool_prompt(filename)` in the MCP layer. The MCP loader checks `~/.claude/cyberbrain/prompts/` first, then falls back to dev-mode repo path.
+Prompts live in `src/cyberbrain/prompts/` (23 markdown files). Loaded by `config.load_prompt(filename)` in the extractor layer, or `shared._load_tool_prompt(filename)` in the MCP layer. The MCP loader checks `~/.claude/cyberbrain/prompts/` first, then falls back to dev-mode repo path.
 
 ### Template Variables
 
@@ -453,7 +453,7 @@ Resolved by WI-013. `get_model_for_tool(config, tool)` provides per-tool model s
 
 ### T5: Hook vs MCP Extraction Path Divergence
 
-The PreCompact hook invokes `extract_beats.py` as a CLI script. The MCP `cb_extract` tool imports `_extract_beats` as a function. Both paths converge at the extractor layer, but the hook path goes through the full `main()` function (including dedup check, runs log, journal writing) while the MCP path reimplements parts of that orchestration in `mcp/tools/extract.py`.
+The PreCompact hook invokes `src/cyberbrain/extractors/extract_beats.py` as a CLI script. The MCP `cb_extract` tool imports `_extract_beats` as a function. Both paths converge at the extractor layer, but the hook path goes through the full `main()` function (including dedup check, runs log, journal writing) while the MCP path reimplements parts of that orchestration in `src/cyberbrain/mcp/tools/extract.py`.
 
 ### T6: Search Backend Initialization
 
@@ -491,9 +491,14 @@ The `.claude-plugin/plugin.json` manifest enables installation via Claude Code's
 - `.mcp.json` — MCP server launch config using `uv run --directory ${CLAUDE_PLUGIN_ROOT}`
 - `pyproject.toml` — Python package metadata for uv dependency resolution
 
-**Path resolution in plugin mode:**
-- `mcp/shared.py` resolves prompts and extractors relative to `__file__` (plugin cache) with legacy `~/.claude/cyberbrain/` fallback
-- Hook scripts check `${CLAUDE_PLUGIN_ROOT}` first, falling back to `~/.claude/cyberbrain/`
+**How plugin mode works:**
+1. Hooks fire via `${CLAUDE_PLUGIN_ROOT}/hooks/pre-compact-extract.sh` and `${CLAUDE_PLUGIN_ROOT}/hooks/session-end-extract.sh`
+2. MCP server launches via `uv run --directory ${CLAUDE_PLUGIN_ROOT} python -m cyberbrain.mcp.server`
+3. Extractors and prompts are resolved relative to `${CLAUDE_PLUGIN_ROOT}`
+
+**Path resolution precedence in `src/cyberbrain/mcp/shared.py`:**
+- Primary: `__file__`-relative (works in plugin cache)
+- Fallback: `~/.claude/cyberbrain/` (legacy installed location)
 - User config remains at `~/.claude/cyberbrain/config.json` — plugin system does not touch it
 
 **What the plugin system handles:**
@@ -520,7 +525,7 @@ The installer copies files to `~/.claude/cyberbrain/` and registers hooks in `~/
 
 ## 100% Coverage Check
 
-1. **Every module's scope is accounted for.** All code files map to a module spec. The 23 prompt files are covered by the prompts module. Build/install scripts (`build.sh`, `install.sh`, `uninstall.sh`) are distribution artifacts, not runtime modules — they are noted but not given module specs.
+1. **Every module's scope is accounted for.** All code files map to a module spec. The 23 prompt files are covered by the prompts module. Install scripts (`install.sh`, `uninstall.sh`) are distribution artifacts, not runtime modules — they are noted but not given module specs.
 
 2. **No two modules claim the same responsibility.** Frontmatter parsing has residual duplication (T4) but a single canonical source (`frontmatter.py` in the extraction module).
 
@@ -529,37 +534,3 @@ The installer copies files to `~/.claude/cyberbrain/` and registers hooks in `~/
 4. **Cross-module dependencies have matching Provides/Requires pairs.** All interfaces are documented in the Interface Contracts section above. The MCP shared bridge (shared.py) is the primary coupling point between the MCP layer and the extractor layer.
 
 **Result: Coverage check passes.** Known gaps are flagged as design tensions (T1-T8) above.
-
----
-
-## Distribution
-
-Cyberbrain supports two distribution paths:
-
-### Plugin Distribution (Claude Code)
-
-The Claude Code plugin system handles hook registration and MCP server launch automatically:
-
-- `.claude-plugin/plugin.json` — plugin manifest with name, version, hooks, and MCP server reference
-- `hooks/hooks.json` — hook definitions using `${CLAUDE_PLUGIN_ROOT}` for script paths
-- `.mcp.json` — MCP server launch config using `uv run` for dependency management
-- `pyproject.toml` — Python package metadata for uv-based dependency resolution
-
-When installed as a plugin:
-1. Hooks fire via `${CLAUDE_PLUGIN_ROOT}/hooks/pre-compact-extract.sh` and `${CLAUDE_PLUGIN_ROOT}/hooks/session-end-extract.sh`
-2. MCP server launches via `uv run --directory ${CLAUDE_PLUGIN_ROOT} python -m mcp.server`
-3. Extractors and prompts are resolved relative to `${CLAUDE_PLUGIN_ROOT}`
-
-Path resolution precedence in `mcp/shared.py`:
-- Primary: `__file__`-relative (works in plugin cache)
-- Fallback: `~/.claude/cyberbrain/` (legacy installed location)
-
-### Manual Distribution (Claude Desktop)
-
-`install.sh` handles:
-- Config initialization (vault path prompt)
-- File migration for existing installs
-- Python dependency installation via pip
-- Claude Desktop MCP registration
-
-Claude Desktop users must run `install.sh` manually; the plugin system is Claude Code-only.

@@ -1,5 +1,5 @@
 """
-test_manage_tool.py — unit tests for mcp/tools/manage.py
+test_manage_tool.py — unit tests for src/cyberbrain/mcp/tools/manage.py
 
 Covers:
 - _read_prefs_section: all branches
@@ -451,6 +451,90 @@ class TestCbConfigureProactiveRecall:
 
 
 # ===========================================================================
+# cb_configure — uncertain_filing_behavior and uncertain_filing_threshold
+# ===========================================================================
+
+class TestCbConfigureUncertainFiling:
+    def _setup_cfg(self, tmp_path, monkeypatch):
+        """Helper: set up a home dir with an empty config and return the cfg_file path."""
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+        cfg_dir = home / ".claude" / "cyberbrain"
+        cfg_dir.mkdir(parents=True)
+        cfg_file = cfg_dir / "config.json"
+        cfg_file.write_text("{}", encoding="utf-8")
+        return cfg_file
+
+    def test_set_behavior_inbox(self, tmp_path, monkeypatch):
+        cfg_file = self._setup_cfg(tmp_path, monkeypatch)
+        result = _cb_configure()(uncertain_filing_behavior="inbox")
+        assert "uncertain_filing_behavior" in result
+        saved = json.loads(cfg_file.read_text())
+        assert saved["uncertain_filing_behavior"] == "inbox"
+
+    def test_set_behavior_ask(self, tmp_path, monkeypatch):
+        cfg_file = self._setup_cfg(tmp_path, monkeypatch)
+        result = _cb_configure()(uncertain_filing_behavior="ask")
+        assert "uncertain_filing_behavior" in result
+        saved = json.loads(cfg_file.read_text())
+        assert saved["uncertain_filing_behavior"] == "ask"
+
+    def test_invalid_behavior_raises(self):
+        with pytest.raises(ToolError, match="must be 'inbox' or 'ask'"):
+            _cb_configure()(uncertain_filing_behavior="discard")
+
+    def test_set_threshold_valid(self, tmp_path, monkeypatch):
+        cfg_file = self._setup_cfg(tmp_path, monkeypatch)
+        result = _cb_configure()(uncertain_filing_threshold=0.7)
+        assert "uncertain_filing_threshold" in result
+        saved = json.loads(cfg_file.read_text())
+        assert saved["uncertain_filing_threshold"] == 0.7
+
+    def test_set_threshold_zero(self, tmp_path, monkeypatch):
+        cfg_file = self._setup_cfg(tmp_path, monkeypatch)
+        result = _cb_configure()(uncertain_filing_threshold=0.0)
+        assert "uncertain_filing_threshold" in result
+        saved = json.loads(cfg_file.read_text())
+        assert saved["uncertain_filing_threshold"] == 0.0
+
+    def test_set_threshold_one(self, tmp_path, monkeypatch):
+        cfg_file = self._setup_cfg(tmp_path, monkeypatch)
+        result = _cb_configure()(uncertain_filing_threshold=1.0)
+        saved = json.loads(cfg_file.read_text())
+        assert saved["uncertain_filing_threshold"] == 1.0
+
+    def test_invalid_threshold_out_of_range_raises(self):
+        with pytest.raises(ToolError, match="between 0.0 and 1.0"):
+            _cb_configure()(uncertain_filing_threshold=1.5)
+
+    def test_invalid_threshold_negative_raises(self):
+        with pytest.raises(ToolError, match="between 0.0 and 1.0"):
+            _cb_configure()(uncertain_filing_threshold=-0.1)
+
+    def test_no_args_shows_uncertain_filing_defaults(self, tmp_path):
+        cfg = {"vault_path": str(tmp_path)}
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            with patch.object(manage_mod, "_read_index_stats", return_value={}):
+                result = _cb_configure()()
+        assert "Uncertain filing" in result
+        assert "behavior=inbox" in result
+        assert "threshold=0.5" in result
+
+    def test_no_args_shows_custom_uncertain_filing_settings(self, tmp_path):
+        cfg = {
+            "vault_path": str(tmp_path),
+            "uncertain_filing_behavior": "ask",
+            "uncertain_filing_threshold": 0.7,
+        }
+        with patch.object(manage_mod, "_load_config", return_value=cfg):
+            with patch.object(manage_mod, "_read_index_stats", return_value={}):
+                result = _cb_configure()()
+        assert "behavior=ask" in result
+        assert "threshold=0.7" in result
+
+
+# ===========================================================================
 # cb_configure — vault_path write path (background index rebuild)
 # ===========================================================================
 
@@ -468,7 +552,7 @@ class TestCbConfigureVaultPath:
 
         with patch.object(manage_mod, "_load_config", return_value={}):
             # Patch search_backends to avoid import error in background thread
-            with patch.dict(sys.modules, {"search_backends": MagicMock()}):
+            with patch.dict(sys.modules, {"cyberbrain.extractors.search_backends": MagicMock()}):
                 result = _cb_configure()(vault_path=str(vault))
 
         assert vault.exists()
@@ -502,7 +586,7 @@ class TestCbConfigureVaultPath:
 
         vault = home / "vault2"
         with patch.object(manage_mod, "_load_config", return_value={}):
-            with patch.dict(sys.modules, {"search_backends": mock_sb}):
+            with patch.dict(sys.modules, {"cyberbrain.extractors.search_backends": mock_sb}):
                 _cb_configure()(vault_path=str(vault))
 
         # Give the background thread a moment to run

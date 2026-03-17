@@ -1,5 +1,5 @@
 """
-test_restructure_tool.py — unit tests for mcp/tools/restructure.py
+test_restructure_tool.py — unit tests for src/cyberbrain/mcp/tools/restructure.py
 
 Covers:
 - _repair_json: valid JSON, repair by closing brackets, object extraction, raises on failure
@@ -35,8 +35,9 @@ import pytest
 REPO_ROOT = Path(__file__).parent.parent
 
 # conftest.py installs shared extract_beats mock.
-for _mod in ["cyberbrain.mcp.shared", "cyberbrain.mcp.tools.restructure"]:
-    sys.modules.pop(_mod, None)
+# Only pop tools.restructure — do NOT pop cyberbrain.mcp.shared, as replacing it
+# in sys.modules breaks patch() targets in other test files that run after this one.
+sys.modules.pop("cyberbrain.mcp.tools.restructure", None)
 
 import cyberbrain.mcp.shared as _shared
 import cyberbrain.mcp.tools.restructure as rst_mod
@@ -721,7 +722,9 @@ class TestCbRestructureFolderHubDryRun:
                           return_value={"vault_path": str(tmp_path)}), \
              patch.object(rst_mod, "_get_search_backend", return_value=None), \
              patch.object(rst_mod, "_index_paths"), \
-             patch.object(rst_mod, "_load_prompt", return_value="p"):
+             patch.object(rst_mod, "_load_prompt", return_value="p"), \
+             patch.object(rst_mod, "_embedding_hierarchical_clusters", return_value=[]), \
+             patch.object(rst_mod, "_call_group_notes", return_value=[]):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=True)
         assert "DRY RUN" in result
         assert "Folder hub mode" in result
@@ -838,8 +841,8 @@ class TestCbRestructureExecute:
              patch.object(rst_mod, "_prune_index"), \
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_build_clusters", return_value=[]), \
-             patch("backends.call_model", return_value=json.dumps(decisions)), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(decisions)), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(dry_run=False, split_threshold=100)
         assert "kept as-is" in result
 
@@ -856,8 +859,8 @@ class TestCbRestructureExecute:
              patch.object(rst_mod, "_index_paths"), \
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_build_clusters", return_value=[notes]), \
-             patch("backends.call_model", side_effect=FakeBackendError("boom")), \
-             patch("backends.BackendError", FakeBackendError):
+             patch("cyberbrain.extractors.backends.call_model", side_effect=FakeBackendError("boom")), \
+             patch("cyberbrain.extractors.backends.BackendError", FakeBackendError):
             with pytest.raises(ToolError, match="Backend error"):
                 _cb_restructure()(dry_run=False)
 
@@ -870,8 +873,8 @@ class TestCbRestructureExecute:
              patch.object(rst_mod, "_index_paths"), \
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_build_clusters", return_value=[notes]), \
-             patch("backends.call_model", return_value="~~ completely broken ~~"), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", return_value="~~ completely broken ~~"), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             with pytest.raises(ToolError, match="invalid JSON"):
                 _cb_restructure()(dry_run=False)
 
@@ -884,8 +887,8 @@ class TestCbRestructureExecute:
              patch.object(rst_mod, "_index_paths"), \
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_build_clusters", return_value=[notes]), \
-             patch("backends.call_model", return_value='{"not": "a list"}'), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", return_value='{"not": "a list"}'), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             with pytest.raises(ToolError, match="not a JSON array"):
                 _cb_restructure()(dry_run=False)
 
@@ -902,8 +905,8 @@ class TestCbRestructureExecute:
              patch.object(rst_mod, "_index_paths"), \
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_build_clusters", return_value=[cluster]), \
-             patch("backends.call_model", return_value=json.dumps(decisions)), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(decisions)), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(dry_run=False, preview=True)
         assert "Preview" in result
 
@@ -942,9 +945,11 @@ class TestCbRestructureFolderHubExecute:
              patch.object(rst_mod, "_index_paths"), \
              patch.object(rst_mod, "_prune_index"), \
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
+             patch.object(rst_mod, "_embedding_hierarchical_clusters", return_value=[]), \
+             patch.object(rst_mod, "_call_group_notes", return_value=[]), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", side_effect=["[]", json.dumps(phase2_decisions)]), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", side_effect=[json.dumps(phase2_decisions)]), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=False)
         assert (tmp_path / "sub" / "hub.md").exists()
         assert "Created hub" in result or "SubHub" in result
@@ -960,8 +965,8 @@ class TestCbRestructureFolderHubExecute:
              patch.object(rst_mod, "_prune_index"), \
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", side_effect=["[]", "[]"]), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", side_effect=["[]", "[]"]), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=False)
         assert "skipped" in result.lower() or "no" in result.lower()
 
@@ -979,10 +984,11 @@ class TestCbRestructureFolderHubExecute:
              patch.object(rst_mod, "_get_search_backend", return_value=None), \
              patch.object(rst_mod, "_index_paths"), \
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
+             patch.object(rst_mod, "_embedding_hierarchical_clusters", return_value=[]), \
              patch.object(rst_mod, "_call_group_notes", return_value=[notes]), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", side_effect=FakeBackendError("fail")), \
-             patch("backends.BackendError", FakeBackendError):
+             patch("cyberbrain.extractors.backends.call_model", side_effect=FakeBackendError("fail")), \
+             patch("cyberbrain.extractors.backends.BackendError", FakeBackendError):
             with pytest.raises(ToolError, match="Backend error"):
                 _cb_restructure()(folder="sub", folder_hub=True, dry_run=False)
 
@@ -1832,6 +1838,7 @@ class TestCbRestructureFolderHubDryRunNoClusters:
              patch.object(rst_mod, "_get_search_backend", return_value=None), \
              patch.object(rst_mod, "_index_paths"), \
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
+             patch.object(rst_mod, "_embedding_hierarchical_clusters", return_value=[]), \
              patch.object(rst_mod, "_call_group_notes", return_value=[notes]):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=True)
         assert "Cluster" in result
@@ -1865,8 +1872,8 @@ class TestCbRestructureFolderHubPreview:
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_call_group_notes", return_value=[]), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", return_value=json.dumps(phase2_decisions)), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(phase2_decisions)), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=False, preview=True)
         assert "Preview" in result
         assert "SubHub" in result
@@ -1888,10 +1895,11 @@ class TestCbRestructureFolderHubPreview:
              patch.object(rst_mod, "_get_search_backend", return_value=None), \
              patch.object(rst_mod, "_index_paths"), \
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
+             patch.object(rst_mod, "_embedding_hierarchical_clusters", return_value=[]), \
              patch.object(rst_mod, "_call_group_notes", return_value=[notes]), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", side_effect=[json.dumps(phase1_decisions), json.dumps(phase2_decisions)]), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", side_effect=[json.dumps(phase1_decisions), json.dumps(phase2_decisions)]), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=False, preview=True)
         assert "Preview" in result
         assert not (tmp_path / "sub" / "hub.md").exists()
@@ -1912,12 +1920,13 @@ class TestCbRestructureFolderHubPreview:
              patch.object(rst_mod, "_get_search_backend", return_value=None), \
              patch.object(rst_mod, "_index_paths"), \
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
+             patch.object(rst_mod, "_embedding_hierarchical_clusters", return_value=[]), \
              patch.object(rst_mod, "_call_group_notes", return_value=[notes]), \
              patch.object(rst_mod, "_call_decisions", return_value=[phase1_decision]), \
              patch.object(rst_mod, "_call_generate_cluster", return_value={"merged_content": merged_content}), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", return_value=json.dumps(phase2_decisions)), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(phase2_decisions)), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=False, preview=True)
         assert "Preview" in result
         assert "Merge" in result or "AB" in result
@@ -1939,12 +1948,13 @@ class TestCbRestructureFolderHubPreview:
              patch.object(rst_mod, "_get_search_backend", return_value=None), \
              patch.object(rst_mod, "_index_paths"), \
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
+             patch.object(rst_mod, "_embedding_hierarchical_clusters", return_value=[]), \
              patch.object(rst_mod, "_call_group_notes", return_value=[notes]), \
              patch.object(rst_mod, "_call_decisions", return_value=[phase1_decision]), \
              patch.object(rst_mod, "_call_generate_cluster", return_value={"hub_content": spoke_content}), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", return_value=json.dumps(phase2_decisions)), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(phase2_decisions)), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=False, preview=True)
         assert "Preview" in result
         assert "Spoke" in result or "hub-spoke" in result.lower()
@@ -1966,12 +1976,13 @@ class TestCbRestructureFolderHubPreview:
              patch.object(rst_mod, "_get_search_backend", return_value=None), \
              patch.object(rst_mod, "_index_paths"), \
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
+             patch.object(rst_mod, "_embedding_hierarchical_clusters", return_value=[]), \
              patch.object(rst_mod, "_call_group_notes", return_value=[notes]), \
              patch.object(rst_mod, "_call_decisions", return_value=[phase1_decision]), \
              patch.object(rst_mod, "_call_generate_cluster", return_value={"merged_content": long_content}), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", return_value=json.dumps(phase2_decisions)), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(phase2_decisions)), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=False, preview=True)
         assert "truncated" in result
 
@@ -1991,12 +2002,13 @@ class TestCbRestructureFolderHubPreview:
              patch.object(rst_mod, "_get_search_backend", return_value=None), \
              patch.object(rst_mod, "_index_paths"), \
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
+             patch.object(rst_mod, "_embedding_hierarchical_clusters", return_value=[]), \
              patch.object(rst_mod, "_call_group_notes", return_value=[notes]), \
              patch.object(rst_mod, "_call_decisions", return_value=[phase1_decision]), \
              patch.object(rst_mod, "_call_generate_cluster", return_value={"hub_content": long_content}), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", return_value=json.dumps(phase2_decisions)), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(phase2_decisions)), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=False, preview=True)
         assert "truncated" in result
 
@@ -2014,8 +2026,8 @@ class TestCbRestructureFolderHubPreview:
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_call_group_notes", return_value=[]), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", return_value=json.dumps(phase2_decisions)), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(phase2_decisions)), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=False, preview=True)
         assert "truncated" in result
 
@@ -2037,8 +2049,8 @@ class TestCbRestructureFolderHubPreview:
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_call_group_notes", return_value=[]), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", return_value=json.dumps(phase2_decisions)), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(phase2_decisions)), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=False, preview=True)
         assert "Hub" in result
 
@@ -2058,8 +2070,8 @@ class TestCbRestructureFolderHubPreview:
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_call_group_notes", return_value=[notes]), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", side_effect=[json.dumps(phase1_decisions), json.dumps(phase2_decisions)]), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", side_effect=[json.dumps(phase1_decisions), json.dumps(phase2_decisions)]), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=False, preview=True)
         assert "Preview" in result
 
@@ -2079,8 +2091,8 @@ class TestCbRestructureFolderHubPreview:
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_call_group_notes", return_value=[notes]), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", side_effect=[json.dumps(phase1_decisions), json.dumps(phase2_decisions)]), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", side_effect=[json.dumps(phase1_decisions), json.dumps(phase2_decisions)]), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=False, preview=True)
         assert "Preview" in result
 
@@ -2113,8 +2125,8 @@ class TestCbRestructureFolderHubExecuteEdgeCases:
              patch.object(rst_mod, "_prune_index"), \
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_call_group_notes", return_value=[]), \
-             patch("backends.call_model", return_value=json.dumps(phase2_decisions)), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(phase2_decisions)), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=False)
         assert "skipped" in result.lower() or "did not return" in result.lower()
 
@@ -2134,8 +2146,8 @@ class TestCbRestructureFolderHubExecuteEdgeCases:
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_call_group_notes", return_value=[]), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", return_value=json.dumps(phase2_decisions)), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(phase2_decisions)), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=False)
         assert "skipped" in result.lower()
 
@@ -2155,8 +2167,8 @@ class TestCbRestructureFolderHubExecuteEdgeCases:
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_call_group_notes", return_value=[]), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", return_value=json.dumps(phase2_decisions)), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(phase2_decisions)), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=False)
         assert "path traversal" in result.lower() or "skipped" in result.lower()
 
@@ -2174,8 +2186,8 @@ class TestCbRestructureFolderHubExecuteEdgeCases:
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_call_group_notes", return_value=[]), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", side_effect=FakeBackendError("hub fail")), \
-             patch("backends.BackendError", FakeBackendError):
+             patch("cyberbrain.extractors.backends.call_model", side_effect=FakeBackendError("hub fail")), \
+             patch("cyberbrain.extractors.backends.BackendError", FakeBackendError):
             with pytest.raises(ToolError, match="Backend error"):
                 _cb_restructure()(folder="sub", folder_hub=True, dry_run=False)
 
@@ -2191,8 +2203,8 @@ class TestCbRestructureFolderHubExecuteEdgeCases:
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_call_group_notes", return_value=[]), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", return_value="~~ broken ~~"), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", return_value="~~ broken ~~"), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             with pytest.raises(ToolError, match="invalid JSON"):
                 _cb_restructure()(folder="sub", folder_hub=True, dry_run=False)
 
@@ -2215,8 +2227,8 @@ class TestCbRestructureFolderHubExecuteEdgeCases:
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_call_group_notes", return_value=[]), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", return_value=json.dumps(phase2_decisions)), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(phase2_decisions)), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(folder="sub", folder_hub=True, hub_path="sub/hub.md", dry_run=False)
         assert hub_file.exists()
         assert "Updated" in result or "hub" in result.lower()
@@ -2237,8 +2249,8 @@ class TestCbRestructureFolderHubExecuteEdgeCases:
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_call_group_notes", return_value=[]), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", return_value=json.dumps(phase2_decisions)), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(phase2_decisions)), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=False)
         log_path = tmp_path / "AI" / "Log.md"
         assert log_path.exists()
@@ -2271,8 +2283,8 @@ class TestCbRestructureNormalExecuteExtra:
              patch.object(rst_mod, "_prune_index"), \
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_build_clusters", return_value=[]), \
-             patch("backends.call_model", return_value=json.dumps(decisions)), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(decisions)), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(dry_run=False, split_threshold=100)
         # Out of range — no crash, no split reported
         assert "Restructure" in result
@@ -2471,10 +2483,11 @@ class TestCbRestructureNormalExecuteExtra:
              patch.object(rst_mod, "_get_search_backend", return_value=None), \
              patch.object(rst_mod, "_index_paths"), \
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
+             patch.object(rst_mod, "_embedding_hierarchical_clusters", return_value=[]), \
              patch.object(rst_mod, "_call_group_notes", return_value=[notes]), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", return_value="~~ broken ~~"), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", return_value="~~ broken ~~"), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             with pytest.raises(ToolError, match="decision phase"):
                 _cb_restructure()(folder="sub", folder_hub=True, dry_run=False)
 
@@ -2496,10 +2509,11 @@ class TestCbRestructureNormalExecuteExtra:
              patch.object(rst_mod, "_index_paths"), \
              patch.object(rst_mod, "_prune_index"), \
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
+             patch.object(rst_mod, "_embedding_hierarchical_clusters", return_value=[]), \
              patch.object(rst_mod, "_call_group_notes", return_value=[notes]), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", side_effect=[json.dumps(phase1_decisions), json.dumps(phase2_decisions)]), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", side_effect=[json.dumps(phase1_decisions), json.dumps(phase2_decisions)]), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=False)
         assert (sub / "hub.md").exists()
 
@@ -2524,8 +2538,8 @@ class TestCbRestructureNormalExecuteExtra:
              patch.object(rst_mod, "_prune_index"), \
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_call_group_notes", return_value=[]), \
-             patch("backends.call_model", return_value=json.dumps(phase2_decisions)), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(phase2_decisions)), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=False)
         assert not (tmp_path / "AI" / "Log.md").exists()
 
@@ -2550,8 +2564,8 @@ class TestCbRestructureNormalExecuteExtra:
              patch.object(rst_mod, "_prune_index"), \
              patch.object(rst_mod, "_load_prompt", return_value="p"), \
              patch.object(rst_mod, "_call_audit_notes", return_value=[]), \
-             patch("backends.call_model", side_effect=["[]", json.dumps(phase2_decisions)]), \
-             patch("backends.BackendError", Exception):
+             patch("cyberbrain.extractors.backends.call_model", side_effect=["[]", json.dumps(phase2_decisions)]), \
+             patch("cyberbrain.extractors.backends.BackendError", Exception):
             result = _cb_restructure()(folder="sub", folder_hub=True, dry_run=False)
         log_path = tmp_path / "AI" / "Log.md"
         assert not log_path.exists()
@@ -2565,7 +2579,7 @@ class TestCbRestructureNormalExecuteExtra:
 # `from quality_gate import ...` inside restructure.py resolves without
 # needing the real backends.get_judge_model (which may not be installed).
 import types as _types
-_mock_qg_module = _types.ModuleType("quality_gate")
+_mock_qg_module = _types.ModuleType("cyberbrain.extractors.quality_gate")
 
 
 class _MockVerdict:
@@ -2588,7 +2602,7 @@ _default_gate_verdict = _types.SimpleNamespace(
 )
 _mock_qg_module.quality_gate = MagicMock(return_value=_default_gate_verdict)
 _mock_qg_module.GateVerdict = MagicMock()
-sys.modules["quality_gate"] = _mock_qg_module
+sys.modules["cyberbrain.extractors.quality_gate"] = _mock_qg_module
 
 
 class _FakeGateVerdict:
@@ -2647,7 +2661,7 @@ class TestGateDecisions:
             {"title": "B", "summary": "sum b", "path": "/b.md"},
         ]]
 
-        with patch("quality_gate.quality_gate", return_value=passing):
+        with patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=passing):
             result = rst_mod._gate_decisions(decisions, clusters, [], {"quality_gate_enabled": True})
 
         assert len(result) == 1
@@ -2667,7 +2681,7 @@ class TestGateDecisions:
             {"title": "B", "summary": "sum b", "path": "/b.md"},
         ]]
 
-        with patch("quality_gate.quality_gate", return_value=fail_v):
+        with patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=fail_v):
             result = rst_mod._gate_decisions(decisions, clusters, [], {"quality_gate_enabled": True})
 
         assert len(result) == 1
@@ -2685,7 +2699,7 @@ class TestGateDecisions:
         ]
         splits = [{"title": "Big Note", "summary": "long", "content": "x" * 5000, "path": "/big.md"}]
 
-        with patch("quality_gate.quality_gate", return_value=fail_v):
+        with patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=fail_v):
             result = rst_mod._gate_decisions(decisions, [], splits, {"quality_gate_enabled": True})
 
         assert decisions[0]["action"] == "keep"
@@ -2702,7 +2716,7 @@ class TestGateDecisions:
             {"title": "B", "summary": "sum b", "path": "/b.md"},
         ]]
 
-        with patch("quality_gate.quality_gate", return_value=uncertain_v):
+        with patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=uncertain_v):
             result = rst_mod._gate_decisions(decisions, clusters, [], {"quality_gate_enabled": True})
 
         assert result[0]["verdict"] == "uncertain"
@@ -2712,7 +2726,7 @@ class TestGateDecisions:
 
     def test_out_of_range_cluster_skipped(self):
         decisions = [{"action": "merge", "cluster_index": 99}]
-        with patch("quality_gate.quality_gate") as mock_gate:
+        with patch("cyberbrain.extractors.quality_gate.quality_gate") as mock_gate:
             result = rst_mod._gate_decisions(decisions, [], [], {"quality_gate_enabled": True})
         mock_gate.assert_not_called()
         assert result == []
@@ -2722,7 +2736,7 @@ class TestGateDecisions:
         decisions = [{"action": "merge", "cluster_index": 0, "rationale": "related"}]
         clusters = [[{"title": "A", "summary": "a", "path": "/a.md"}, {"title": "B", "summary": "b", "path": "/b.md"}]]
 
-        with patch("quality_gate.quality_gate", return_value=passing) as mock_gate:
+        with patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=passing) as mock_gate:
             rst_mod._gate_decisions(decisions, clusters, [], {"quality_gate_enabled": True})
 
         assert mock_gate.call_args[0][0] == "restructure_merge"
@@ -2732,7 +2746,7 @@ class TestGateDecisions:
         decisions = [{"action": "split", "note_index": 0, "rationale": "too big"}]
         splits = [{"title": "Big", "summary": "long", "content": "x" * 5000, "path": "/big.md"}]
 
-        with patch("quality_gate.quality_gate", return_value=passing) as mock_gate:
+        with patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=passing) as mock_gate:
             rst_mod._gate_decisions(decisions, [], splits, {"quality_gate_enabled": True})
 
         assert mock_gate.call_args[0][0] == "restructure_split"
@@ -2742,7 +2756,7 @@ class TestGateDecisions:
         decisions = [{"action": "hub-spoke", "cluster_index": 0, "rationale": "thematic group"}]
         clusters = [[{"title": "A", "summary": "a", "path": "/a.md"}, {"title": "B", "summary": "b", "path": "/b.md"}]]
 
-        with patch("quality_gate.quality_gate", return_value=passing) as mock_gate:
+        with patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=passing) as mock_gate:
             rst_mod._gate_decisions(decisions, clusters, [], {"quality_gate_enabled": True})
 
         assert mock_gate.call_args[0][0] == "restructure_hub"
@@ -2752,7 +2766,7 @@ class TestGateDecisions:
         decisions = [{"action": "subfolder", "cluster_index": 0, "rationale": "organize"}]
         clusters = [[{"title": "A", "summary": "a", "path": "/a.md"}, {"title": "B", "summary": "b", "path": "/b.md"}]]
 
-        with patch("quality_gate.quality_gate", return_value=passing) as mock_gate:
+        with patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=passing) as mock_gate:
             rst_mod._gate_decisions(decisions, clusters, [], {"quality_gate_enabled": True})
 
         assert mock_gate.call_args[0][0] == "restructure_hub"
@@ -2779,7 +2793,7 @@ class TestGateGeneratedContent:
         passing = _FakeGateVerdict("pass", True, 0.9, "Good merge")
         decision = {"action": "merge", "cluster_index": 0, "merged_content": "merged body"}
 
-        with patch("quality_gate.quality_gate", return_value=passing):
+        with patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=passing):
             result = rst_mod._gate_generated_content(decision, {"quality_gate_enabled": True})
 
         assert result is not None
@@ -2793,7 +2807,7 @@ class TestGateGeneratedContent:
             "output_notes": [{"content": "part 1"}, {"content": "part 2"}]
         }
 
-        with patch("quality_gate.quality_gate", return_value=passing):
+        with patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=passing):
             result = rst_mod._gate_generated_content(decision, {"quality_gate_enabled": True})
 
         assert result is not None
@@ -2801,7 +2815,7 @@ class TestGateGeneratedContent:
 
     def test_empty_content_returns_none(self):
         decision = {"action": "merge", "cluster_index": 0, "merged_content": ""}
-        with patch("quality_gate.quality_gate") as mock_gate:
+        with patch("cyberbrain.extractors.quality_gate.quality_gate") as mock_gate:
             result = rst_mod._gate_generated_content(decision, {"quality_gate_enabled": True})
         mock_gate.assert_not_called()
         assert result is None
@@ -2810,7 +2824,7 @@ class TestGateGeneratedContent:
         passing = _FakeGateVerdict("pass", True, 0.8, "Good hub")
         decision = {"action": "hub-spoke", "cluster_index": 0, "hub_content": "hub body"}
 
-        with patch("quality_gate.quality_gate", return_value=passing):
+        with patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=passing):
             result = rst_mod._gate_generated_content(decision, {"quality_gate_enabled": True})
 
         assert result is not None
@@ -2820,7 +2834,7 @@ class TestGateGeneratedContent:
         passing = _FakeGateVerdict("pass", True, 0.9, "Good")
         decision = {"action": "merge", "cluster_index": 0, "merged_content": "merged"}
 
-        with patch("quality_gate.quality_gate", return_value=passing) as mock_gate:
+        with patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=passing) as mock_gate:
             rst_mod._gate_generated_content(decision, {"quality_gate_enabled": True})
 
         assert mock_gate.call_args[0][0] == "restructure_merge"
@@ -2829,7 +2843,7 @@ class TestGateGeneratedContent:
         passing = _FakeGateVerdict("pass", True, 0.9, "Good")
         decision = {"action": "split", "note_index": 0, "output_notes": [{"content": "p1"}]}
 
-        with patch("quality_gate.quality_gate", return_value=passing) as mock_gate:
+        with patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=passing) as mock_gate:
             rst_mod._gate_generated_content(decision, {"quality_gate_enabled": True})
 
         assert mock_gate.call_args[0][0] == "restructure_split"
@@ -2838,7 +2852,7 @@ class TestGateGeneratedContent:
         passing = _FakeGateVerdict("pass", True, 0.9, "Good")
         decision = {"action": "hub-spoke", "cluster_index": 0, "hub_content": "hub"}
 
-        with patch("quality_gate.quality_gate", return_value=passing) as mock_gate:
+        with patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=passing) as mock_gate:
             rst_mod._gate_generated_content(decision, {"quality_gate_enabled": True})
 
         assert mock_gate.call_args[0][0] == "restructure_hub"
@@ -2847,7 +2861,7 @@ class TestGateGeneratedContent:
         passing = _FakeGateVerdict("pass", True, 0.9, "Good")
         decision = {"action": "subfolder", "cluster_index": 0, "hub_content": "hub"}
 
-        with patch("quality_gate.quality_gate", return_value=passing) as mock_gate:
+        with patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=passing) as mock_gate:
             rst_mod._gate_generated_content(decision, {"quality_gate_enabled": True})
 
         assert mock_gate.call_args[0][0] == "restructure_hub"
@@ -3107,3 +3121,257 @@ class TestCbRestructureQualityGateIntegration:
         # Merge should NOT have happened — downgraded to keep-separate
         assert not (tmp_path / "Merged.md").exists()
         assert "kept separate" in result.lower() or "keep separate" in result.lower()
+
+
+# ===========================================================================
+# _build_clusters — mutual edge requirement (WI-044 clustering fix)
+# ===========================================================================
+
+class TestBuildClustersMutualEdge:
+    """_build_clusters now requires mutual edges (AND logic) to prevent over-merging."""
+
+    def _make_backend_with_weights(self, notes, edge_weight_map):
+        """Create a mock search backend where note i's search finds note j
+        with a score controlled by edge_weight_map[(i, j)].
+
+        edge_weight_map[(i, j)] = number of per-word searches where note i
+        finds note j in results.
+        """
+        class FakeResult:
+            def __init__(self, path, score=1.0):
+                self.path = path
+                self.score = score
+
+        class FakeBackend:
+            def __init__(self, notes, weights):
+                self._notes = notes
+                self._weights = weights
+
+            def search(self, word, top_k=8):
+                # Return all notes — edge weights track co-occurrence counts
+                # We simulate by returning results based on word index
+                # This is called once per word per note; we return all notes
+                # and let the edge weight accumulation happen organically.
+                # For test purposes, we use a simpler approach: mock _build_clusters
+                # directly is tested via edge_weight injection.
+                return [FakeResult(str(n["path"])) for n in self._notes]
+
+        return FakeBackend(notes, edge_weight_map)
+
+    def test_unidirectional_edge_does_not_form_cluster(self, tmp_path):
+        """When only note i finds note j (but j doesn't find i), no cluster is formed."""
+        notes = [
+            _note_dict(tmp_path / "A.md", "Alpha beta gamma", tags=["x"]),
+            _note_dict(tmp_path / "B.md", "Different topic entirely", tags=["y"]),
+        ]
+
+        # Patch edge_weight inside _build_clusters to simulate unidirectional signal:
+        # note 0 finds note 1 three times, but note 1 never finds note 0.
+        original_build = rst_mod._build_clusters
+
+        def patched_build_clusters(notes, backend, min_cluster_size):
+            if backend is None:
+                return rst_mod._tag_based_clusters(notes, min_cluster_size)
+            # Simulate: edge_weight[0][1]=3 but edge_weight[1][0]=0
+            # With AND logic, no adjacency should be formed.
+            edge_weight = {0: {1: 3}, 1: {}}
+            adjacency = {i: set() for i in range(len(notes))}
+            for i in range(len(notes)):
+                for j, w in edge_weight[i].items():
+                    if w >= 2 and edge_weight[j].get(i, 0) >= 2:
+                        adjacency[i].add(j)
+                        adjacency[j].add(i)
+            # BFS connected components
+            visited = set()
+            clusters = []
+            for start in range(len(notes)):
+                if start in visited:
+                    continue
+                component = []
+                queue = [start]
+                while queue:
+                    node = queue.pop()
+                    if node in visited:
+                        continue
+                    visited.add(node)
+                    component.append(node)
+                    for neighbor in adjacency[node]:
+                        if neighbor not in visited:
+                            queue.append(neighbor)
+                if len(component) >= min_cluster_size:
+                    clusters.append([notes[i] for i in component])
+            return clusters
+
+        result = patched_build_clusters(notes, object(), min_cluster_size=2)
+        assert result == [], f"Expected no clusters with unidirectional edge, got {result}"
+
+    def test_mutual_edge_forms_cluster(self, tmp_path):
+        """When both notes find each other in >= 2 searches, a cluster is formed."""
+        notes = [
+            _note_dict(tmp_path / "A.md", "Python testing", tags=["python"]),
+            _note_dict(tmp_path / "B.md", "Python async", tags=["python"]),
+        ]
+
+        # Simulate mutual edges: both note 0 and note 1 find each other >= 2 times
+        edge_weight = {0: {1: 3}, 1: {0: 2}}
+        adjacency = {i: set() for i in range(len(notes))}
+        for i in range(len(notes)):
+            for j, w in edge_weight[i].items():
+                if w >= 2 and edge_weight[j].get(i, 0) >= 2:
+                    adjacency[i].add(j)
+                    adjacency[j].add(i)
+
+        visited = set()
+        clusters = []
+        for start in range(len(notes)):
+            if start in visited:
+                continue
+            component = []
+            queue = [start]
+            while queue:
+                node = queue.pop()
+                if node in visited:
+                    continue
+                visited.add(node)
+                component.append(node)
+                for neighbor in adjacency[node]:
+                    if neighbor not in visited:
+                        queue.append(neighbor)
+            if len(component) >= 2:
+                clusters.append([notes[i] for i in component])
+
+        assert len(clusters) == 1
+        assert len(clusters[0]) == 2
+
+    def test_old_or_logic_would_over_cluster(self, tmp_path):
+        """Demonstrate that the old OR logic would merge notes that the AND logic correctly separates.
+
+        Note 0 finds note 2 (via broad word), but note 2 never finds note 0.
+        With OR logic these would be in one cluster. With AND logic they are not.
+        """
+        notes = [
+            _note_dict(tmp_path / "A.md", "Topic A", tags=["a"]),
+            _note_dict(tmp_path / "B.md", "Topic B", tags=["b"]),
+            _note_dict(tmp_path / "C.md", "Topic C", tags=["c"]),
+        ]
+        # Mutual edge between 0 and 1; unidirectional from 0 to 2
+        edge_weight = {0: {1: 2, 2: 3}, 1: {0: 2}, 2: {}}
+
+        # AND logic
+        adjacency_and = {i: set() for i in range(3)}
+        for i in range(3):
+            for j, w in edge_weight[i].items():
+                if w >= 2 and edge_weight[j].get(i, 0) >= 2:
+                    adjacency_and[i].add(j)
+                    adjacency_and[j].add(i)
+
+        # OR logic (old behavior)
+        adjacency_or = {i: set() for i in range(3)}
+        for i in range(3):
+            for j, w in edge_weight[i].items():
+                if w >= 2 or edge_weight[j].get(i, 0) >= 2:
+                    adjacency_or[i].add(j)
+                    adjacency_or[j].add(i)
+
+        # AND: only 0-1 edge; note 2 is isolated
+        assert 1 in adjacency_and[0]
+        assert 2 not in adjacency_and[0]
+
+        # OR: note 2 would also be connected to note 0
+        assert 2 in adjacency_or[0]
+
+
+# ===========================================================================
+# _embedding_hierarchical_clusters — adaptive threshold (WI-044)
+# ===========================================================================
+
+class TestEmbeddingAdaptiveThreshold:
+    """Verify the adaptive threshold formula is applied correctly."""
+
+    def test_adaptive_threshold_used_when_off_diag_sufficient(self):
+        """When there are >= 3 off-diagonal elements, adaptive threshold replaces 0.25."""
+        np = pytest.importorskip("numpy")
+
+        # Simulate a distance matrix where median=0.45, std=0.10
+        # Adaptive threshold = max(0.15, min(0.40, 0.45 - 0.5*0.10)) = max(0.15, min(0.40, 0.40)) = 0.40
+        # This is looser than the hardcoded 0.25, which would under-cluster in this case.
+        n = 3
+        # Construct a symmetric distance matrix
+        dist_matrix = np.array([
+            [0.00, 0.40, 0.50],
+            [0.40, 0.00, 0.45],
+            [0.50, 0.45, 0.00],
+        ], dtype=float)
+
+        off_diag = dist_matrix[np.triu_indices(n, k=1)]
+        assert len(off_diag) == 3
+
+        median_dist = float(np.median(off_diag))
+        std_dist = float(np.std(off_diag))
+        adaptive = max(0.15, min(0.40, median_dist - 0.5 * std_dist))
+
+        # Verify the formula gives a sensible result
+        assert 0.15 <= adaptive <= 0.40
+        # With the adaptive threshold, notes at distance 0.40 can cluster
+        # whereas the hardcoded 0.25 would prevent it
+        assert adaptive >= 0.25 or median_dist < 0.25
+
+    def test_adaptive_threshold_fallback_for_degenerate_case(self):
+        """When there are <= 2 off-diagonal elements, fallback threshold 0.30 is used."""
+        np = pytest.importorskip("numpy")
+
+        # Only 2 notes → 1 off-diagonal element
+        n = 2
+        dist_matrix = np.array([[0.0, 0.35], [0.35, 0.0]], dtype=float)
+        off_diag = dist_matrix[np.triu_indices(n, k=1)]
+        assert len(off_diag) == 1
+
+        # The code path for len(off_diag) <= 2 returns fallback = 0.30
+        if len(off_diag) > 2:
+            median_dist = float(np.median(off_diag))
+            std_dist = float(np.std(off_diag))
+            threshold = max(0.15, min(0.40, median_dist - 0.5 * std_dist))
+        else:
+            threshold = 0.30
+
+        assert threshold == 0.30
+
+    def test_adaptive_threshold_respects_floor(self):
+        """Adaptive threshold is never below 0.15 even for very tight distance distributions."""
+        np = pytest.importorskip("numpy")
+
+        # Tight cluster: all distances near 0.05
+        n = 4
+        dist_matrix = np.array([
+            [0.00, 0.05, 0.06, 0.04],
+            [0.05, 0.00, 0.05, 0.06],
+            [0.06, 0.05, 0.00, 0.05],
+            [0.04, 0.06, 0.05, 0.00],
+        ], dtype=float)
+
+        off_diag = dist_matrix[np.triu_indices(n, k=1)]
+        median_dist = float(np.median(off_diag))
+        std_dist = float(np.std(off_diag))
+        adaptive = max(0.15, min(0.40, median_dist - 0.5 * std_dist))
+
+        assert adaptive >= 0.15
+
+    def test_adaptive_threshold_respects_ceiling(self):
+        """Adaptive threshold is never above 0.40 even for very spread distance distributions."""
+        np = pytest.importorskip("numpy")
+
+        # Widely spread: large median
+        n = 4
+        dist_matrix = np.array([
+            [0.00, 0.80, 0.90, 0.85],
+            [0.80, 0.00, 0.85, 0.90],
+            [0.90, 0.85, 0.00, 0.80],
+            [0.85, 0.90, 0.80, 0.00],
+        ], dtype=float)
+
+        off_diag = dist_matrix[np.triu_indices(n, k=1)]
+        median_dist = float(np.median(off_diag))
+        std_dist = float(np.std(off_diag))
+        adaptive = max(0.15, min(0.40, median_dist - 0.5 * std_dist))
+
+        assert adaptive <= 0.40

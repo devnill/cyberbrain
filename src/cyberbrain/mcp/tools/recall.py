@@ -121,7 +121,7 @@ def _synthesize_recall(
     gate_passed = True
     if config.get("quality_gate_enabled", True):
         try:
-            from quality_gate import quality_gate
+            from cyberbrain.extractors.quality_gate import quality_gate
             verdict = quality_gate(
                 operation="synthesis",
                 input_context=f"Query: {query}\n\nSource notes:\n{notes_block}",
@@ -191,6 +191,14 @@ def register(mcp: FastMCP) -> None:
 
         config = _load_config()
         vault_path = config["vault_path"]
+
+        # Lazy incremental refresh: update index with any vault changes since last scan.
+        # Errors are swallowed — a failed refresh never blocks the search.
+        try:
+            from cyberbrain.extractors.search_index import incremental_refresh
+            incremental_refresh(config)
+        except Exception:
+            pass
 
         # Try pluggable search backend; fall back to grep on any failure
         backend = _get_search_backend(config)
@@ -326,24 +334,38 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
     def cb_read(
         identifier: Annotated[str, Field(
-            description="A vault-relative path (e.g. 'Projects/myproject/JWT Auth Flow.md') or a note title (e.g. 'JWT Auth Flow'). Resolution tries exact path, path + .md, then FTS5 title match."
+            description="A vault-relative path (e.g. 'Projects/myproject/JWT Auth Flow.md') or a note title (e.g. 'JWT Auth Flow'). For multiple notes, separate with | (pipe), e.g. 'Note A|Note B|Projects/foo.md'. Up to 10 identifiers. Resolution tries exact path, path + .md, then FTS5 title match."
         )],
+        synthesize: Annotated[bool, Field(
+            description="If true, return an LLM-synthesized context block instead of raw note content. Most useful when retrieving multiple notes you want merged into a coherent answer."
+        )] = False,
+        query: Annotated[str, Field(
+            description="When synthesize=True, focus the synthesis on this question or topic. If empty, a general summary is produced."
+        )] = "",
+        max_chars_per_note: Annotated[int, Field(
+            description="When synthesize=False and multiple identifiers are provided, truncate each note body at this many characters (default 2000). Set to 0 for no truncation."
+        )] = 2000,
     ) -> str:
         """
-        Read a specific vault note by path or title.
+        Read one or more specific vault notes by path or title.
 
-        Use this after cb_recall surfaces a note you want to read in full, or when the user
-        names a specific note they want to retrieve. For searching, use cb_recall.
+        Use this after cb_recall surfaces notes you want to read in full, or when the user
+        names a specific note. For searching, use cb_recall.
 
-        Resolution order:
+        Single identifier: returns the full note content including frontmatter and source path.
+
+        Multiple identifiers (pipe-separated): returns each note's full content concatenated,
+        each with its source path. Set synthesize=True to merge them into a concise context
+        block focused on `query`.
+
+        Resolution order per identifier:
         1. Exact vault-relative path (with or without .md extension)
         2. FTS5 index title exact match (case-insensitive)
         3. FTS5 index title prefix/fuzzy match
-
-        Returns the full note content including frontmatter, followed by the vault-relative path.
         """
         config = _load_config()
         vault_path = Path(config["vault_path"]).resolve()
+        MAX_CHARS_PER_NOTE = max_chars_per_note
 
         def _resolve_path(candidate: Path) -> Path | None:
             """Return resolved path if it's within the vault, else None."""
@@ -354,32 +376,124 @@ def register(mcp: FastMCP) -> None:
             except (ValueError, OSError):
                 return None
 
-        # 1. Exact vault-relative path
-        candidate = vault_path / identifier
-        resolved = _resolve_path(candidate)
-        if resolved and resolved.exists():
-            note_path = resolved
-        else:
+        def _resolve_identifier(ident: str) -> Path | None:
+            """Resolve a single identifier to a Path within the vault."""
+            # 1. Exact vault-relative path
+            candidate = vault_path / ident
+            resolved = _resolve_path(candidate)
+            if resolved and resolved.exists():
+                return resolved
             # 2. Exact path + .md extension
-            candidate_md = vault_path / (identifier if identifier.endswith(".md") else identifier + ".md")
+            candidate_md = vault_path / (ident if ident.endswith(".md") else ident + ".md")
             resolved_md = _resolve_path(candidate_md)
             if resolved_md and resolved_md.exists():
-                note_path = resolved_md
+                return resolved_md
+            # 3 & 4. FTS5 title lookup (exact then fuzzy)
+            return _find_note_by_title(ident, config)
+
+        # Parse pipe-separated identifiers (| never appears in Obsidian filenames)
+        identifiers = [i.strip() for i in identifier.split("|") if i.strip()][:10]
+
+        if len(identifiers) <= 1:
+            # Single-note path (original behavior)
+            note_path = _resolve_identifier(identifier.strip())
+            if note_path is None:
+                raise ToolError(f"Note not found: {identifier}. Try cb_recall to search.")
+            try:
+                content = note_path.read_text(encoding="utf-8")
+            except OSError as e:
+                raise ToolError(f"Could not read note: {e}")
+
+            fm = _parse_frontmatter(content)
+            title = fm.get("title") or note_path.stem
+            rel = os.path.relpath(str(note_path), str(vault_path))
+
+            if not synthesize:
+                return f"# {title}\n\n{content}\n\n---\nSource: {rel}"
+
+            # Single note + synthesize: useful for long notes where a focused excerpt is needed
+            body = content
+            if content.startswith("---"):
+                end = content.find("\n---", 3)
+                if end != -1:
+                    body = content[end + 4:].strip()
+            note_summaries = [{
+                "title": title,
+                "type": fm.get("type", ""),
+                "date": str(fm.get("date", ""))[:10],
+                "tags": fm.get("tags", []) or [],
+                "summary": fm.get("summary", ""),
+                "source": rel,
+                "body_excerpt": body[:500],
+            }]
+            notes_block = f"# {title}\n\n{content}"
+            effective_query = query or "Summarize the key information from these notes."
+            return _synthesize_recall(effective_query, notes_block, note_summaries, config)
+
+        # Multi-note path
+        resolved_notes = []
+        unresolved = []
+        for ident in identifiers:
+            p = _resolve_identifier(ident)
+            if p is None:
+                unresolved.append(ident)
             else:
-                # 3 & 4. FTS5 title lookup (exact then fuzzy)
-                note_path = _find_note_by_title(identifier, config)
+                resolved_notes.append(p)
 
-        if note_path is None:
-            raise ToolError(f"Note not found: {identifier}. Try cb_recall to search.")
+        if not resolved_notes:
+            raise ToolError(
+                f"No notes found for any of: {', '.join(identifiers)}. Try cb_recall to search."
+            )
 
-        try:
-            content = note_path.read_text(encoding="utf-8")
-        except OSError as e:
-            raise ToolError(f"Could not read note: {e}")
+        note_summaries = []
+        parts = []
+        for note_path in resolved_notes:
+            try:
+                content = note_path.read_text(encoding="utf-8")
+            except OSError:
+                unresolved.append(str(note_path))
+                continue
+            fm = _parse_frontmatter(content)
+            title = fm.get("title") or note_path.stem
+            rel = os.path.relpath(str(note_path), str(vault_path))
 
-        # Extract title from frontmatter or filename
-        fm = _parse_frontmatter(content)
-        title = fm.get("title") or note_path.stem
-        rel = os.path.relpath(str(note_path), str(vault_path))
+            body = content
+            if content.startswith("---"):
+                end = content.find("\n---", 3)
+                if end != -1:
+                    body = content[end + 4:].strip()
 
-        return f"# {title}\n\n{content}\n\n---\nSource: {rel}"
+            note_summaries.append({
+                "title": title,
+                "type": fm.get("type", ""),
+                "date": str(fm.get("date", ""))[:10],
+                "tags": fm.get("tags", []) or [],
+                "summary": fm.get("summary", ""),
+                "source": rel,
+                "body_excerpt": body[:500],
+            })
+
+            if synthesize:
+                parts.append(f"# {title}\n\n{content}")
+            else:
+                # Truncate body per note when not synthesizing; 0 means no truncation
+                if MAX_CHARS_PER_NOTE > 0 and len(body) > MAX_CHARS_PER_NOTE:
+                    truncated_body = body[:MAX_CHARS_PER_NOTE] + "\n\n*(truncated — use cb_read with this identifier alone for the full note)*"
+                else:
+                    truncated_body = body
+                parts.append(f"# {title}\n\n{content[:content.find(body)]}{truncated_body}\n\n---\nSource: {rel}")
+
+        if not parts:
+            raise ToolError(f"All notes failed to read: {', '.join(identifiers)}")
+
+        warning = ""
+        if unresolved:
+            warning = f"\n\n*(Could not resolve: {', '.join(unresolved)})*"
+
+        if not synthesize:
+            return "\n\n---\n\n".join(parts) + warning
+
+        effective_query = query or "Summarize the key information from these notes."
+        notes_block = "\n\n---\n\n".join(parts)
+        result = _synthesize_recall(effective_query, notes_block, note_summaries, config)
+        return result + warning

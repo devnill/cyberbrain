@@ -7,5 +7,5 @@
   },
   "repository": "https://github.com/danshipper/cyberbrain",
   "hooks": "./hooks/hooks.json",
-  "mcpServers": "./.mcp.json"
+  "mcpServers": "./mcp.json"
 }

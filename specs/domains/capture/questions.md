@@ -2,7 +2,7 @@
 
 ## Q-1: WI-030 manual capture mode re-test pending
 - **Question**: Has the emphatic prohibition wording added in WI-023 (manual mode: Claude must not offer to file beats) actually changed model behavior in a live Claude Desktop session?
-- **Source**: archive/cycles/001/gap-analysis.md (M1); archive/cycles/001/decision-log.md (OQ11)
+- **Source**: archive/cycles/001/gap-analysis.md (M1); archive/cycles/001/decision-log.md (OQ11); archive/cycles/002/decision-log.md (OQ10) — re-test procedure at specs/steering/research/manual-capture-retest.md
 - **Impact**: The WI-023 fix is unvalidated. Claude may still offer to auto-file beats when operating in manual mode, confusing the user.
 - **Status**: open
 - **Reexamination trigger**: Any user session using Claude Desktop in manual capture mode.
@@ -20,3 +20,17 @@
 - **Impact**: Relation types specified by the LLM are silently discarded, producing less useful knowledge graphs than intended.
 - **Status**: open
 - **Reexamination trigger**: Any work on knowledge graph quality or relation-based retrieval.
+
+## Q-4: WI-042 (intake interface implementation) status unknown
+- **Question**: Was WI-042 executed? The incremental review file is empty. The `cb_file` document intake mode (title parameter, document mode switch, durability parameter per D-9) may not be implemented. WI-046 and WI-047 depend on WI-042.
+- **Source**: archive/cycles/002/decision-log.md (OQ1); archive/cycles/002/summary.md (Findings Requiring User Input)
+- **Impact**: If unimplemented, the design-approved intake interface is absent and WI-047 (vault CLAUDE.md update) cannot proceed.
+- **Status**: open
+- **Reexamination trigger**: Technical investigation of src/cyberbrain/mcp/tools/file.py against the WI-040 design spec.
+
+## Q-5: WI-044 (improved clustering/filing accuracy) not started
+- **Question**: Has the clustering parameter adjustment and vault history injection (from WI-038 research) been implemented in autofile?
+- **Source**: archive/cycles/002/decision-log.md (OQ2); archive/cycles/002/summary.md (Proposed Refinement Plan)
+- **Impact**: Filing accuracy improvements from WI-038 research remain unrealized. Vault history injection as examples in the autofile prompt is the recommended approach.
+- **Status**: open
+- **Reexamination trigger**: Technical investigation of src/cyberbrain/extractors/autofile.py; or any user report of poor autofile routing.

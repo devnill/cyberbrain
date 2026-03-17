@@ -1,6 +1,6 @@
 # Domain Registry
 
-current_cycle: 1
+current_cycle: 3
 
 ## Domains
 
@@ -30,4 +30,4 @@ Files: domains/distribution/policies.md, decisions.md, questions.md
 
 **Graceful degradation**: GP-8 applies differently in each domain — hooks must never block (capture), bad curation must surface to user rather than fail silently (curation), search degrades through tiers (retrieval), plugin paths must not hard-fail on missing files (distribution).
 
-**Incomplete WI-034 migration**: As of cycle 6, the src layout migration is half-done. The distribution domain carries 7 open blocking questions that must be resolved before the package is installable. These questions also affect the capture domain (extractor imports) and the test infrastructure.
+**Cycle 003 completion**: All 9 work items from cycles 002-003 are now complete and reviewed: WI-042 (intake interface), WI-044 (filing accuracy), WI-045 (automatic indexing), WI-046 (retrieval interface), WI-047 (vault CLAUDE.md update), WI-048 (pytest markers), WI-049 (affected-only plugin), WI-050 (quiet defaults), WI-051 (test wrapper). See archive/cycles/003/ for review artifacts.

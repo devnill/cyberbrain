@@ -148,6 +148,19 @@ def register(mcp: FastMCP) -> None:
         proactive_recall: Annotated[bool | None, Field(
             description="Enable or disable proactive recall (automatic context injection). Default: True."
         )] = None,
+        uncertain_filing_behavior: Annotated[str | None, Field(
+            description=(
+                "What to do when autofile confidence is below threshold. "
+                "'inbox' routes the beat to the inbox folder (default). "
+                "'ask' returns a clarification prompt to the user before writing."
+            )
+        )] = None,
+        uncertain_filing_threshold: Annotated[float | None, Field(
+            description=(
+                "Confidence threshold (0.0-1.0) below which uncertain_filing_behavior applies. "
+                "Default: 0.5. Beats with confidence >= threshold are filed normally."
+            )
+        )] = None,
     ) -> str:
         """
         Configure cyberbrain or show current configuration.
@@ -163,6 +176,8 @@ def register(mcp: FastMCP) -> None:
         Call with tool_models={...} to set per-tool model overrides.
         Call with quality_gate_enabled=True/False to enable/disable quality gates.
         Call with proactive_recall=True/False to enable/disable proactive recall.
+        Call with uncertain_filing_behavior='inbox'|'ask' to control low-confidence routing.
+        Call with uncertain_filing_threshold=0.5 to set the confidence cutoff (0.0-1.0).
 
         Use this to set up cyberbrain through conversation instead of editing config files.
         """
@@ -249,7 +264,7 @@ def register(mcp: FastMCP) -> None:
 
         # --- writes ---
         changed = []
-        if vault_path is not None or inbox is not None or capture_mode is not None or working_memory_ttl is not None or tool_models is not None or quality_gate_enabled is not None or proactive_recall is not None:
+        if vault_path is not None or inbox is not None or capture_mode is not None or working_memory_ttl is not None or tool_models is not None or quality_gate_enabled is not None or proactive_recall is not None or uncertain_filing_behavior is not None or uncertain_filing_threshold is not None:
             cfg = _load_raw()
 
             if vault_path is not None:
@@ -322,6 +337,23 @@ def register(mcp: FastMCP) -> None:
                 cfg["proactive_recall"] = proactive_recall
                 changed.append(f"proactive_recall → {proactive_recall}")
 
+            if uncertain_filing_behavior is not None:
+                valid_behaviors = {"inbox", "ask"}
+                if uncertain_filing_behavior not in valid_behaviors:
+                    raise ToolError(
+                        f"uncertain_filing_behavior must be 'inbox' or 'ask'. Got: {uncertain_filing_behavior}"
+                    )
+                cfg["uncertain_filing_behavior"] = uncertain_filing_behavior
+                changed.append(f"uncertain_filing_behavior → {uncertain_filing_behavior}")
+
+            if uncertain_filing_threshold is not None:
+                if not isinstance(uncertain_filing_threshold, (int, float)) or not (0.0 <= uncertain_filing_threshold <= 1.0):
+                    raise ToolError(
+                        f"uncertain_filing_threshold must be a float between 0.0 and 1.0. Got: {uncertain_filing_threshold}"
+                    )
+                cfg["uncertain_filing_threshold"] = float(uncertain_filing_threshold)
+                changed.append(f"uncertain_filing_threshold → {uncertain_filing_threshold}")
+
             _save_raw(cfg)
             result = "Configuration updated:\n" + "\n".join(f"  - {c}" for c in changed)
             if vault_path is not None:
@@ -362,6 +394,9 @@ def register(mcp: FastMCP) -> None:
             lines.append("Proactive recall: disabled")
         capture = cfg.get("desktop_capture_mode", "suggest")
         lines.append(f"Capture mode: {capture}")
+        filing_behavior = cfg.get("uncertain_filing_behavior", "inbox")
+        filing_threshold = cfg.get("uncertain_filing_threshold", 0.5)
+        lines.append(f"Uncertain filing: behavior={filing_behavior}, threshold={filing_threshold}")
 
         # Last extraction run
         runs_log = Path(RUNS_LOG_PATH)

@@ -514,7 +514,7 @@ class HybridBackend:
         Opportunistically read Smart Connections' .ajson index if it exists in the vault
         and was built with a compatible model. Returns True if import succeeded.
         """
-        import sys, json, numpy as np
+        import sys, json
 
         sc_dir = Path(self._vault) / ".smart-env"
         if not sc_dir.exists():
@@ -568,7 +568,11 @@ class HybridBackend:
         Parse a Smart Connections .ajson file and import vectors into usearch.
         Returns number of vectors imported.
         """
-        import json, numpy as np, sys
+        import json, sys
+        try:
+            import numpy as np
+        except ImportError:
+            return 0
 
         imported = 0
         try:
@@ -780,45 +784,6 @@ def get_search_backend(config: dict) -> SearchBackend:
 # Shared helpers (canonical implementations live in frontmatter.py)
 # ---------------------------------------------------------------------------
 
-try:
-    from frontmatter import read_frontmatter as _read_frontmatter
-    from frontmatter import normalise_list as _normalise_list
-    from frontmatter import derive_id as _derive_id
-except ImportError:
-    # Fallback implementations for environments where frontmatter.py is not yet available
-    from pathlib import Path as _Path
-
-    def _read_frontmatter(path: str) -> dict:
-        try:
-            text = _Path(path).read_text(encoding="utf-8")
-        except OSError:
-            return {}
-        if not text.startswith("---"):
-            return {}
-        end = text.find("\n---", 3)
-        if end == -1:
-            return {}
-        try:
-            import yaml
-            fm = yaml.safe_load(text[3:end])
-            return fm if isinstance(fm, dict) else {}
-        except Exception:
-            return {}
-
-    def _normalise_list(value) -> list:
-        if isinstance(value, list):
-            return [str(v) for v in value if v]
-        if isinstance(value, str):
-            import json
-            try:
-                parsed = json.loads(value)
-                if isinstance(parsed, list):
-                    return [str(v) for v in parsed if v]
-            except (json.JSONDecodeError, ValueError):
-                pass
-            return [value] if value.strip() else []
-        return []
-
-    def _derive_id(note_path: str) -> str:
-        import hashlib
-        return hashlib.sha256(note_path.encode()).hexdigest()[:36]
+from cyberbrain.extractors.frontmatter import read_frontmatter as _read_frontmatter
+from cyberbrain.extractors.frontmatter import normalise_list as _normalise_list
+from cyberbrain.extractors.frontmatter import derive_id as _derive_id

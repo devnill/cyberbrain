@@ -1,5 +1,5 @@
 """
-test_backends.py — unit tests for the LLM backend abstraction in extract_beats.py
+test_backends.py — unit tests for the LLM backend abstraction in src/cyberbrain/extractors/backends.py
 
 Each backend has a distinct integration point. Tests verify that:
 - The correct external call is made (subprocess or HTTP)
@@ -17,6 +17,13 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 
 REPO_ROOT = Path(__file__).parent.parent
+
+# Clear conftest's mock so we can import the real module.
+# Only pop extract_beats (the module conftest actually mocks).
+# Do NOT pop backends — conftest doesn't mock it, and popping creates a new
+# BackendError class that breaks autofile.py's except-clause in other tests.
+for _mod in ["cyberbrain.extractors.extract_beats"]:
+    sys.modules.pop(_mod, None)
 
 import cyberbrain.extractors.extract_beats as eb
 import cyberbrain.extractors.backends as _backends_module
@@ -75,7 +82,7 @@ class TestClaudeCodeBackend:
 
         with patch("shutil.which", return_value="/usr/local/bin/claude"):
             with patch("subprocess.run", side_effect=fake_run):
-                eb._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
+                _backends_module._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
 
         # The four dangerous vars must not appear in the subprocess env
         assert "CLAUDECODE" not in captured_env
@@ -108,7 +115,7 @@ class TestClaudeCodeBackend:
 
         with patch("shutil.which", return_value="/usr/local/bin/claude"):
             with patch("subprocess.run", side_effect=fake_run):
-                eb._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
+                _backends_module._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
 
         assert "CLAUDE_CODE_SESSION_ACCESS_TOKEN" not in captured_env
         assert captured_env.get("SAFE_VAR") == "keep-me"
@@ -132,7 +139,7 @@ class TestClaudeCodeBackend:
 
         with patch("shutil.which", return_value="/usr/local/bin/claude"):
             with patch("subprocess.run", side_effect=fake_run):
-                eb._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
+                _backends_module._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
 
         assert "--allowedTools" in captured_cmd
         tools_idx = captured_cmd.index("--allowedTools")
@@ -154,7 +161,7 @@ class TestClaudeCodeBackend:
 
         with patch("shutil.which", return_value="/usr/local/bin/claude"):
             with patch("subprocess.run", side_effect=fake_run):
-                eb._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
+                _backends_module._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
 
         assert captured_kwargs["timeout"] == 45
 
@@ -165,7 +172,7 @@ class TestClaudeCodeBackend:
 
         with patch("shutil.which", return_value=None):
             with pytest.raises(eb.BackendError, match="claude"):
-                eb._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
+                _backends_module._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
 
     def test_raises_backend_error_on_nonzero_exit(self):
         """BackendError is raised when the claude subprocess exits with a nonzero code."""
@@ -181,7 +188,7 @@ class TestClaudeCodeBackend:
         with patch("shutil.which", return_value="/usr/local/bin/claude"):
             with patch("subprocess.run", side_effect=fake_run):
                 with pytest.raises(eb.BackendError, match="exited with code 1"):
-                    eb._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
+                    _backends_module._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
 
     def test_raises_backend_error_on_timeout(self):
         """BackendError is raised when the subprocess times out."""
@@ -195,7 +202,7 @@ class TestClaudeCodeBackend:
         with patch("shutil.which", return_value="/usr/local/bin/claude"):
             with patch("subprocess.run", side_effect=fake_run):
                 with pytest.raises(eb.BackendError, match="timed out"):
-                    eb._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
+                    _backends_module._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
 
     def test_uses_model_from_config(self):
         """The model from the config's 'model' key is passed to the subprocess."""
@@ -213,7 +220,7 @@ class TestClaudeCodeBackend:
 
         with patch("shutil.which", return_value="/usr/local/bin/claude"):
             with patch("subprocess.run", side_effect=fake_run):
-                eb._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
+                _backends_module._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
 
         assert "--model" in captured_cmd
         model_idx = captured_cmd.index("--model")
@@ -245,7 +252,7 @@ class TestBedrockBackend:
         )
 
         with patch.dict(sys.modules, {"anthropic": mock_anthropic}):
-            result = eb._call_bedrock(SYSTEM_PROMPT, USER_MESSAGE, config)
+            result = _backends_module._call_bedrock(SYSTEM_PROMPT, USER_MESSAGE, config)
 
         mock_anthropic.AnthropicBedrock.assert_called_once_with(aws_region="eu-west-1")
         call_kwargs = mock_client.messages.create.call_args
@@ -266,7 +273,7 @@ class TestBedrockBackend:
         try:
             with patch.dict(sys.modules, {"anthropic": None}):
                 with pytest.raises(eb.BackendError):
-                    eb._call_bedrock(SYSTEM_PROMPT, USER_MESSAGE, config)
+                    _backends_module._call_bedrock(SYSTEM_PROMPT, USER_MESSAGE, config)
         finally:
             if original == "NOT_PRESENT":
                 sys.modules.pop("anthropic", None)
@@ -284,7 +291,7 @@ class TestBedrockBackend:
 
         with patch.dict(sys.modules, {"anthropic": mock_anthropic}):
             with pytest.raises(eb.BackendError, match="Bedrock API call failed"):
-                eb._call_bedrock(SYSTEM_PROMPT, USER_MESSAGE, config)
+                _backends_module._call_bedrock(SYSTEM_PROMPT, USER_MESSAGE, config)
 
 
 # ===========================================================================
@@ -325,7 +332,7 @@ class TestOllamaBackend:
         )
 
         with patch("urllib.request.urlopen", side_effect=fake_urlopen):
-            eb._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
+            _backends_module._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
 
         assert captured_request["url"] == "http://localhost:11434/api/chat"
         assert captured_request["method"] == "POST"
@@ -341,7 +348,7 @@ class TestOllamaBackend:
         config = make_config(backend="ollama", model="llama3.2")
 
         with patch("urllib.request.urlopen", return_value=self._make_ollama_response('["a beat"]')):
-            result = eb._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
+            result = _backends_module._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
 
         assert result == '["a beat"]'
 
@@ -351,7 +358,7 @@ class TestOllamaBackend:
         config = make_config(backend="ollama", model="llama3.2")
 
         with patch("urllib.request.urlopen", return_value=self._make_ollama_response(fenced_content)):
-            result = eb._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
+            result = _backends_module._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
 
         # The returned value should be valid JSON (fences stripped)
         parsed = json.loads(result)
@@ -364,7 +371,7 @@ class TestOllamaBackend:
 
         with patch("urllib.request.urlopen", return_value=self._make_ollama_response(invalid_content)):
             with pytest.raises(eb.BackendError, match="not valid JSON"):
-                eb._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
+                _backends_module._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
 
     def test_raises_backend_error_on_http_error(self):
         """BackendError is raised on HTTP errors from the Ollama server."""
@@ -376,7 +383,7 @@ class TestOllamaBackend:
             url=None, code=500, msg="Internal Server Error", hdrs=None, fp=None
         )):
             with pytest.raises(eb.BackendError, match="HTTP error"):
-                eb._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
+                _backends_module._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
 
     def test_raises_backend_error_on_connection_error(self):
         """BackendError is raised when Ollama is not reachable."""
@@ -386,7 +393,7 @@ class TestOllamaBackend:
 
         with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("Connection refused")):
             with pytest.raises(eb.BackendError, match="connection error"):
-                eb._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
+                _backends_module._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
 
     def test_uses_custom_ollama_url(self):
         """A custom ollama_url from config is used in the request."""
@@ -403,7 +410,7 @@ class TestOllamaBackend:
         )
 
         with patch("urllib.request.urlopen", side_effect=fake_urlopen):
-            eb._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
+            _backends_module._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
 
         assert captured_url[0].startswith("http://192.168.1.10:11434")
 
@@ -419,7 +426,7 @@ class TestCallModelDispatch:
         """call_model routes to _call_claude_code when backend=claude-code."""
         config = make_config(backend="claude-code")
         with patch.object(_backends_module, "_call_claude_code", return_value="response") as mock:
-            result = eb.call_model(SYSTEM_PROMPT, USER_MESSAGE, config)
+            result = _backends_module.call_model(SYSTEM_PROMPT, USER_MESSAGE, config)
         mock.assert_called_once()
         assert result == "response"
 
@@ -427,7 +434,7 @@ class TestCallModelDispatch:
         """call_model routes to _call_bedrock when backend=bedrock."""
         config = make_config(backend="bedrock")
         with patch.object(_backends_module, "_call_bedrock", return_value="response") as mock:
-            result = eb.call_model(SYSTEM_PROMPT, USER_MESSAGE, config)
+            result = _backends_module.call_model(SYSTEM_PROMPT, USER_MESSAGE, config)
         mock.assert_called_once()
         assert result == "response"
 
@@ -435,7 +442,7 @@ class TestCallModelDispatch:
         """call_model routes to _call_ollama when backend=ollama."""
         config = make_config(backend="ollama")
         with patch.object(_backends_module, "_call_ollama", return_value="response") as mock:
-            result = eb.call_model(SYSTEM_PROMPT, USER_MESSAGE, config)
+            result = _backends_module.call_model(SYSTEM_PROMPT, USER_MESSAGE, config)
         mock.assert_called_once()
         assert result == "response"
 
@@ -443,13 +450,13 @@ class TestCallModelDispatch:
         """call_model raises BackendError for an unrecognized backend name."""
         config = make_config(backend="unknown-backend")
         with pytest.raises(eb.BackendError, match="Unknown backend"):
-            eb.call_model(SYSTEM_PROMPT, USER_MESSAGE, config)
+            _backends_module.call_model(SYSTEM_PROMPT, USER_MESSAGE, config)
 
     def test_default_backend_is_claude_code(self):
         """When no backend is specified, claude-code is used by default."""
         config = {k: v for k, v in BASE_CONFIG.items() if k != "backend"}
         with patch.object(_backends_module, "_call_claude_code", return_value="response") as mock:
-            eb.call_model(SYSTEM_PROMPT, USER_MESSAGE, config)
+            _backends_module.call_model(SYSTEM_PROMPT, USER_MESSAGE, config)
         mock.assert_called_once()
 
 
@@ -487,7 +494,7 @@ class TestClaudeCodeFallbackPaths:
             with patch("os.path.isfile", return_value=True):
                 with patch("os.access", return_value=True):
                     with patch("subprocess.run", side_effect=fake_run):
-                        result = eb._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
+                        result = _backends_module._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
 
         assert result == "ok"
         assert captured_cmd[0] in (
@@ -508,7 +515,7 @@ class TestClaudeCodeFallbackPaths:
             with patch("os.path.isfile", return_value=True):
                 with patch("os.access", return_value=True):
                     with pytest.raises(eb.BackendError, match="claude"):
-                        eb._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
+                        _backends_module._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
 
     def test_raises_backend_error_when_all_fallbacks_absent(self):
         """
@@ -520,7 +527,7 @@ class TestClaudeCodeFallbackPaths:
         with patch("shutil.which", return_value=None):
             with patch("os.path.isfile", return_value=False):
                 with pytest.raises(eb.BackendError) as exc_info:
-                    eb._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
+                    _backends_module._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
 
         assert "claude_path" in str(exc_info.value) or "'claude'" in str(exc_info.value)
 
@@ -537,7 +544,7 @@ class TestClaudeCodeFallbackPaths:
         with patch("shutil.which", return_value="/usr/local/bin/claude"):
             with patch("subprocess.run", side_effect=boom):
                 with pytest.raises(eb.BackendError, match="failed to start"):
-                    eb._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
+                    _backends_module._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
 
     def test_raises_backend_error_on_empty_stdout(self):
         """
@@ -556,7 +563,7 @@ class TestClaudeCodeFallbackPaths:
         with patch("shutil.which", return_value="/usr/local/bin/claude"):
             with patch("subprocess.run", side_effect=fake_run):
                 with pytest.raises(eb.BackendError) as exc_info:
-                    eb._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
+                    _backends_module._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
 
         msg = str(exc_info.value)
         assert "no output" in msg.lower() or "empty" in msg.lower() or "code 0" in msg.lower()
@@ -579,7 +586,7 @@ class TestClaudeCodeFallbackPaths:
         with patch("shutil.which", return_value="/usr/local/bin/claude"):
             with patch("subprocess.run", side_effect=fake_run):
                 with pytest.raises(eb.BackendError, match="CLI error"):
-                    eb._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
+                    _backends_module._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
 
 
 # ===========================================================================
@@ -607,7 +614,7 @@ class TestBedrockBackendErrorPaths:
 
         with patch.dict(sys.modules, {"anthropic": mock_anthropic}):
             with pytest.raises(eb.BackendError, match="empty content"):
-                eb._call_bedrock(SYSTEM_PROMPT, USER_MESSAGE, make_config(backend="bedrock"))
+                _backends_module._call_bedrock(SYSTEM_PROMPT, USER_MESSAGE, make_config(backend="bedrock"))
 
     def test_raises_backend_error_on_non_text_content_block(self):
         """
@@ -621,7 +628,7 @@ class TestBedrockBackendErrorPaths:
 
         with patch.dict(sys.modules, {"anthropic": mock_anthropic}):
             with pytest.raises(eb.BackendError, match="unexpected content block"):
-                eb._call_bedrock(SYSTEM_PROMPT, USER_MESSAGE, make_config(backend="bedrock"))
+                _backends_module._call_bedrock(SYSTEM_PROMPT, USER_MESSAGE, make_config(backend="bedrock"))
 
     def test_raises_backend_error_on_empty_text_response(self):
         """
@@ -636,7 +643,7 @@ class TestBedrockBackendErrorPaths:
 
         with patch.dict(sys.modules, {"anthropic": mock_anthropic}):
             with pytest.raises(eb.BackendError, match="empty response"):
-                eb._call_bedrock(SYSTEM_PROMPT, USER_MESSAGE, make_config(backend="bedrock"))
+                _backends_module._call_bedrock(SYSTEM_PROMPT, USER_MESSAGE, make_config(backend="bedrock"))
 
 
 # ===========================================================================
@@ -671,7 +678,7 @@ class TestOllamaBackendErrorPaths:
 
         with patch("urllib.request.urlopen", side_effect=TimeoutError("timed out")):
             with pytest.raises(eb.BackendError, match="timed out"):
-                eb._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
+                _backends_module._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
 
     def test_raises_backend_error_on_invalid_json_response_body(self):
         """
@@ -683,7 +690,7 @@ class TestOllamaBackendErrorPaths:
 
         with patch("urllib.request.urlopen", return_value=raw_resp):
             with pytest.raises(eb.BackendError, match="invalid JSON"):
-                eb._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
+                _backends_module._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
 
     def test_raises_backend_error_when_message_content_field_missing(self):
         """
@@ -696,7 +703,7 @@ class TestOllamaBackendErrorPaths:
 
         with patch("urllib.request.urlopen", return_value=raw_resp):
             with pytest.raises(eb.BackendError, match="message.content"):
-                eb._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
+                _backends_module._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
 
     def test_raises_backend_error_on_generic_urlopen_exception(self):
         """
@@ -707,7 +714,7 @@ class TestOllamaBackendErrorPaths:
 
         with patch("urllib.request.urlopen", side_effect=OSError("socket error")):
             with pytest.raises(eb.BackendError, match="request failed"):
-                eb._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
+                _backends_module._call_ollama(SYSTEM_PROMPT, USER_MESSAGE, config)
 
 
 # ===========================================================================
@@ -743,7 +750,7 @@ class TestClaudeCodeSubprocessHardening:
 
         with patch("shutil.which", return_value="/usr/local/bin/claude"):
             with patch("subprocess.run", side_effect=self._fake_run_capture(captured)):
-                eb._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
+                _backends_module._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
 
         assert captured.get("start_new_session") is True, (
             "start_new_session must be True to detach the subprocess from the parent "
@@ -767,7 +774,7 @@ class TestClaudeCodeSubprocessHardening:
 
         with patch("shutil.which", return_value="/usr/local/bin/claude"):
             with patch("subprocess.run", side_effect=self._fake_run_capture(captured)):
-                eb._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
+                _backends_module._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
 
         expected = str(fake_home / ".claude" / "cyberbrain")
         assert captured.get("cwd") == expected, (
@@ -785,7 +792,7 @@ class TestClaudeCodeSubprocessHardening:
 
         with patch("shutil.which", return_value="/usr/local/bin/claude"):
             with patch("subprocess.run", side_effect=self._fake_run_capture(captured)):
-                eb._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
+                _backends_module._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
 
         assert captured.get("cwd") == "/custom/neutral/dir"
 
@@ -812,7 +819,7 @@ class TestClaudeCodeSubprocessHardening:
         config = make_config(backend="claude-code")
         with patch("shutil.which", return_value="/usr/local/bin/claude"):
             with patch("subprocess.run", side_effect=fake_run):
-                eb._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
+                _backends_module._call_claude_code(SYSTEM_PROMPT, USER_MESSAGE, config)
 
         for var in _backends_module._STRIP_VARS:
             assert var not in captured_env, (

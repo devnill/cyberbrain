@@ -61,7 +61,7 @@ Nothing — prompts are passive template files loaded by other modules.
 
 ## Internal Design Notes
 
-- Directory: `prompts/` (23 files)
+- Directory: `src/cyberbrain/prompts/` (23 files)
 - Restructure has the most prompts (8 files) reflecting its multi-phase architecture
 - `extract-beats-system.md` is the longest prompt (~7,900 chars) — defines the core beat extraction behavior
 - `claude-desktop-project.md` (~6,500 chars) is a standalone guide not loaded by any Python code — it's meant to be pasted into Claude Desktop project settings
