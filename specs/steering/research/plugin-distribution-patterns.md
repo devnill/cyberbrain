@@ -111,13 +111,13 @@ Yes — uvx and uv tool install both support git sources directly:
 
 ```bash
 # uvx from GitHub main branch
-uvx --from git+https://github.com/danshipper/cyberbrain@main cyberbrain-mcp
+uvx --from git+https://github.com/devnill/cyberbrain@main cyberbrain-mcp
 
 # uv tool install from GitHub
-uv tool install git+https://github.com/danshipper/cyberbrain
+uv tool install git+https://github.com/devnill/cyberbrain
 
 # Specific tag or commit
-uvx --from git+https://github.com/danshipper/cyberbrain@v1.2.0 cyberbrain-mcp
+uvx --from git+https://github.com/devnill/cyberbrain@v1.2.0 cyberbrain-mcp
 ```
 
 **Requirements for this to work:**
@@ -188,7 +188,7 @@ cyberbrain/                         # plugin root (the git repo)
   "author": {
     "name": "Dan Shipper"
   },
-  "repository": "https://github.com/danshipper/cyberbrain"
+  "repository": "https://github.com/devnill/cyberbrain"
 }
 ```
 
@@ -257,15 +257,15 @@ cyberbrain/                         # plugin root (the git repo)
 ### Install flow with plugin system
 ```bash
 # User adds cyberbrain's GitHub repo as a marketplace (one time)
-/plugin marketplace add danshipper/cyberbrain
+/plugin marketplace add devnill/cyberbrain
 
 # User installs cyberbrain plugin
-/plugin install cyberbrain@danshipper-cyberbrain
+/plugin install cyberbrain@devnill-cyberbrain
 
 # On first use, cb_configure guides vault setup (already implemented)
 
 # Updates
-/plugin update cyberbrain@danshipper-cyberbrain
+/plugin update cyberbrain@devnill-cyberbrain
 # or auto-update if enabled in marketplace settings
 ```
 
@@ -344,17 +344,17 @@ The existing `hooks/pre-compact-extract.sh` and `hooks/session-end-extract.sh` s
 
 ```bash
 # Step 1: Add marketplace (one time, registers cyberbrain as a known source)
-/plugin marketplace add danshipper/cyberbrain
+/plugin marketplace add devnill/cyberbrain
 
 # Step 2: Install
-/plugin install cyberbrain@danshipper-cyberbrain
+/plugin install cyberbrain@devnill-cyberbrain
 
 # Step 3: First use — cb_configure guides vault setup
 # (in Claude Code or Claude Desktop, with cyberbrain MCP tools active)
 # Call cb_configure(discover=True) to set vault_path
 
 # Updates (whenever a new version is published)
-/plugin update cyberbrain@danshipper-cyberbrain
+/plugin update cyberbrain@devnill-cyberbrain
 ```
 
 That's it. No cloning, no venv creation, no bash scripts, no settings.json editing.
@@ -401,7 +401,7 @@ And users with uv can already test the uvx path via git source:
 ```json
 {
   "command": "uvx",
-  "args": ["--from", "git+https://github.com/danshipper/cyberbrain", "cyberbrain-mcp"]
+  "args": ["--from", "git+https://github.com/devnill/cyberbrain", "cyberbrain-mcp"]
 }
 ```
 

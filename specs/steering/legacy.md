@@ -246,3 +246,17 @@ A: Sequential. This is a cohesive restructuring task that touches many files.
 - Update hooks to call entry points
 - Update tests to use package imports
 - Sequential execution
+
+---
+## Decision — 2026-03-16: install.sh and uninstall.sh removed
+
+`install.sh` and `uninstall.sh` were deleted. Reasons:
+
+1. **Hooks are Claude Code-only.** PreCompact and SessionEnd hooks are not supported by Claude Desktop or other MCP clients. The Claude Code plugin system registers hooks automatically via `hooks/hooks.json` — `install.sh` registering them in `settings.json` was redundant.
+
+2. **MCP registration is plugin-handled for Claude Code.** The plugin auto-registers the MCP server. Claude Desktop doesn't support the plugin system, but it also doesn't support hooks — so the only thing install.sh provided for Desktop was MCP registration in `claude_desktop_config.json`, which is a one-line manual step.
+
+3. **Dependencies are handled by `uv run`.** The plugin launches the MCP server via `uv run --directory ${CLAUDE_PLUGIN_ROOT}`, which manages the venv automatically. No pre-created venv needed.
+
+4. **YAGNI.** With the plugin covering the Claude Code path entirely, install.sh had no remaining use case that justified its complexity. Config setup is handled by `cb_configure`.
+

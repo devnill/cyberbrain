@@ -34,10 +34,10 @@ Cyberbrain can be installed as a Claude Code plugin for automatic updates and ve
 ```bash
 # Prerequisites: uv installed (brew install uv)
 # Add plugin marketplace (one time)
-claude plugin marketplace add danshipper/cyberbrain
+claude plugin marketplace add devnill/cyberbrain
 
 # Install the plugin
-claude plugin install cyberbrain@danshipper-cyberbrain
+claude plugin install cyberbrain@devnill-cyberbrain
 
 # First-time setup: configure vault path
 # The cb_configure tool will guide you through vault discovery
@@ -48,27 +48,18 @@ The plugin system handles:
 - MCP server launch via `uv run`
 - Version tracking and updates via `/plugin update`
 
-**Config location:** `~/.claude/cyberbrain/config.json` (unchanged from install.sh)
+**Config location:** `~/.claude/cyberbrain/config.json`
 
 ### Development / Manual Installation
 
-For development or users who prefer manual control:
-
 ```bash
 # Clone and install dependencies
-git clone https://github.com/danshipper/cyberbrain.git
+git clone https://github.com/devnill/cyberbrain.git
 cd cyberbrain
 uv sync  # or: pip install -e .
 
 # Run tests
 python3 -m pytest tests/
-```
-
-For Claude Desktop, use `install.sh` which handles MCP registration:
-
-```bash
-bash install.sh        # install to ~/.claude/
-bash uninstall.sh [--yes]  # uninstall
 ```
 
 ### Validate the extractor directly:
@@ -239,20 +230,18 @@ Claude Code / Claude Desktop (process A — user session, expensive model)
 
 ## Distribution
 
-Cyberbrain can be installed via Claude Code's plugin system or manually via `install.sh`.
-
 ### Plugin Installation (Claude Code)
 
 The plugin system handles hook registration and MCP server launch automatically:
 
 1. Add the cyberbrain repo as a marketplace:
    ```
-   /plugin marketplace add danshipper/cyberbrain
+   /plugin marketplace add devnill/cyberbrain
    ```
 
 2. Install the plugin:
    ```
-   /plugin install cyberbrain@danshipper-cyberbrain
+   /plugin install cyberbrain@devnill-cyberbrain
    ```
 
 3. Configure the vault path:
@@ -262,24 +251,7 @@ The plugin system handles hook registration and MCP server launch automatically:
 
 4. Updates:
    ```
-   /plugin update cyberbrain@danshipper-cyberbrain
+   /plugin update cyberbrain@devnill-cyberbrain
    ```
 
 The plugin uses `uv run` to manage dependencies automatically — no venv setup required.
-
-### Manual Installation (install.sh)
-
-For Claude Desktop or manual setup:
-
-```bash
-bash install.sh        # install to ~/.claude/cyberbrain/
-bash uninstall.sh      # uninstall
-```
-
-`install.sh` handles:
-- Config initialization (vault path prompt)
-- File migration for existing installs
-- Claude Desktop MCP registration
-- Python dependency installation
-
-The package includes hooks, `src/cyberbrain/extractors/`, `src/cyberbrain/prompts/`, and `src/cyberbrain/mcp/`.
