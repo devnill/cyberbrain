@@ -6,5 +6,5 @@
     "name": "Dan Singer"
   },
   "repository": "https://github.com/devnill/cyberbrain",
-  "mcpServers": "./mcp.json"
+  "mcpServers": "./.mcp.json"
 }
