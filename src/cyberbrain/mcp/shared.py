@@ -7,27 +7,31 @@ from pathlib import Path
 # 1. Primary: relative to this file (works in plugin cache via ${CLAUDE_PLUGIN_ROOT})
 # 2. Fallback: legacy installed location for existing installs
 _PROMPTS_DIR_PRIMARY = Path(__file__).parent.parent / "prompts"
-_PROMPTS_DIR_LEGACY = Path.home() / ".claude" / "cyberbrain" / "prompts"
+from cyberbrain.extractors.state import PROMPTS_DIR_LEGACY as _PROMPTS_DIR_LEGACY
 
 # ---------------------------------------------------------------------------
-# Module-level import of extract_beats — fail fast at startup, not mid-session
+# Direct imports from source modules — avoids the extract_beats re-export hub,
+# which lets tests mock individual modules without sys.modules manipulation.
 # ---------------------------------------------------------------------------
 
 try:
-    from cyberbrain.extractors.extract_beats import (
-        extract_beats as _extract_beats,
-        parse_jsonl_transcript,
-        write_beat, autofile_beat, write_journal_entry,
-        BackendError,
-        resolve_config as _resolve_config,
+    from cyberbrain.extractors.autofile import autofile_beat
+    from cyberbrain.extractors.backends import BackendError
+    from cyberbrain.extractors.backends import (
         _call_claude_code as _call_claude_code_backend,
-        RUNS_LOG_PATH,
     )
-    from cyberbrain.extractors.frontmatter import parse_frontmatter as _parse_frontmatter
+    from cyberbrain.extractors.config import resolve_config as _resolve_config
+    from cyberbrain.extractors.extractor import extract_beats as _extract_beats
+    from cyberbrain.extractors.frontmatter import (
+        parse_frontmatter as _parse_frontmatter,
+    )
+    from cyberbrain.extractors.run_log import RUNS_LOG_PATH, write_journal_entry
+    from cyberbrain.extractors.transcript import parse_jsonl_transcript
+    from cyberbrain.extractors.vault import write_beat
 except ImportError as e:
     raise RuntimeError(
-        f"Could not import extract_beats from cyberbrain.extractors. "
-        f"Tried plugin location and ~/.claude/cyberbrain/extractors/: {e}. "
+        f"Could not import cyberbrain extractors. "
+        f"Ensure cyberbrain is installed: {e}. "
         "Run install.sh or ensure plugin is correctly installed."
     ) from e
 
@@ -41,8 +45,9 @@ def _get_search_backend(config: dict):
     if _search_backend is None:
         try:
             from cyberbrain.extractors.search_backends import get_search_backend
+
             _search_backend = get_search_backend(config)
-        except Exception:
+        except Exception:  # intentional: backend init failure (missing optional deps) is non-fatal; falls back to grep
             _search_backend = None
     return _search_backend
 
@@ -130,8 +135,10 @@ def _prune_index(config: dict) -> int:
     if backend is None or not hasattr(backend, "prune_stale_notes"):
         return 0
     try:
-        return backend.prune_stale_notes() or 0
-    except Exception:
+        return backend.prune_stale_notes() or 0  # type: ignore[reportAttributeAccessIssue]  # runtime duck-typed: hasattr guard above
+    except (
+        Exception
+    ):  # intentional: prune failure is non-fatal; stale entries are harmless
         return 0
 
 
@@ -147,6 +154,8 @@ def _index_paths(paths: list, config: dict) -> int:
             fm = _parse_frontmatter(content)
             backend.index_note(str(path), fm)
             count += 1
-        except Exception:
+        except (
+            Exception
+        ):  # intentional: per-path indexing failure is non-fatal; continue to next path
             pass
     return count

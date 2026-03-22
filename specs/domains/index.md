@@ -1,6 +1,6 @@
 # Domain Registry
 
-current_cycle: 3
+current_cycle: 12
 
 ## Domains
 
@@ -17,7 +17,7 @@ Knowledge retrieval: three-tier search backends (grep/fts5/hybrid), recall, LLM 
 Files: domains/retrieval/policies.md, decisions.md, questions.md
 
 ### distribution
-Packaging and delivery: Claude Code plugin system, pyproject.toml, uv dependency management, MCP server launch, hook script path resolution, two-level config, and install.sh for Claude Desktop. This domain covers how the system is installed, updated, and configured.
+Packaging and delivery: Claude Code plugin system, pyproject.toml, uv dependency management, MCP server launch, hook script path resolution, two-level config, install.sh for Claude Desktop, and quality tooling (ruff, basedpyright, pre-commit). This domain covers how the system is installed, updated, configured, and quality-gated.
 Files: domains/distribution/policies.md, decisions.md, questions.md
 
 ---
@@ -31,3 +31,5 @@ Files: domains/distribution/policies.md, decisions.md, questions.md
 **Graceful degradation**: GP-8 applies differently in each domain — hooks must never block (capture), bad curation must surface to user rather than fail silently (curation), search degrades through tiers (retrieval), plugin paths must not hard-fail on missing files (distribution).
 
 **Cycle 003 completion**: All 9 work items from cycles 002-003 are now complete and reviewed: WI-042 (intake interface), WI-044 (filing accuracy), WI-045 (automatic indexing), WI-046 (retrieval interface), WI-047 (vault CLAUDE.md update), WI-048 (pytest markers), WI-049 (affected-only plugin), WI-050 (quiet defaults), WI-051 (test wrapper). See archive/cycles/003/ for review artifacts.
+
+**CLAUDE.md stale after restructure decomposition**: CLAUDE.md still references `restructure.py` as a single file. The module is now a sub-package. See distribution/Q-12.

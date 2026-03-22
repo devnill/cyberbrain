@@ -64,6 +64,7 @@ def _get_file_module():
 # FakeMCP
 # ---------------------------------------------------------------------------
 
+
 class FakeMCP:
     def __init__(self):
         self.tools = {}
@@ -74,6 +75,7 @@ class FakeMCP:
             self.tools[fn.__name__] = fn
             self.annotations[fn.__name__] = annotations
             return fn
+
         return decorator
 
 
@@ -122,6 +124,7 @@ def _base_config(vault: Path, **overrides) -> dict:
 # cb_extract — path restriction
 # ===========================================================================
 
+
 class TestCbExtractPathRestriction:
     """transcript_path must be within ~/.claude/projects/."""
 
@@ -166,7 +169,9 @@ class TestCbExtractPathRestriction:
         mod = _get_extract_module()
         cb_extract = _register_extract()
         with patch.object(mod, "_load_config", return_value=config):
-            with patch.object(mod, "parse_jsonl_transcript", return_value="User: hello"):
+            with patch.object(
+                mod, "parse_jsonl_transcript", return_value="User: hello"
+            ):
                 with patch.object(mod, "_extract_beats", return_value=[]):
                     result = cb_extract(transcript_path=str(transcript))
 
@@ -176,6 +181,7 @@ class TestCbExtractPathRestriction:
 # ===========================================================================
 # cb_extract — plain text transcript
 # ===========================================================================
+
 
 class TestCbExtractPlainText:
     """Non-.jsonl transcripts are read as plain text."""
@@ -187,7 +193,9 @@ class TestCbExtractPlainText:
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
 
         transcript = home / ".claude" / "projects" / "export.txt"
-        transcript.write_text("User: what is jwt?\nAssistant: JWT is a token format.", encoding="utf-8")
+        transcript.write_text(
+            "User: what is jwt?\nAssistant: JWT is a token format.", encoding="utf-8"
+        )
 
         vault = tmp_path / "vault"
         vault.mkdir()
@@ -224,7 +232,9 @@ class TestCbExtractPlainText:
         mod = _get_extract_module()
         cb_extract = _register_extract()
         with patch.object(mod, "_load_config", return_value=config):
-            with patch("pathlib.Path.read_text", side_effect=OSError("permission denied")):
+            with patch(
+                "pathlib.Path.read_text", side_effect=OSError("permission denied")
+            ):
                 with pytest.raises(ToolError, match="Failed to read"):
                     cb_extract(transcript_path=str(transcript))
 
@@ -233,10 +243,13 @@ class TestCbExtractPlainText:
 # cb_extract — BackendError
 # ===========================================================================
 
+
 class TestCbExtractBackendError:
     """BackendError from _extract_beats is wrapped in ToolError."""
 
-    def test_backend_error_raises_tool_error_with_backend_name(self, tmp_path, monkeypatch):
+    def test_backend_error_raises_tool_error_with_backend_name(
+        self, tmp_path, monkeypatch
+    ):
         """BackendError becomes ToolError mentioning the backend name."""
         from fastmcp.exceptions import ToolError
 
@@ -258,8 +271,14 @@ class TestCbExtractBackendError:
         mod = _get_extract_module()
         cb_extract = _register_extract()
         with patch.object(mod, "_load_config", return_value=config):
-            with patch.object(mod, "parse_jsonl_transcript", return_value="User: hello"):
-                with patch.object(mod, "_extract_beats", side_effect=BackendError("connection refused")):
+            with patch.object(
+                mod, "parse_jsonl_transcript", return_value="User: hello"
+            ):
+                with patch.object(
+                    mod,
+                    "_extract_beats",
+                    side_effect=BackendError("connection refused"),
+                ):
                     with pytest.raises(ToolError, match="ollama"):
                         cb_extract(transcript_path=str(transcript))
 
@@ -267,6 +286,7 @@ class TestCbExtractBackendError:
 # ===========================================================================
 # cb_extract — autofile path
 # ===========================================================================
+
 
 class TestCbExtractAutofile:
     """When autofile=True, autofile_beat is called instead of write_beat."""
@@ -297,7 +317,9 @@ class TestCbExtractAutofile:
         mock_write = MagicMock(return_value=None)
 
         with patch.object(mod, "_load_config", return_value=config):
-            with patch.object(mod, "parse_jsonl_transcript", return_value="User: hello"):
+            with patch.object(
+                mod, "parse_jsonl_transcript", return_value="User: hello"
+            ):
                 with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT]):
                     with patch.object(mod, "autofile_beat", mock_autofile):
                         with patch.object(mod, "write_beat", mock_write):
@@ -333,7 +355,9 @@ class TestCbExtractAutofile:
         mock_write = MagicMock(return_value=fake_path)
 
         with patch.object(mod, "_load_config", return_value=config):
-            with patch.object(mod, "parse_jsonl_transcript", return_value="User: hello"):
+            with patch.object(
+                mod, "parse_jsonl_transcript", return_value="User: hello"
+            ):
                 with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT]):
                     with patch.object(mod, "autofile_beat", mock_autofile):
                         with patch.object(mod, "write_beat", mock_write):
@@ -346,6 +370,7 @@ class TestCbExtractAutofile:
 # ===========================================================================
 # cb_extract — daily journal
 # ===========================================================================
+
 
 class TestCbExtractDailyJournal:
     """When daily_journal=True and beats were written, write_journal_entry is called."""
@@ -376,7 +401,9 @@ class TestCbExtractDailyJournal:
         mock_write = MagicMock(return_value=fake_path)
 
         with patch.object(mod, "_load_config", return_value=config):
-            with patch.object(mod, "parse_jsonl_transcript", return_value="User: hello"):
+            with patch.object(
+                mod, "parse_jsonl_transcript", return_value="User: hello"
+            ):
                 with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT]):
                     with patch.object(mod, "write_beat", mock_write):
                         with patch.object(mod, "write_journal_entry", mock_journal):
@@ -384,7 +411,9 @@ class TestCbExtractDailyJournal:
 
         mock_journal.assert_called_once()
 
-    def test_daily_journal_not_called_when_no_beats_written(self, tmp_path, monkeypatch):
+    def test_daily_journal_not_called_when_no_beats_written(
+        self, tmp_path, monkeypatch
+    ):
         """daily_journal=True but no beats written -> write_journal_entry NOT called."""
         home = tmp_path / "home"
         (home / ".claude" / "projects").mkdir(parents=True)
@@ -405,7 +434,9 @@ class TestCbExtractDailyJournal:
         mock_journal = MagicMock()
 
         with patch.object(mod, "_load_config", return_value=config):
-            with patch.object(mod, "parse_jsonl_transcript", return_value="User: hello"):
+            with patch.object(
+                mod, "parse_jsonl_transcript", return_value="User: hello"
+            ):
                 with patch.object(mod, "_extract_beats", return_value=[]):
                     with patch.object(mod, "write_journal_entry", mock_journal):
                         result = cb_extract(transcript_path=str(transcript))
@@ -417,6 +448,7 @@ class TestCbExtractDailyJournal:
 # ===========================================================================
 # cb_file — autofile path
 # ===========================================================================
+
 
 class TestCbFileAutofile:
     """cb_file: autofile routing behavior."""
@@ -440,7 +472,9 @@ class TestCbFileAutofile:
             with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT]):
                 with patch.object(mod, "autofile_beat", mock_autofile):
                     with patch.object(mod, "write_beat", mock_write):
-                        result = cb_file(content="Use connection pooling for all DB access.")
+                        result = cb_file(
+                            content="Use connection pooling for all DB access."
+                        )
 
         mock_autofile.assert_called_once()
         mock_write.assert_not_called()
@@ -493,7 +527,9 @@ class TestCbFileAutofile:
             with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT]):
                 with patch.object(mod, "autofile_beat", mock_autofile):
                     with patch.object(mod, "write_beat", mock_write):
-                        result = cb_file(content="Use connection pooling for all DB access.")
+                        result = cb_file(
+                            content="Use connection pooling for all DB access."
+                        )
 
         mock_autofile.assert_not_called()
         mock_write.assert_called_once()
@@ -502,6 +538,7 @@ class TestCbFileAutofile:
 # ===========================================================================
 # cb_file — daily journal
 # ===========================================================================
+
 
 class TestCbFileDailyJournal:
     """cb_file: daily_journal=True calls write_journal_entry after filing."""
@@ -546,6 +583,7 @@ class TestCbFileDailyJournal:
                     with patch.object(mod, "write_journal_entry", mock_journal):
                         # write_beat returns None -> written list is empty -> ToolError raised
                         from fastmcp.exceptions import ToolError
+
                         with pytest.raises(ToolError):
                             cb_file(content="Use connection pooling for all DB access.")
 
@@ -555,6 +593,7 @@ class TestCbFileDailyJournal:
 # ===========================================================================
 # cb_file — BackendError
 # ===========================================================================
+
 
 class TestCbFileBackendError:
     """BackendError from _extract_beats is wrapped in ToolError."""
@@ -571,7 +610,9 @@ class TestCbFileBackendError:
         mod = _get_file_module()
         cb_file = _register_file()
         with patch.object(mod, "_load_config", return_value=config):
-            with patch.object(mod, "_extract_beats", side_effect=BackendError("timeout")):
+            with patch.object(
+                mod, "_extract_beats", side_effect=BackendError("timeout")
+            ):
                 with pytest.raises(ToolError, match="bedrock"):
                     cb_file(content="some content to file")
 
@@ -579,6 +620,7 @@ class TestCbFileBackendError:
 # ===========================================================================
 # cb_file — no content worth filing
 # ===========================================================================
+
 
 class TestCbFileNoContent:
     """cb_file returns a message when no beats are extracted."""
@@ -601,6 +643,7 @@ class TestCbFileNoContent:
 # ===========================================================================
 # cb_file — type parameter (UC2: type override after extraction)
 # ===========================================================================
+
 
 class TestCbFileTypeOverride:
     """type forces the beat type after extraction (UC2: single-beat capture)."""
@@ -658,15 +701,16 @@ class TestCbFileTypeOverride:
 
         assert len(captured_beats) == 1
         result_tags = captured_beats[0]["tags"]
-        assert "postgres" in result_tags   # from LLM
+        assert "postgres" in result_tags  # from LLM
         assert "performance" in result_tags  # from LLM
-        assert "python" in result_tags     # from caller
-        assert "async" in result_tags      # from caller
+        assert "python" in result_tags  # from caller
+        assert "async" in result_tags  # from caller
 
 
 # ===========================================================================
 # cb_file — document intake (UC3)
 # ===========================================================================
+
 
 class TestCbFileDocumentIntake:
     """cb_file with title provided: document intake mode (UC3)."""
@@ -936,6 +980,7 @@ class TestCbFileDocumentIntake:
 # cb_extract — transcript truncation and vault CLAUDE.md reading
 # ===========================================================================
 
+
 class TestCbExtractAdditional:
     """Additional coverage for less common paths."""
 
@@ -986,7 +1031,9 @@ class TestCbExtractAdditional:
         vault.mkdir()
         # Write a vault CLAUDE.md
         claude_md = vault / "CLAUDE.md"
-        claude_md.write_text("# Vault Instructions\n\nUse type: decision, insight.", encoding="utf-8")
+        claude_md.write_text(
+            "# Vault Instructions\n\nUse type: decision, insight.", encoding="utf-8"
+        )
 
         config = _base_config(vault, autofile=True)
 
@@ -999,10 +1046,14 @@ class TestCbExtractAdditional:
         mock_autofile = MagicMock(return_value=fake_path)
 
         with patch.object(mod, "_load_config", return_value=config):
-            with patch.object(mod, "parse_jsonl_transcript", return_value="User: hello"):
+            with patch.object(
+                mod, "parse_jsonl_transcript", return_value="User: hello"
+            ):
                 with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT]):
                     with patch.object(mod, "autofile_beat", mock_autofile):
-                        with patch.object(mod, "write_beat", MagicMock(return_value=None)):
+                        with patch.object(
+                            mod, "write_beat", MagicMock(return_value=None)
+                        ):
                             cb_extract(transcript_path=str(transcript))
 
         # autofile_beat should have been called with vault_context containing the CLAUDE.md content
@@ -1031,9 +1082,13 @@ class TestCbExtractAdditional:
         cb_extract = _register_extract()
 
         with patch.object(mod, "_load_config", return_value=config):
-            with patch.object(mod, "parse_jsonl_transcript", return_value="User: hello"):
+            with patch.object(
+                mod, "parse_jsonl_transcript", return_value="User: hello"
+            ):
                 with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT]):
-                    with patch.object(mod, "write_beat", side_effect=OSError("disk full")):
+                    with patch.object(
+                        mod, "write_beat", side_effect=OSError("disk full")
+                    ):
                         result = cb_extract(transcript_path=str(transcript))
 
         # Error is recorded in the summary, not raised
@@ -1044,6 +1099,7 @@ class TestCbExtractAdditional:
 # cb_file — vault CLAUDE.md reading during autofile
 # ===========================================================================
 
+
 class TestCbFileAdditional:
     """Additional coverage for file.py autofile vault context reading."""
 
@@ -1053,7 +1109,9 @@ class TestCbFileAdditional:
         vault.mkdir()
         # Write a vault CLAUDE.md
         claude_md = vault / "CLAUDE.md"
-        claude_md.write_text("# Vault Guide\n\nUse types: decision, reference.", encoding="utf-8")
+        claude_md.write_text(
+            "# Vault Guide\n\nUse types: decision, reference.", encoding="utf-8"
+        )
 
         config = _base_config(vault, autofile=True)
 
@@ -1108,7 +1166,9 @@ class TestCbFileAutofileAsk:
 
         with patch.object(mod, "_load_config", return_value=config):
             with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT.copy()]):
-                with patch.object(mod, "autofile_beat", side_effect=mock_autofile_with_ask):
+                with patch.object(
+                    mod, "autofile_beat", side_effect=mock_autofile_with_ask
+                ):
                     result = cb_file(content="Some content to file.")
 
         assert "Confidence in routing is low" in result

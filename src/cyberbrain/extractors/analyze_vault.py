@@ -27,8 +27,8 @@ from pathlib import Path
 
 from cyberbrain.extractors.frontmatter import parse_frontmatter
 
-
 # ── helpers ──────────────────────────────────────────────────────────────────
+
 
 def extract_wikilinks(text: str) -> list[str]:
     """Extract all [[wikilink]] targets from markdown text."""
@@ -59,6 +59,7 @@ def note_name_style(stem: str) -> str:
 
 # ── main analysis ─────────────────────────────────────────────────────────────
 
+
 def analyze_vault(vault_path: str, max_samples: int = 3) -> dict:
     root = Path(vault_path).expanduser().resolve()
     if not root.exists():
@@ -66,16 +67,17 @@ def analyze_vault(vault_path: str, max_samples: int = 3) -> dict:
 
     # Exclude hidden directories (.obsidian, .trash, etc.)
     md_files = [
-        f for f in root.rglob("*.md")
+        f
+        for f in root.rglob("*.md")
         if not any(part.startswith(".") for part in f.relative_to(root).parts)
     ]
     total_notes = len(md_files)
 
     # ── per-note data ──
-    frontmatter_fields: Counter = Counter()          # field name → count of notes using it
+    frontmatter_fields: Counter = Counter()  # field name → count of notes using it
     field_values: dict[str, Counter] = defaultdict(Counter)  # field → value → count
     tag_counter: Counter = Counter()
-    link_counter: Counter = Counter()                # target note name → incoming link count
+    link_counter: Counter = Counter()  # target note name → incoming link count
     # note: outgoing_links tracks which notes have any outgoing links;
     # the dict values aren't used in the report but the keys are (via the else branch)
     outgoing_links: dict[str, list] = {}
@@ -178,7 +180,11 @@ def analyze_vault(vault_path: str, max_samples: int = 3) -> dict:
 
     # ── top fields ──
     top_fields = [
-        {"field": f, "note_count": c, "top_values": dict(field_values[f].most_common(8))}
+        {
+            "field": f,
+            "note_count": c,
+            "top_values": dict(field_values[f].most_common(8)),
+        }
         for f, c in frontmatter_fields.most_common(30)
     ]
 
@@ -186,7 +192,9 @@ def analyze_vault(vault_path: str, max_samples: int = 3) -> dict:
     top_tags = [{"tag": t, "count": c} for t, c in tag_counter.most_common(40)]
 
     # ── most linked notes (likely hub nodes) ──
-    hub_nodes = [{"note": n, "incoming_links": c} for n, c in link_counter.most_common(20)]
+    hub_nodes = [
+        {"note": n, "incoming_links": c} for n, c in link_counter.most_common(20)
+    ]
 
     # ── build report ──
     report = {
@@ -225,7 +233,9 @@ def analyze_vault(vault_path: str, max_samples: int = 3) -> dict:
 def main():
     parser = argparse.ArgumentParser(description="Analyze an Obsidian vault structure")
     parser.add_argument("vault_path", help="Path to the Obsidian vault root")
-    parser.add_argument("--max-samples", type=int, default=3, help="Max sample notes per entity type")
+    parser.add_argument(
+        "--max-samples", type=int, default=3, help="Max sample notes per entity type"
+    )
     parser.add_argument("--output", help="Write JSON to this file instead of stdout")
     args = parser.parse_args()
 

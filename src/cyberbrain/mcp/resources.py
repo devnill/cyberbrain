@@ -10,7 +10,7 @@ def _build_guide(recall_instruction: str, filing_instruction: str = "") -> str:
     if not filing_instruction:
         filing_instruction = (
             "- When something durable is learned or decided during the session\n"
-            "- When the user says \"save this\", \"remember this\", \"file this\""
+            '- When the user says "save this", "remember this", "file this"'
         )
     return f"""\
 # Cyberbrain — AI Usage Guide
@@ -77,12 +77,12 @@ def _get_guide() -> str:
     filing_instructions = {
         "suggest": (
             "When you identify something worth saving — a decision, a non-obvious insight, "
-            "a useful pattern — offer first: \"That's worth capturing — should I file it?\" "
+            'a useful pattern — offer first: "That\'s worth capturing — should I file it?" '
             "Call cb_file only after the user confirms."
         ),
         "auto": (
             "When you identify something worth saving, call cb_file immediately without asking. "
-            "Mention what was saved: \"Filed: [title]\"."
+            'Mention what was saved: "Filed: [title]".'
         ),
         "manual": (
             "NEVER suggest, offer, or mention filing. Do NOT proactively identify content worth saving. "
@@ -107,17 +107,19 @@ def register(mcp: FastMCP) -> None:
         Select this at the beginning of a new conversation to establish vault behavior.
         """
         guide = _get_guide()
-        return [Message(
-            role="user",
-            content=(
-                "I'm starting a new session. Please do the following:\n\n"
-                "1. Read my cyberbrain usage guide below — use it to govern how you interact "
-                "with my knowledge vault throughout this conversation.\n"
-                "2. Call cb_status() to check vault health. If the vault is not configured "
-                "or missing, guide me through cb_configure() before anything else.\n\n"
-                "Usage guide:\n\n" + guide
-            ),
-        )]
+        return [
+            Message(
+                role="user",
+                content=(
+                    "I'm starting a new session. Please do the following:\n\n"
+                    "1. Read my cyberbrain usage guide below — use it to govern how you interact "
+                    "with my knowledge vault throughout this conversation.\n"
+                    "2. Call cb_status() to check vault health. If the vault is not configured "
+                    "or missing, guide me through cb_configure() before anything else.\n\n"
+                    "Usage guide:\n\n" + guide
+                ),
+            )
+        ]
 
     @mcp.prompt()
     def recall() -> list[Message]:
@@ -125,13 +127,15 @@ def register(mcp: FastMCP) -> None:
         Scan the current conversation for unfamiliar topics and query the vault for each.
         Select this mid-session when context has been lost or you want the model to catch up.
         """
-        return [Message(
-            role="user",
-            content=(
-                "Scan our current conversation for topics you are uncertain about or that "
-                "I may have prior context on in my knowledge vault. For each unfamiliar "
-                "topic, call cb_recall to check what I know. If uncertain whether something "
-                "is in the vault, check it — don't skip it. Summarize what you find and "
-                "integrate it into our conversation naturally."
-            ),
-        )]
+        return [
+            Message(
+                role="user",
+                content=(
+                    "Scan our current conversation for topics you are uncertain about or that "
+                    "I may have prior context on in my knowledge vault. For each unfamiliar "
+                    "topic, call cb_recall to check what I know. If uncertain whether something "
+                    "is in the vault, check it — don't skip it. Summarize what you find and "
+                    "integrate it into our conversation naturally."
+                ),
+            )
+        ]

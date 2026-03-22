@@ -36,3 +36,9 @@
 - **Rationale**: Consolidation task was partially completed; full migration not yet done.
 - **Source**: specs/plan/architecture.md (Design Tension T4)
 - **Status**: resolved — WI-036 (cycle 002) fixed `search_backends.py` to use qualified imports. `shared.py` and `analyze_vault.py` were already delegating. All three files now use the canonical module. See curation/Q-3 (resolved).
+
+## D-7: restructure.py decomposed into phase-based sub-package with 11 modules
+- **Decision**: The 2,832-line `restructure.py` monolith was split into a sub-package of 11 files organized by pipeline phase: collect, cluster, cache, audit, decide, generate, execute, format, utils, pipeline, and __init__. Phase-based decomposition was chosen over horizontal (layer) or feature (vertical) alternatives.
+- **Rationale**: Phase-based split maps directly onto the existing audit → group → decide → generate → execute pipeline, making each phase independently testable and debuggable. Horizontal split would scatter related logic; vertical split would create artificial feature silos.
+- **Source**: archive/cycles/012/decision-log.md (D3); archive/incremental/062-decompose-restructure.md
+- **Status**: settled

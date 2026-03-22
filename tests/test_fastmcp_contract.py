@@ -8,18 +8,13 @@ framework API breakage that unit tests miss.
 """
 
 import asyncio
-import sys
-from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
-
-
 from fastmcp import FastMCP
+
 import cyberbrain.mcp.resources as resources_mod
-import cyberbrain.mcp.tools.recall as recall_mod
 import cyberbrain.mcp.tools.manage as manage_mod
+import cyberbrain.mcp.tools.recall as recall_mod
 
 BASE_CONFIG = {
     "vault_path": "/tmp/test-vault",
@@ -39,6 +34,7 @@ def _run(coro):
 # ---------------------------------------------------------------------------
 # Prompts — no mocking needed
 # ---------------------------------------------------------------------------
+
 
 class TestPromptContract:
     """render_prompt() succeeds and returns well-formed Message objects."""
@@ -66,6 +62,7 @@ class TestPromptContract:
 # Resource — patch _load_config
 # ---------------------------------------------------------------------------
 
+
 class TestResourceContract:
     """read_resource() succeeds and returns a string."""
 
@@ -86,6 +83,7 @@ class TestResourceContract:
 # ---------------------------------------------------------------------------
 # Tools — patch _load_config, verify dispatch succeeds
 # ---------------------------------------------------------------------------
+
 
 class TestToolContract:
     """call_tool() dispatches without FastMCP-level errors."""

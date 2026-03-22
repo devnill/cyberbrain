@@ -13,23 +13,28 @@ All LLM calls are mocked. Real filesystem operations use tmp_path.
 import json
 import sys
 import textwrap
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 REPO_ROOT = Path(__file__).parent.parent
 
-from cyberbrain.extractors.autofile import autofile_beat, _merge_relations_into_note, _build_folder_examples
+from cyberbrain.extractors.autofile import (
+    _build_folder_examples,
+    _merge_relations_into_note,
+    autofile_beat,
+)
 from cyberbrain.extractors.backends import BackendError
 
-NOW = datetime(2026, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _vault(tmp_path: Path) -> Path:
     v = tmp_path / "vault"
@@ -70,27 +75,33 @@ def _write(path: Path, text: str) -> Path:
 # _merge_relations_into_note
 # ===========================================================================
 
+
 class TestMergeRelationsIntoNote:
     """_merge_relations_into_note merges wikilinks into a note's related: field."""
 
     def test_appends_new_relation_wikilink(self, tmp_path):
         """A new target not already in related: is appended."""
         pytest.importorskip("ruamel.yaml")
-        note = _write(tmp_path / "Note.md", textwrap.dedent("""\
+        note = _write(
+            tmp_path / "Note.md",
+            textwrap.dedent("""\
             ---
             title: "My Note"
             related: []
             ---
 
             Body.
-        """))
+        """),
+        )
         _merge_relations_into_note(note, [{"target": "Postgres Pool"}])
         assert "Postgres Pool" in note.read_text()
 
     def test_does_not_duplicate_existing_relation(self, tmp_path):
         """A target already in related: is not added a second time."""
         pytest.importorskip("ruamel.yaml")
-        note = _write(tmp_path / "Note.md", textwrap.dedent("""\
+        note = _write(
+            tmp_path / "Note.md",
+            textwrap.dedent("""\
             ---
             title: "My Note"
             related:
@@ -98,7 +109,8 @@ class TestMergeRelationsIntoNote:
             ---
 
             Body.
-        """))
+        """),
+        )
         _merge_relations_into_note(note, [{"target": "Postgres Pool"}])
         # Count should be exactly 1 (the existing one, not duplicated)
         assert note.read_text().count("Postgres Pool") == 1
@@ -117,7 +129,9 @@ class TestMergeRelationsIntoNote:
             Body.
         """)
         note = _write(tmp_path / "Note.md", original)
-        _merge_relations_into_note(note, [{"target": "Target A"}, {"target": "Target B"}])
+        _merge_relations_into_note(
+            note, [{"target": "Target A"}, {"target": "Target B"}]
+        )
         assert note.read_text() == original
 
     def test_skips_note_without_frontmatter(self, tmp_path):
@@ -148,14 +162,17 @@ class TestMergeRelationsIntoNote:
     def test_non_list_existing_related_field(self, tmp_path):
         """When related: is a non-list value, it is treated as empty and new relations are added."""
         pytest.importorskip("ruamel.yaml")
-        note = _write(tmp_path / "Note.md", textwrap.dedent("""\
+        note = _write(
+            tmp_path / "Note.md",
+            textwrap.dedent("""\
             ---
             title: "My Note"
             related: "not-a-list"
             ---
 
             Body.
-        """))
+        """),
+        )
         _merge_relations_into_note(note, [{"target": "New Target"}])
         content = note.read_text()
         assert "New Target" in content
@@ -164,14 +181,17 @@ class TestMergeRelationsIntoNote:
         """Invalid YAML in frontmatter prints a warning and returns without writing."""
         pytest.importorskip("ruamel.yaml")
         # Frontmatter that triggers a YAML parse error with ruamel
-        note = _write(tmp_path / "Note.md", textwrap.dedent("""\
+        note = _write(
+            tmp_path / "Note.md",
+            textwrap.dedent("""\
             ---
             title: [unclosed
             related: []
             ---
 
             Body.
-        """))
+        """),
+        )
         original = note.read_text()
         _merge_relations_into_note(note, [{"target": "Target"}])
         # Either the parse succeeds (ruamel is lenient) or a warning is emitted
@@ -181,18 +201,25 @@ class TestMergeRelationsIntoNote:
     def test_write_oserror_is_caught_gracefully(self, tmp_path, capsys):
         """An OSError when writing the updated note is caught and reported."""
         pytest.importorskip("ruamel.yaml")
-        note = _write(tmp_path / "Note.md", textwrap.dedent("""\
+        note = _write(
+            tmp_path / "Note.md",
+            textwrap.dedent("""\
             ---
             title: "My Note"
             related: []
             ---
 
             Body.
-        """))
+        """),
+        )
         with patch.object(Path, "write_text", side_effect=OSError("disk full")):
             _merge_relations_into_note(note, [{"target": "New Target"}])
         captured = capsys.readouterr()
-        assert "Could not write" in captured.err or "OSError" in captured.err or "disk full" in captured.err
+        assert (
+            "Could not write" in captured.err
+            or "OSError" in captured.err
+            or "disk full" in captured.err
+        )
 
     def test_skips_missing_file_gracefully(self, tmp_path, capsys):
         """A file that doesn't exist is handled without exception."""
@@ -215,6 +242,7 @@ class TestMergeRelationsIntoNote:
 # autofile_beat — error recovery paths
 # ===========================================================================
 
+
 class TestAutofileBeatErrorRecovery:
     """autofile_beat falls back to write_beat on backend and parse errors."""
 
@@ -224,8 +252,14 @@ class TestAutofileBeatErrorRecovery:
         config = _config(vault)
         beat = _beat()
 
-        with patch("cyberbrain.extractors.autofile.call_model", side_effect=BackendError("model unavailable")):
-            with patch("cyberbrain.extractors.autofile.write_beat", return_value=vault / "fallback.md") as mock_write:
+        with patch(
+            "cyberbrain.extractors.autofile.call_model",
+            side_effect=BackendError("model unavailable"),
+        ):
+            with patch(
+                "cyberbrain.extractors.autofile.write_beat",
+                return_value=vault / "fallback.md",
+            ) as mock_write:
                 result = autofile_beat(beat, config, "session-1", str(tmp_path), NOW)
 
         mock_write.assert_called_once()
@@ -237,7 +271,10 @@ class TestAutofileBeatErrorRecovery:
         config = _config(vault)
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=""):
-            with patch("cyberbrain.extractors.autofile.write_beat", return_value=vault / "fallback.md") as mock_write:
+            with patch(
+                "cyberbrain.extractors.autofile.write_beat",
+                return_value=vault / "fallback.md",
+            ) as mock_write:
                 result = autofile_beat(_beat(), config, "s", str(tmp_path), NOW)
 
         mock_write.assert_called_once()
@@ -247,8 +284,14 @@ class TestAutofileBeatErrorRecovery:
         vault = _vault(tmp_path)
         config = _config(vault)
 
-        with patch("cyberbrain.extractors.autofile.call_model", return_value="This is not JSON at all."):
-            with patch("cyberbrain.extractors.autofile.write_beat", return_value=vault / "fallback.md") as mock_write:
+        with patch(
+            "cyberbrain.extractors.autofile.call_model",
+            return_value="This is not JSON at all.",
+        ):
+            with patch(
+                "cyberbrain.extractors.autofile.write_beat",
+                return_value=vault / "fallback.md",
+            ) as mock_write:
                 autofile_beat(_beat(), config, "s", str(tmp_path), NOW)
 
         mock_write.assert_called_once()
@@ -262,7 +305,10 @@ class TestAutofileBeatErrorRecovery:
         decision = json.dumps({"action": "teleport", "path": "somewhere.md"})
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
-            with patch("cyberbrain.extractors.autofile.write_beat", return_value=vault / "fallback.md") as mock_write:
+            with patch(
+                "cyberbrain.extractors.autofile.write_beat",
+                return_value=vault / "fallback.md",
+            ) as mock_write:
                 autofile_beat(_beat(), config, "s", str(tmp_path), NOW)
 
         mock_write.assert_called_once()
@@ -272,23 +318,46 @@ class TestAutofileBeatErrorRecovery:
     def test_uses_vault_claude_md_when_context_not_provided(self, tmp_path):
         """When vault_context=None, reads vault CLAUDE.md if it exists."""
         vault = _vault(tmp_path)
-        (vault / "CLAUDE.md").write_text("# Vault guide\n\nUse types: decision, insight.", encoding="utf-8")
+        (vault / "CLAUDE.md").write_text(
+            "# Vault guide\n\nUse types: decision, insight.", encoding="utf-8"
+        )
         config = _config(vault)
 
-        with patch("cyberbrain.extractors.autofile.call_model", return_value=json.dumps({"action": "create", "path": "Test.md", "content": "# Test"})):
-            with patch("cyberbrain.extractors.autofile.write_beat", return_value=vault / "Test.md"):
+        with patch(
+            "cyberbrain.extractors.autofile.call_model",
+            return_value=json.dumps(
+                {"action": "create", "path": "Test.md", "content": "# Test"}
+            ),
+        ):
+            with patch(
+                "cyberbrain.extractors.autofile.write_beat",
+                return_value=vault / "Test.md",
+            ):
                 # vault_context=None triggers CLAUDE.md read
-                autofile_beat(_beat(), config, "s", str(tmp_path), NOW, vault_context=None)
+                autofile_beat(
+                    _beat(), config, "s", str(tmp_path), NOW, vault_context=None
+                )
 
     def test_related_docs_oserror_is_swallowed(self, tmp_path):
         """An OSError reading a related doc is silently skipped."""
         vault = _vault(tmp_path)
         config = _config(vault)
-        decision = json.dumps({"action": "create", "path": "Note.md", "content": "---\ntitle: Note\n---\nBody."})
+        decision = json.dumps(
+            {
+                "action": "create",
+                "path": "Note.md",
+                "content": "---\ntitle: Note\n---\nBody.",
+            }
+        )
 
         # Patch search_vault to return a path that can't be read
-        with patch("cyberbrain.extractors.autofile.search_vault", return_value=["/nonexistent/path.md"]):
-            with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
+        with patch(
+            "cyberbrain.extractors.autofile.search_vault",
+            return_value=["/nonexistent/path.md"],
+        ):
+            with patch(
+                "cyberbrain.extractors.autofile.call_model", return_value=decision
+            ):
                 result = autofile_beat(_beat(), config, "s", str(tmp_path), NOW)
 
         assert result is not None
@@ -297,14 +366,18 @@ class TestAutofileBeatErrorRecovery:
         """An OSError when listing vault top-level folders is swallowed."""
         vault = _vault(tmp_path)
         config = _config(vault)
-        decision = json.dumps({
-            "action": "create",
-            "path": "Note.md",
-            "content": "---\ntitle: Note\n---\nBody.",
-        })
+        decision = json.dumps(
+            {
+                "action": "create",
+                "path": "Note.md",
+                "content": "---\ntitle: Note\n---\nBody.",
+            }
+        )
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
-            with patch("pathlib.Path.iterdir", side_effect=OSError("permission denied")):
+            with patch(
+                "pathlib.Path.iterdir", side_effect=OSError("permission denied")
+            ):
                 result = autofile_beat(_beat(), config, "s", str(tmp_path), NOW)
 
         # Should not raise — OSError is caught; result may be None or a path
@@ -315,22 +388,30 @@ class TestAutofileBeatErrorRecovery:
 # autofile_beat — 'extend' action
 # ===========================================================================
 
+
 class TestAutofileExtendAction:
     """autofile_beat 'extend' action appends content to an existing note."""
 
-    def _make_decision(self, vault: Path, target_rel: str, insertion: str = "## Addition\n\nNew content.") -> str:
-        return json.dumps({
-            "action": "extend",
-            "target_path": target_rel,
-            "insertion": insertion,
-        })
+    def _make_decision(
+        self,
+        vault: Path,
+        target_rel: str,
+        insertion: str = "## Addition\n\nNew content.",
+    ) -> str:
+        return json.dumps(
+            {
+                "action": "extend",
+                "target_path": target_rel,
+                "insertion": insertion,
+            }
+        )
 
     def test_appends_content_to_existing_note(self, tmp_path):
         """extend action appends insertion text to the target file."""
         vault = _vault(tmp_path)
         existing = _write(
             vault / "Projects" / "hermes.md",
-            "---\ntitle: hermes\ntags: [python]\n---\n\nExisting content."
+            "---\ntitle: hermes\ntags: [python]\n---\n\nExisting content.",
         )
         decision = self._make_decision(vault, "Projects/hermes.md")
 
@@ -347,7 +428,10 @@ class TestAutofileExtendAction:
         decision = self._make_decision(vault, "Nonexistent/File.md")
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
-            with patch("cyberbrain.extractors.autofile.write_beat", return_value=vault / "fallback.md") as mock_write:
+            with patch(
+                "cyberbrain.extractors.autofile.write_beat",
+                return_value=vault / "fallback.md",
+            ) as mock_write:
                 autofile_beat(_beat(), _config(vault), "s", str(tmp_path), NOW)
 
         mock_write.assert_called_once()
@@ -358,12 +442,18 @@ class TestAutofileExtendAction:
         decision = self._make_decision(vault, "../../etc/passwd")
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
-            with patch("cyberbrain.extractors.autofile.write_beat", return_value=vault / "fallback.md") as mock_write:
+            with patch(
+                "cyberbrain.extractors.autofile.write_beat",
+                return_value=vault / "fallback.md",
+            ) as mock_write:
                 autofile_beat(_beat(), _config(vault), "s", str(tmp_path), NOW)
 
         mock_write.assert_called_once()
         captured = capsys.readouterr()
-        assert "path traversal" in captured.err.lower() or "rejected" in captured.err.lower()
+        assert (
+            "path traversal" in captured.err.lower()
+            or "rejected" in captured.err.lower()
+        )
 
     def test_merges_resolved_relations(self, tmp_path):
         """When beat has relations that resolve to vault notes, they are merged into the target."""
@@ -374,14 +464,16 @@ class TestAutofileExtendAction:
         # Create the target note to extend
         target = _write(
             vault / "Auth Overview.md",
-            "---\ntitle: Auth Overview\nrelated: []\ntags: [auth]\n---\n\nOverview."
+            "---\ntitle: Auth Overview\nrelated: []\ntags: [auth]\n---\n\nOverview.",
         )
         beat = _beat(relations=[{"type": "references", "target": "JWT Auth"}])
-        decision = json.dumps({
-            "action": "extend",
-            "target_path": "Auth Overview.md",
-            "insertion": "## New section\n\nSee JWT auth details.",
-        })
+        decision = json.dumps(
+            {
+                "action": "extend",
+                "target_path": "Auth Overview.md",
+                "insertion": "## New section\n\nSee JWT auth details.",
+            }
+        )
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
             autofile_beat(beat, _config(vault), "s", str(tmp_path), NOW)
@@ -393,10 +485,15 @@ class TestAutofileExtendAction:
         """An extend action with empty insertion falls back to write_beat."""
         vault = _vault(tmp_path)
         _write(vault / "Existing.md", "---\ntitle: Existing\n---\nContent.")
-        decision = json.dumps({"action": "extend", "target_path": "Existing.md", "insertion": ""})
+        decision = json.dumps(
+            {"action": "extend", "target_path": "Existing.md", "insertion": ""}
+        )
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
-            with patch("cyberbrain.extractors.autofile.write_beat", return_value=vault / "fallback.md") as mock_write:
+            with patch(
+                "cyberbrain.extractors.autofile.write_beat",
+                return_value=vault / "fallback.md",
+            ) as mock_write:
                 autofile_beat(_beat(), _config(vault), "s", str(tmp_path), NOW)
 
         mock_write.assert_called_once()
@@ -405,15 +502,16 @@ class TestAutofileExtendAction:
         """extend action with relations that don't resolve to vault notes skips merge."""
         vault = _vault(tmp_path)
         target = _write(
-            vault / "Note.md",
-            "---\ntitle: Note\nrelated: []\n---\n\nContent."
+            vault / "Note.md", "---\ntitle: Note\nrelated: []\n---\n\nContent."
         )
         beat = _beat(relations=[{"type": "references", "target": "NonExistentNote"}])
-        decision = json.dumps({
-            "action": "extend",
-            "target_path": "Note.md",
-            "insertion": "## Appended.",
-        })
+        decision = json.dumps(
+            {
+                "action": "extend",
+                "target_path": "Note.md",
+                "insertion": "## Appended.",
+            }
+        )
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
             result = autofile_beat(beat, _config(vault), "s", str(tmp_path), NOW)
@@ -426,14 +524,17 @@ class TestAutofileExtendAction:
 # autofile_beat — 'create' action
 # ===========================================================================
 
+
 class TestAutofileCreateAction:
     """autofile_beat 'create' action writes a new note to the vault."""
 
     def _create_decision(self, path: str, content: str = None) -> str:
-        return json.dumps({
-            "action": "create",
-            "path": path,
-            "content": content or textwrap.dedent("""\
+        return json.dumps(
+            {
+                "action": "create",
+                "path": path,
+                "content": content
+                or textwrap.dedent("""\
                 ---
                 id: abc123
                 type: decision
@@ -446,7 +547,8 @@ class TestAutofileCreateAction:
 
                 FastAPI was chosen.
             """),
-        })
+            }
+        )
 
     def test_creates_new_file_in_vault(self, tmp_path):
         """create action writes the content to the specified vault-relative path."""
@@ -463,10 +565,15 @@ class TestAutofileCreateAction:
     def test_falls_back_when_path_or_content_empty(self, tmp_path):
         """create with empty path or content falls back to write_beat."""
         vault = _vault(tmp_path)
-        decision = json.dumps({"action": "create", "path": "", "content": "Some content"})
+        decision = json.dumps(
+            {"action": "create", "path": "", "content": "Some content"}
+        )
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
-            with patch("cyberbrain.extractors.autofile.write_beat", return_value=vault / "fallback.md") as mock_write:
+            with patch(
+                "cyberbrain.extractors.autofile.write_beat",
+                return_value=vault / "fallback.md",
+            ) as mock_write:
                 autofile_beat(_beat(), _config(vault), "s", str(tmp_path), NOW)
 
         mock_write.assert_called_once()
@@ -477,7 +584,10 @@ class TestAutofileCreateAction:
         decision = json.dumps({"action": "create", "path": "Note.md", "content": ""})
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
-            with patch("cyberbrain.extractors.autofile.write_beat", return_value=vault / "fallback.md") as mock_write:
+            with patch(
+                "cyberbrain.extractors.autofile.write_beat",
+                return_value=vault / "fallback.md",
+            ) as mock_write:
                 autofile_beat(_beat(), _config(vault), "s", str(tmp_path), NOW)
 
         mock_write.assert_called_once()
@@ -488,12 +598,18 @@ class TestAutofileCreateAction:
         decision = self._create_decision("../../evil/inject.md")
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
-            with patch("cyberbrain.extractors.autofile.write_beat", return_value=vault / "fallback.md") as mock_write:
+            with patch(
+                "cyberbrain.extractors.autofile.write_beat",
+                return_value=vault / "fallback.md",
+            ) as mock_write:
                 autofile_beat(_beat(), _config(vault), "s", str(tmp_path), NOW)
 
         mock_write.assert_called_once()
         captured = capsys.readouterr()
-        assert "rejected" in captured.err.lower() or "path traversal" in captured.err.lower()
+        assert (
+            "rejected" in captured.err.lower()
+            or "path traversal" in captured.err.lower()
+        )
 
     def test_collision_high_tag_overlap_extends_existing(self, tmp_path):
         """When target exists and tag overlap >= 2, content is appended (not renamed)."""
@@ -508,7 +624,7 @@ class TestAutofileCreateAction:
                 ---
 
                 Original content.
-            """)
+            """),
         )
         content = textwrap.dedent("""\
             ---
@@ -519,7 +635,9 @@ class TestAutofileCreateAction:
 
             New info about FastAPI.
         """)
-        decision = json.dumps({"action": "create", "path": "FastAPI Decision.md", "content": content})
+        decision = json.dumps(
+            {"action": "create", "path": "FastAPI Decision.md", "content": content}
+        )
         beat = _beat(tags=["fastapi", "python"])
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
@@ -535,7 +653,7 @@ class TestAutofileCreateAction:
         # Pre-create the target with different tags
         _write(
             vault / "Auth Decision.md",
-            "---\ntitle: Auth Decision\ntags: [jwt, oauth]\n---\nExisting."
+            "---\ntitle: Auth Decision\ntags: [jwt, oauth]\n---\nExisting.",
         )
         content = textwrap.dedent("""\
             ---
@@ -546,7 +664,9 @@ class TestAutofileCreateAction:
 
             Different auth approach.
         """)
-        decision = json.dumps({"action": "create", "path": "Auth Decision.md", "content": content})
+        decision = json.dumps(
+            {"action": "create", "path": "Auth Decision.md", "content": content}
+        )
         beat = _beat(tags=["session-based", "cookies"])
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
@@ -554,16 +674,28 @@ class TestAutofileCreateAction:
 
         # Should create a new file with a distinguishing name
         assert result is not None
-        assert "session-based" in result.name or "cookies" in result.name or result != vault / "Auth Decision.md"
+        assert (
+            "session-based" in result.name
+            or "cookies" in result.name
+            or result != vault / "Auth Decision.md"
+        )
 
     def test_collision_counter_when_specific_path_also_exists(self, tmp_path):
         """When both the primary and the tag-suffixed path exist, uses a numeric counter."""
         vault = _vault(tmp_path)
         # Create both the primary and the expected renamed path
-        _write(vault / "Arch Decision.md", "---\ntitle: Original\ntags: [k8s, docker]\n---\nOrig.")
-        _write(vault / "Arch Decision — k8s.md", "---\ntitle: First collision\ntags: [k8s]\n---\nFirst.")
+        _write(
+            vault / "Arch Decision.md",
+            "---\ntitle: Original\ntags: [k8s, docker]\n---\nOrig.",
+        )
+        _write(
+            vault / "Arch Decision — k8s.md",
+            "---\ntitle: First collision\ntags: [k8s]\n---\nFirst.",
+        )
         content = "---\ntype: decision\ntitle: Arch Decision\ntags: [k8s]\n---\nThird."
-        decision = json.dumps({"action": "create", "path": "Arch Decision.md", "content": content})
+        decision = json.dumps(
+            {"action": "create", "path": "Arch Decision.md", "content": content}
+        )
         beat = _beat(tags=["k8s"])
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
@@ -581,7 +713,9 @@ class TestAutofileCreateAction:
         _write(vault / "My Note — x.md", "---\ntags: [x]\n---\nFirst collision.")
         _write(vault / "2 My Note.md", "---\ntags: [x]\n---\nSecond collision.")
         content = "---\ntype: decision\ntitle: My Note\ntags: [x]\n---\nNew."
-        decision = json.dumps({"action": "create", "path": "My Note.md", "content": content})
+        decision = json.dumps(
+            {"action": "create", "path": "My Note.md", "content": content}
+        )
         beat = _beat(tags=["x"])
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
@@ -598,11 +732,17 @@ class TestAutofileCreateAction:
     def test_strips_code_fences_from_response(self, tmp_path):
         """Model response wrapped in ```json fences is parsed correctly."""
         vault = _vault(tmp_path)
-        decision = "```json\n" + json.dumps({
-            "action": "create",
-            "path": "Projects/New Note.md",
-            "content": "---\ntitle: New Note\n---\nBody.",
-        }) + "\n```"
+        decision = (
+            "```json\n"
+            + json.dumps(
+                {
+                    "action": "create",
+                    "path": "Projects/New Note.md",
+                    "content": "---\ntitle: New Note\n---\nBody.",
+                }
+            )
+            + "\n```"
+        )
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
             result = autofile_beat(_beat(), _config(vault), "s", str(tmp_path), NOW)
@@ -614,7 +754,9 @@ class TestAutofileCreateAction:
         """After creating a note, the code tries to update the search index (ImportError is tolerated)."""
         vault = _vault(tmp_path)
         content = "---\ntype: decision\ntitle: Search Test\ntags: [search]\nsummary: Test.\n---\nBody."
-        decision = json.dumps({"action": "create", "path": "Search Test.md", "content": content})
+        decision = json.dumps(
+            {"action": "create", "path": "Search Test.md", "content": content}
+        )
 
         # Simulate search_index module being importable and update_search_index being called
         mock_module = MagicMock()
@@ -634,7 +776,9 @@ class TestAutofileCreateAction:
         """If search_index can't be imported, the create action still succeeds."""
         vault = _vault(tmp_path)
         content = "---\ntype: decision\ntitle: Note\ntags: [x]\n---\nBody."
-        decision = json.dumps({"action": "create", "path": "Note.md", "content": content})
+        decision = json.dumps(
+            {"action": "create", "path": "Note.md", "content": content}
+        )
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
             with patch.dict(sys.modules, {"search_index": None}):
@@ -648,18 +792,23 @@ class TestAutofileCreateAction:
 # autofile_beat — confidence-based routing
 # ===========================================================================
 
+
 class TestAutofileConfidenceRouting:
     """Confidence-based routing: high confidence proceeds normally, low confidence
     falls back to inbox or asks for confirmation depending on uncertain_filing_behavior."""
 
-    def _create_decision(self, confidence: float, rationale: str = "Test rationale.") -> str:
-        return json.dumps({
-            "action": "create",
-            "path": "Projects/High Confidence Note.md",
-            "content": "---\ntype: decision\ntitle: High Confidence Note\ntags: [fastapi]\n---\nBody.",
-            "confidence": confidence,
-            "rationale": rationale,
-        })
+    def _create_decision(
+        self, confidence: float, rationale: str = "Test rationale."
+    ) -> str:
+        return json.dumps(
+            {
+                "action": "create",
+                "path": "Projects/High Confidence Note.md",
+                "content": "---\ntype: decision\ntitle: High Confidence Note\ntags: [fastapi]\n---\nBody.",
+                "confidence": confidence,
+                "rationale": rationale,
+            }
+        )
 
     def test_high_confidence_routes_normally(self, tmp_path):
         """When confidence >= threshold (default 0.5), beat is filed at the LLM's chosen path."""
@@ -689,12 +838,18 @@ class TestAutofileConfidenceRouting:
     def test_low_confidence_inbox_behavior_routes_to_inbox(self, tmp_path, capsys):
         """When confidence < threshold and behavior='inbox', beat is routed to inbox via write_beat."""
         vault = _vault(tmp_path)
-        decision = self._create_decision(confidence=0.3, rationale="No clear folder match.")
-        config = _config(vault, uncertain_filing_behavior="inbox", uncertain_filing_threshold=0.5)
+        decision = self._create_decision(
+            confidence=0.3, rationale="No clear folder match."
+        )
+        config = _config(
+            vault, uncertain_filing_behavior="inbox", uncertain_filing_threshold=0.5
+        )
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
-            with patch("cyberbrain.extractors.autofile.write_beat",
-                       return_value=vault / "AI" / "Claude-Sessions" / "beat.md") as mock_write:
+            with patch(
+                "cyberbrain.extractors.autofile.write_beat",
+                return_value=vault / "AI" / "Claude-Sessions" / "beat.md",
+            ) as mock_write:
                 result = autofile_beat(_beat(), config, "s", str(tmp_path), NOW)
 
         mock_write.assert_called_once()
@@ -710,8 +865,10 @@ class TestAutofileConfidenceRouting:
         config = _config(vault)
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
-            with patch("cyberbrain.extractors.autofile.write_beat",
-                       return_value=vault / "AI" / "Claude-Sessions" / "beat.md") as mock_write:
+            with patch(
+                "cyberbrain.extractors.autofile.write_beat",
+                return_value=vault / "AI" / "Claude-Sessions" / "beat.md",
+            ) as mock_write:
                 result = autofile_beat(_beat(), config, "s", str(tmp_path), NOW)
 
         mock_write.assert_called_once()
@@ -724,7 +881,9 @@ class TestAutofileConfidenceRouting:
         vault = _vault(tmp_path)
         rationale = "Multiple folders seem equally plausible."
         decision = self._create_decision(confidence=0.3, rationale=rationale)
-        config = _config(vault, uncertain_filing_behavior="ask", uncertain_filing_threshold=0.5)
+        config = _config(
+            vault, uncertain_filing_behavior="ask", uncertain_filing_threshold=0.5
+        )
         beat = _beat()
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
@@ -741,11 +900,15 @@ class TestAutofileConfidenceRouting:
         """When behavior='ask' and can_ask=True, write_beat is NOT called — no file is written."""
         vault = _vault(tmp_path)
         decision = self._create_decision(confidence=0.1)
-        config = _config(vault, uncertain_filing_behavior="ask", uncertain_filing_threshold=0.5)
+        config = _config(
+            vault, uncertain_filing_behavior="ask", uncertain_filing_threshold=0.5
+        )
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
             with patch("cyberbrain.extractors.autofile.write_beat") as mock_write:
-                result = autofile_beat(_beat(), config, "s", str(tmp_path), NOW, can_ask=True)
+                result = autofile_beat(
+                    _beat(), config, "s", str(tmp_path), NOW, can_ask=True
+                )
 
         mock_write.assert_not_called()
         assert result is None
@@ -766,11 +929,15 @@ class TestAutofileConfidenceRouting:
         """With a custom threshold of 0.7, confidence=0.65 triggers inbox fallback."""
         vault = _vault(tmp_path)
         decision = self._create_decision(confidence=0.65)
-        config = _config(vault, uncertain_filing_threshold=0.7, uncertain_filing_behavior="inbox")
+        config = _config(
+            vault, uncertain_filing_threshold=0.7, uncertain_filing_behavior="inbox"
+        )
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
-            with patch("cyberbrain.extractors.autofile.write_beat",
-                       return_value=vault / "AI" / "Claude-Sessions" / "beat.md") as mock_write:
+            with patch(
+                "cyberbrain.extractors.autofile.write_beat",
+                return_value=vault / "AI" / "Claude-Sessions" / "beat.md",
+            ) as mock_write:
                 result = autofile_beat(_beat(), config, "s", str(tmp_path), NOW)
 
         mock_write.assert_called_once()
@@ -779,11 +946,13 @@ class TestAutofileConfidenceRouting:
         """When the LLM response has no confidence field, it defaults to 0.5 (at threshold = proceeds)."""
         vault = _vault(tmp_path)
         # Decision without confidence key
-        decision = json.dumps({
-            "action": "create",
-            "path": "Projects/No Confidence.md",
-            "content": "---\ntype: decision\ntitle: No Confidence\ntags: [x]\n---\nBody.",
-        })
+        decision = json.dumps(
+            {
+                "action": "create",
+                "path": "Projects/No Confidence.md",
+                "content": "---\ntype: decision\ntitle: No Confidence\ntags: [x]\n---\nBody.",
+            }
+        )
         config = _config(vault)
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
@@ -796,12 +965,14 @@ class TestAutofileConfidenceRouting:
     def test_non_numeric_confidence_defaults_to_0_5(self, tmp_path):
         """When confidence is a non-numeric value, it is treated as 0.5 (at threshold = proceeds)."""
         vault = _vault(tmp_path)
-        decision = json.dumps({
-            "action": "create",
-            "path": "Projects/Bad Confidence.md",
-            "content": "---\ntype: decision\ntitle: Bad Confidence\ntags: [x]\n---\nBody.",
-            "confidence": "high",
-        })
+        decision = json.dumps(
+            {
+                "action": "create",
+                "path": "Projects/Bad Confidence.md",
+                "content": "---\ntype: decision\ntitle: Bad Confidence\ntags: [x]\n---\nBody.",
+                "confidence": "high",
+            }
+        )
         config = _config(vault)
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
@@ -812,7 +983,9 @@ class TestAutofileConfidenceRouting:
     def test_confidence_above_threshold_proceeds_normally(self, tmp_path):
         """When confidence >= threshold, beat is filed normally without uncertainty handling."""
         vault = _vault(tmp_path)
-        decision = self._create_decision(confidence=0.6, rationale="Slightly uncertain.")
+        decision = self._create_decision(
+            confidence=0.6, rationale="Slightly uncertain."
+        )
         config = _config(vault, uncertain_filing_threshold=0.5)
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
@@ -825,12 +998,16 @@ class TestAutofileConfidenceRouting:
         """When routing to inbox due to low confidence, beat['_autofile_low_confidence'] is set."""
         vault = _vault(tmp_path)
         decision = self._create_decision(confidence=0.3)
-        config = _config(vault, uncertain_filing_behavior="inbox", uncertain_filing_threshold=0.5)
+        config = _config(
+            vault, uncertain_filing_behavior="inbox", uncertain_filing_threshold=0.5
+        )
         beat = _beat()
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
-            with patch("cyberbrain.extractors.autofile.write_beat",
-                       return_value=vault / "AI" / "Claude-Sessions" / "beat.md"):
+            with patch(
+                "cyberbrain.extractors.autofile.write_beat",
+                return_value=vault / "AI" / "Claude-Sessions" / "beat.md",
+            ):
                 autofile_beat(beat, config, "s", str(tmp_path), NOW)
 
         assert beat.get("_autofile_low_confidence") == 0.3
@@ -840,11 +1017,18 @@ class TestAutofileConfidenceRouting:
 # _build_folder_examples — vault history injection (WI-044)
 # ===========================================================================
 
+
 class TestBuildFolderExamples:
     """_build_folder_examples samples notes from vault folders for LLM context."""
 
-    def _make_note(self, path: Path, title: str, note_type: str = "reference",
-                   tags: list = None, summary: str = "A test summary.") -> Path:
+    def _make_note(
+        self,
+        path: Path,
+        title: str,
+        note_type: str = "reference",
+        tags: list = None,
+        summary: str = "A test summary.",
+    ) -> Path:
         tags_yaml = str(tags or ["test"])
         content = (
             f"---\ntitle: {title!r}\ntype: {note_type}\n"
@@ -921,6 +1105,7 @@ class TestBuildFolderExamples:
     def test_includes_most_recent_note(self, tmp_path):
         """The most recently modified note is always included in the sample."""
         import time
+
         vault = tmp_path / "vault"
         vault.mkdir()
         folder = vault / "Folder"
@@ -1015,14 +1200,28 @@ class TestBuildFolderExamples:
             lines = user.split("\n")
             # Find the folder_examples content (last portion after vault_folders)
             captured_examples.append(user)
-            return json.dumps({"action": "create", "path": "Note.md",
-                                "content": "---\ntitle: T\n---\nBody."})
+            return json.dumps(
+                {
+                    "action": "create",
+                    "path": "Note.md",
+                    "content": "---\ntitle: T\n---\nBody.",
+                }
+            )
 
         beat = _beat()
-        with patch("cyberbrain.extractors.autofile.load_prompt", side_effect=fake_load_prompt):
-            with patch("cyberbrain.extractors.autofile.call_model", side_effect=fake_call_model):
-                with patch("cyberbrain.extractors.autofile.search_vault", return_value=[]):
-                    with patch("cyberbrain.extractors.autofile.read_vault_claude_md", return_value=None):
+        with patch(
+            "cyberbrain.extractors.autofile.load_prompt", side_effect=fake_load_prompt
+        ):
+            with patch(
+                "cyberbrain.extractors.autofile.call_model", side_effect=fake_call_model
+            ):
+                with patch(
+                    "cyberbrain.extractors.autofile.search_vault", return_value=[]
+                ):
+                    with patch(
+                        "cyberbrain.extractors.autofile.read_vault_claude_md",
+                        return_value=None,
+                    ):
                         autofile_beat(beat, config, "s", str(tmp_path), NOW)
 
         # With autofile_history_samples=1, only 1 note per folder should appear

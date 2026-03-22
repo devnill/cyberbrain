@@ -8,7 +8,6 @@ All tests use temporary directories — no real vault is touched.
 """
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
@@ -17,16 +16,16 @@ REPO_ROOT = Path(__file__).parent.parent
 
 from cyberbrain.extractors.analyze_vault import (
     analyze_vault,
-    parse_frontmatter,
-    extract_wikilinks,
     extract_inline_tags,
+    extract_wikilinks,
     note_name_style,
+    parse_frontmatter,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
+
 
 def write_note(vault: Path, rel_path: str, content: str) -> Path:
     """Write a markdown note into the vault at the given relative path."""
@@ -39,6 +38,7 @@ def write_note(vault: Path, rel_path: str, content: str) -> Path:
 # ---------------------------------------------------------------------------
 # Unit tests: parse_frontmatter
 # ---------------------------------------------------------------------------
+
 
 class TestParseFrontmatter:
     def test_returns_empty_dict_for_no_frontmatter(self):
@@ -73,6 +73,7 @@ class TestParseFrontmatter:
 # Unit tests: extract_wikilinks
 # ---------------------------------------------------------------------------
 
+
 class TestExtractWikilinks:
     def test_extracts_simple_wikilinks(self):
         text = "See [[My Note]] for details.\n"
@@ -103,6 +104,7 @@ class TestExtractWikilinks:
 # Unit tests: extract_inline_tags
 # ---------------------------------------------------------------------------
 
+
 class TestExtractInlineTags:
     def test_extracts_hashtags_from_body(self):
         text = "---\ntags: [existing]\n---\n\nThis is #python code.\n"
@@ -125,6 +127,7 @@ class TestExtractInlineTags:
 # Unit tests: note_name_style
 # ---------------------------------------------------------------------------
 
+
 class TestNoteNameStyle:
     def test_detects_kebab_case(self):
         assert note_name_style("my-note-title") == "kebab-case"
@@ -142,6 +145,7 @@ class TestNoteNameStyle:
 # ---------------------------------------------------------------------------
 # Integration tests: analyze_vault
 # ---------------------------------------------------------------------------
+
 
 class TestAnalyzeVaultEmpty:
     def test_raises_on_nonexistent_path(self):
@@ -173,7 +177,10 @@ class TestAnalyzeVaultDeveloperPKM:
 
     @pytest.fixture
     def dev_vault(self, tmp_path):
-        write_note(tmp_path, "AI/Claude-Sessions/JWT Auth Issue.md", """\
+        write_note(
+            tmp_path,
+            "AI/Claude-Sessions/JWT Auth Issue.md",
+            """\
 ---
 id: abc123
 type: problem
@@ -192,8 +199,12 @@ JWT tokens expired silently.
 
 Added 5-minute clock skew tolerance.
 See also [[Postgres Connection Pool]].
-""")
-        write_note(tmp_path, "AI/Claude-Sessions/Postgres Connection Pool.md", """\
+""",
+        )
+        write_note(
+            tmp_path,
+            "AI/Claude-Sessions/Postgres Connection Pool.md",
+            """\
 ---
 id: def456
 type: problem
@@ -206,8 +217,12 @@ date: 2026-01-20
 ## Problem
 
 Pool exhausted.
-""")
-        write_note(tmp_path, "AI/Claude-Sessions/FastAPI Router Decision.md", """\
+""",
+        )
+        write_note(
+            tmp_path,
+            "AI/Claude-Sessions/FastAPI Router Decision.md",
+            """\
 ---
 id: ghi789
 type: decision
@@ -220,8 +235,12 @@ date: 2026-01-25
 ## Decision
 
 FastAPI chosen. See [[JWT Auth Issue]] for context.
-""")
-        write_note(tmp_path, "Projects/hermes/Architecture.md", """\
+""",
+        )
+        write_note(
+            tmp_path,
+            "Projects/hermes/Architecture.md",
+            """\
 ---
 type: reference
 title: "Architecture"
@@ -232,7 +251,8 @@ tags: [architecture, design]
 ## Architecture
 
 Using microservices. Related to [[FastAPI Router Decision]].
-""")
+""",
+        )
         return tmp_path
 
     def test_counts_correct_total_notes(self, dev_vault):
@@ -294,13 +314,17 @@ class TestAnalyzeVaultTagHierarchy:
     """Verify hierarchical tag detection."""
 
     def test_detects_hierarchical_tag_parents(self, tmp_path):
-        write_note(tmp_path, "Note A.md", """\
+        write_note(
+            tmp_path,
+            "Note A.md",
+            """\
 ---
 tags: [project/backend, project/frontend]
 ---
 
 Body with #project/infra/k8s inline.
-""")
+""",
+        )
         report = analyze_vault(str(tmp_path))
         hierarchy = report["tags"]["hierarchy"]
         assert "project" in hierarchy or "project/infra" in hierarchy
@@ -332,12 +356,15 @@ class TestAnalyzeVaultNamingStyles:
 # analyze_vault.py: tags from frontmatter with non-standard shapes
 # ---------------------------------------------------------------------------
 
+
 class TestAnalyzeVaultTagEdgeCases:
     """Exercise the non-list tags branches in analyze_vault (lines 138, 140)."""
 
     def test_string_tags_field_is_split_by_comma(self, tmp_path):
         """A tags field that is a plain string is split on commas and counted."""
-        write_note(tmp_path, "Note.md", "---\ntags: python, testing, backend\n---\n\nBody.")
+        write_note(
+            tmp_path, "Note.md", "---\ntags: python, testing, backend\n---\n\nBody."
+        )
         report = analyze_vault(str(tmp_path))
         tag_names = [t["tag"] for t in report["tags"]["top_tags"]]
         assert "python" in tag_names
@@ -355,6 +382,7 @@ class TestAnalyzeVaultTagEdgeCases:
 # analyze_vault.py: main() CLI function (lines 241-258, 262)
 # ---------------------------------------------------------------------------
 
+
 class TestAnalyzeVaultMain:
     """Exercise the analyze_vault main() CLI entrypoint."""
 
@@ -365,7 +393,9 @@ class TestAnalyzeVaultMain:
 
         write_note(tmp_path, "Note.md", "---\ntype: decision\n---\nBody.")
         monkeypatch.setattr(_sys, "argv", ["analyze_vault.py", str(tmp_path)])
-        runpy.run_module("cyberbrain.extractors.analyze_vault", run_name="__main__", alter_sys=True)
+        runpy.run_module(
+            "cyberbrain.extractors.analyze_vault", run_name="__main__", alter_sys=True
+        )
         captured = capsys.readouterr()
         data = json.loads(captured.out)
         assert data["total_notes"] == 1
@@ -377,8 +407,12 @@ class TestAnalyzeVaultMain:
 
         write_note(tmp_path, "Note.md", "---\ntype: insight\n---\nBody.")
         out_file = tmp_path / "report.json"
-        monkeypatch.setattr(_sys, "argv", ["analyze_vault.py", str(tmp_path), "--output", str(out_file)])
-        runpy.run_module("cyberbrain.extractors.analyze_vault", run_name="__main__", alter_sys=True)
+        monkeypatch.setattr(
+            _sys, "argv", ["analyze_vault.py", str(tmp_path), "--output", str(out_file)]
+        )
+        runpy.run_module(
+            "cyberbrain.extractors.analyze_vault", run_name="__main__", alter_sys=True
+        )
         assert out_file.exists()
         data = json.loads(out_file.read_text())
         assert data["total_notes"] == 1
@@ -390,9 +424,15 @@ class TestAnalyzeVaultMain:
         import runpy
         import sys as _sys
 
-        monkeypatch.setattr(_sys, "argv", ["analyze_vault.py", "/nonexistent/vault/path"])
+        monkeypatch.setattr(
+            _sys, "argv", ["analyze_vault.py", "/nonexistent/vault/path"]
+        )
         with pytest.raises(SystemExit) as exc_info:
-            runpy.run_module("cyberbrain.extractors.analyze_vault", run_name="__main__", alter_sys=True)
+            runpy.run_module(
+                "cyberbrain.extractors.analyze_vault",
+                run_name="__main__",
+                alter_sys=True,
+            )
         assert exc_info.value.code == 1
 
 
@@ -400,28 +440,34 @@ class TestAnalyzeVaultMain:
 # frontmatter.py: edge cases not covered by test_analyze_vault's parse_frontmatter
 # ---------------------------------------------------------------------------
 
+
 class TestFrontmatterEdgeCases:
     """Tests for src/cyberbrain/extractors/frontmatter.py missing lines (28-29, 75, 81)."""
 
     def test_parse_frontmatter_returns_empty_when_yaml_is_non_dict(self):
         """YAML that parses to a list (not a dict) returns {}."""
         from cyberbrain.extractors.frontmatter import parse_frontmatter
+
         content = "---\n- item1\n- item2\n---\nBody."
         result = parse_frontmatter(content)
         assert result == {}
 
     def test_parse_frontmatter_returns_empty_on_yaml_exception(self):
-        """YAML parse errors return {} (the except Exception branch, lines 28-29)."""
-        from cyberbrain.extractors.frontmatter import parse_frontmatter
+        """YAML parse errors return {} (the except yaml.YAMLError branch)."""
+        import yaml  # noqa: I001
         from unittest.mock import patch
-        # Force yaml.safe_load to raise
-        with patch("yaml.safe_load", side_effect=Exception("yaml error")):
+
+        from cyberbrain.extractors.frontmatter import parse_frontmatter
+
+        # Force yaml.safe_load to raise a YAMLError (the exception type the code catches)
+        with patch("yaml.safe_load", side_effect=yaml.YAMLError("yaml error")):
             result = parse_frontmatter("---\nkey: value\n---\nBody.")
         assert result == {}
 
     def test_read_frontmatter_tags_returns_empty_for_plain_string_tags(self, tmp_path):
         """Tags that aren't JSON array and aren't bracketed list return empty set."""
         from cyberbrain.extractors.frontmatter import read_frontmatter_tags
+
         p = tmp_path / "note.md"
         p.write_text("---\ntags: just-a-plain-value\n---\nBody.", encoding="utf-8")
         result = read_frontmatter_tags(str(p))
@@ -430,12 +476,14 @@ class TestFrontmatterEdgeCases:
     def test_normalise_list_with_actual_list(self):
         """normalise_list() with a real Python list returns list[str]."""
         from cyberbrain.extractors.frontmatter import normalise_list
+
         result = normalise_list(["alpha", "beta", "gamma"])
         assert result == ["alpha", "beta", "gamma"]
 
     def test_read_frontmatter_returns_dict_for_valid_file(self, tmp_path):
         """read_frontmatter() reads a file and returns parsed frontmatter."""
         from cyberbrain.extractors.frontmatter import read_frontmatter
+
         p = tmp_path / "note.md"
         p.write_text("---\ntitle: Test\ntags: [a, b]\n---\nBody.", encoding="utf-8")
         result = read_frontmatter(str(p))
@@ -444,5 +492,6 @@ class TestFrontmatterEdgeCases:
     def test_read_frontmatter_returns_empty_for_missing_file(self, tmp_path):
         """read_frontmatter() returns {} when the file doesn't exist."""
         from cyberbrain.extractors.frontmatter import read_frontmatter
+
         result = read_frontmatter(str(tmp_path / "nonexistent.md"))
         assert result == {}

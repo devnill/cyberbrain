@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import sys
+from datetime import UTC
 from pathlib import Path
 from typing import Annotated
 
@@ -12,22 +13,36 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from cyberbrain.extractors.state import (
+    SEARCH_DB_PATH as _SEARCH_DB_PATH,
+)
+from cyberbrain.extractors.state import (
+    SEARCH_MANIFEST_PATH as _SEARCH_MANIFEST_PATH,
+)
+from cyberbrain.extractors.state import (
+    WM_RECALL_LOG_PATH as _WM_RECALL_LOG,
+)
 from cyberbrain.mcp.shared import (
-    _parse_frontmatter, _get_search_backend, _load_config, _call_claude_code_backend,
+    _call_claude_code_backend,
+    _get_search_backend,
+    _load_config,
+    _parse_frontmatter,
+)
+from cyberbrain.mcp.shared import (
     _load_tool_prompt as _load_prompt,
 )
 
-_DEFAULT_DB_PATH = str(Path.home() / ".claude" / "cyberbrain" / "search-index.db")
-_DEFAULT_MANIFEST_PATH = str(Path.home() / ".claude" / "cyberbrain" / "search-index-manifest.json")
-_WM_RECALL_LOG = Path.home() / ".claude" / "cyberbrain" / "wm-recall.jsonl"
+_DEFAULT_DB_PATH = str(_SEARCH_DB_PATH)
+_DEFAULT_MANIFEST_PATH = str(_SEARCH_MANIFEST_PATH)
 
 
 def _log_wm_recall(query: str, wm_paths: list[str], total_results: int) -> None:
     """Append a log entry when working-memory notes are surfaced in recall results."""
     import json as _json
-    from datetime import datetime as _dt, timezone as _tz
+    from datetime import datetime as _dt
+
     entry = {
-        "timestamp": _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "timestamp": _dt.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "query": query,
         "wm_notes": wm_paths,
         "wm_count": len(wm_paths),
@@ -44,6 +59,7 @@ def _log_wm_recall(query: str, wm_paths: list[str], total_results: int) -> None:
 def _find_note_by_title(title: str, config: dict) -> "Path | None":
     """Look up a note by title in the FTS5 index. Returns resolved Path or None."""
     import sqlite3
+
     db_path = config.get("search_db_path", _DEFAULT_DB_PATH)
     if not Path(db_path).exists():
         return None
@@ -63,7 +79,7 @@ def _find_note_by_title(title: str, config: dict) -> "Path | None":
         conn.close()
         if row:
             return Path(row[0])
-    except Exception:
+    except Exception:  # intentional: SQLite query failure (schema mismatch, corrupt db) returns None gracefully
         pass
     return None
 
@@ -103,17 +119,22 @@ def _synthesize_recall(
 
     notes_block = "\n\n---\n\n".join(notes_lines)
 
-    user_message = _load_prompt("synthesize-user.md").format_map({
-        "query": query,
-        "note_count": str(len(note_summaries)),
-        "notes_block": notes_block,
-    })
+    user_message = _load_prompt("synthesize-user.md").format_map(
+        {
+            "query": query,
+            "note_count": str(len(note_summaries)),
+            "notes_block": notes_block,
+        }
+    )
 
     try:
         from cyberbrain.extractors.backends import get_model_for_tool
+
         recall_config = {**config, "model": get_model_for_tool(config, "recall")}
-        synthesis = _call_claude_code_backend(system_prompt, user_message, recall_config)
-    except Exception as e:
+        synthesis = _call_claude_code_backend(
+            system_prompt, user_message, recall_config
+        )
+    except Exception as e:  # intentional: catches BackendError and any other LLM call failure; falls back to note cards
         # LLM call failed — return note cards with error note
         return retrieved_content + f"\n\n*(Synthesis failed: {e})*"
 
@@ -122,6 +143,7 @@ def _synthesize_recall(
     if config.get("quality_gate_enabled", True):
         try:
             from cyberbrain.extractors.quality_gate import quality_gate
+
             verdict = quality_gate(
                 operation="synthesis",
                 input_context=f"Query: {query}\n\nSource notes:\n{notes_block}",
@@ -134,7 +156,7 @@ def _synthesize_recall(
                     f"[synthesize] Quality gate failed: {verdict.rationale}",
                     file=sys.stderr,
                 )
-        except Exception as e:
+        except Exception as e:  # intentional: quality gate import or call failure is non-fatal; proceed with synthesis
             # Quality gate unavailable — proceed with synthesis (graceful degradation)
             print(f"[synthesize] Quality gate error (proceeding): {e}", file=sys.stderr)
 
@@ -159,13 +181,20 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
     def cb_recall(
         query: str,
-        max_results: Annotated[int, Field(
-            ge=1, le=50,
-            description="Maximum number of matching notes to return. Full body content is included for the top 2 results."
-        )] = 5,
-        synthesize: Annotated[bool, Field(
-            description="If true, ask the LLM to synthesize the retrieved notes into a concise answer. Requires claude-code backend."
-        )] = False,
+        max_results: Annotated[
+            int,
+            Field(
+                ge=1,
+                le=50,
+                description="Maximum number of matching notes to return. Full body content is included for the top 2 results.",
+            ),
+        ] = 5,
+        synthesize: Annotated[
+            bool,
+            Field(
+                description="If true, ask the LLM to synthesize the retrieved notes into a concise answer. Requires claude-code backend."
+            ),
+        ] = False,
     ) -> str:
         """
         Search the knowledge vault for notes from past sessions matching a query.
@@ -187,7 +216,9 @@ def register(mcp: FastMCP) -> None:
         """
         # Validate query length before any I/O
         if not any(len(w) >= 3 for w in re.split(r"\W+", query)):
-            raise ToolError("Query too short — provide at least one word with 3+ characters.")
+            raise ToolError(
+                "Query too short — provide at least one word with 3+ characters."
+            )
 
         config = _load_config()
         vault_path = config["vault_path"]
@@ -196,8 +227,9 @@ def register(mcp: FastMCP) -> None:
         # Errors are swallowed — a failed refresh never blocks the search.
         try:
             from cyberbrain.extractors.search_index import incremental_refresh
+
             incremental_refresh(config)
-        except Exception:
+        except Exception:  # intentional: refresh failure (import error, backend error) is non-fatal per comment above
             pass
 
         # Try pluggable search backend; fall back to grep on any failure
@@ -208,7 +240,9 @@ def register(mcp: FastMCP) -> None:
         if backend:
             try:
                 results = backend.search(query, top_k=max_results)
-            except Exception:
+            except (
+                Exception
+            ):  # intentional: backend search failure triggers grep fallback
                 backend = None
                 results = []
 
@@ -216,12 +250,15 @@ def register(mcp: FastMCP) -> None:
             # Grep fallback (always available)
             terms = [w for w in re.split(r"\W+", query) if len(w) >= 3][:8]
             if not terms:
-                raise ToolError("Query too short — provide at least one word with 3+ characters.")
+                raise ToolError(
+                    "Query too short — provide at least one word with 3+ characters."
+                )
             found: dict[str, tuple[int, float]] = {}
             for term in terms:
                 result = subprocess.run(
                     ["grep", "-r", "-l", "--include=*.md", "-i", term, vault_path],
-                    capture_output=True, text=True,
+                    capture_output=True,
+                    text=True,
                 )
                 for path in result.stdout.strip().splitlines():
                     if path:
@@ -233,23 +270,32 @@ def register(mcp: FastMCP) -> None:
                             pass
             if not found:
                 return f"No notes found matching: {query}"
-            ranked_paths = sorted(found, key=lambda p: (found[p][0], found[p][1]), reverse=True)[:max_results]
+            ranked_paths = sorted(
+                found, key=lambda p: (found[p][0], found[p][1]), reverse=True
+            )[:max_results]
 
-            from cyberbrain.extractors.search_backends import SearchResult, _read_frontmatter, _normalise_list
+            from cyberbrain.extractors.search_backends import (
+                SearchResult,
+                _normalise_list,
+                _read_frontmatter,
+            )
+
             results = []
             for path in ranked_paths:
                 fm = _read_frontmatter(path)
-                results.append(SearchResult(
-                    path=path,
-                    title=fm.get("title", "") or Path(path).stem,
-                    summary=fm.get("summary", ""),
-                    tags=_normalise_list(fm.get("tags", [])),
-                    related=_normalise_list(fm.get("related", [])),
-                    note_type=fm.get("type", ""),
-                    date=str(fm.get("date", ""))[:10],
-                    score=float(found[path][0]),
-                    backend="grep",
-                ))
+                results.append(
+                    SearchResult(
+                        path=path,
+                        title=fm.get("title", "") or Path(path).stem,
+                        summary=fm.get("summary", ""),
+                        tags=_normalise_list(fm.get("tags", [])),
+                        related=_normalise_list(fm.get("related", [])),
+                        note_type=fm.get("type", ""),
+                        date=str(fm.get("date", ""))[:10],
+                        score=float(found[path][0]),
+                        backend="grep",
+                    )
+                )
             backend_label = "grep"
 
         if not results:
@@ -282,7 +328,7 @@ def register(mcp: FastMCP) -> None:
             if content.startswith("---"):
                 end = content.find("\n---", 3)
                 if end != -1:
-                    body = content[end + 4:].strip()
+                    body = content[end + 4 :].strip()
 
             # Include full body for the 1-2 most relevant results
             if idx <= 2:
@@ -293,29 +339,30 @@ def register(mcp: FastMCP) -> None:
 
             # Collect summary info for synthesis prompt (all results, not just top 2)
             # Body excerpt: first 500 chars for token efficiency
-            note_summaries.append({
-                "title": result.title,
-                "type": result.note_type,
-                "date": result.date,
-                "tags": result.tags or [],
-                "summary": result.summary,
-                "source": rel,
-                "body_excerpt": body[:500] if body else "",
-            })
+            note_summaries.append(
+                {
+                    "title": result.title,
+                    "type": result.note_type,
+                    "date": result.date,
+                    "tags": result.tags or [],
+                    "summary": result.summary,
+                    "source": rel,
+                    "body_excerpt": body[:500] if body else "",
+                }
+            )
 
         if not entries:
             return f"No notes found matching: {query}"
 
         # Log any working-memory notes that were surfaced (for later synthesis quality analysis)
         wm_folder = config.get("working_memory_folder", "AI/Working Memory")
-        wm_paths = [
-            r.path for r in results
-            if wm_folder.lower() in r.path.lower()
-        ]
+        wm_paths = [r.path for r in results if wm_folder.lower() in r.path.lower()]
         if wm_paths:
             _log_wm_recall(query, wm_paths, len(results))
 
-        header = f"Found {len(entries)} note(s) for '{query}' (backend: {backend_label})"
+        header = (
+            f"Found {len(entries)} note(s) for '{query}' (backend: {backend_label})"
+        )
         content_block = header + "\n\n" + "\n---\n\n".join(entries)
 
         # M2 — security demarcation: wrap retrieved content so the active session LLM
@@ -333,18 +380,30 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
     def cb_read(
-        identifier: Annotated[str, Field(
-            description="A vault-relative path (e.g. 'Projects/myproject/JWT Auth Flow.md') or a note title (e.g. 'JWT Auth Flow'). For multiple notes, separate with | (pipe), e.g. 'Note A|Note B|Projects/foo.md'. Up to 10 identifiers. Resolution tries exact path, path + .md, then FTS5 title match."
-        )],
-        synthesize: Annotated[bool, Field(
-            description="If true, return an LLM-synthesized context block instead of raw note content. Most useful when retrieving multiple notes you want merged into a coherent answer."
-        )] = False,
-        query: Annotated[str, Field(
-            description="When synthesize=True, focus the synthesis on this question or topic. If empty, a general summary is produced."
-        )] = "",
-        max_chars_per_note: Annotated[int, Field(
-            description="When synthesize=False and multiple identifiers are provided, truncate each note body at this many characters (default 2000). Set to 0 for no truncation."
-        )] = 2000,
+        identifier: Annotated[
+            str,
+            Field(
+                description="A vault-relative path (e.g. 'Projects/myproject/JWT Auth Flow.md') or a note title (e.g. 'JWT Auth Flow'). For multiple notes, separate with | (pipe), e.g. 'Note A|Note B|Projects/foo.md'. Up to 10 identifiers. Resolution tries exact path, path + .md, then FTS5 title match."
+            ),
+        ],
+        synthesize: Annotated[
+            bool,
+            Field(
+                description="If true, return an LLM-synthesized context block instead of raw note content. Most useful when retrieving multiple notes you want merged into a coherent answer."
+            ),
+        ] = False,
+        query: Annotated[
+            str,
+            Field(
+                description="When synthesize=True, focus the synthesis on this question or topic. If empty, a general summary is produced."
+            ),
+        ] = "",
+        max_chars_per_note: Annotated[
+            int,
+            Field(
+                description="When synthesize=False and multiple identifiers are provided, truncate each note body at this many characters (default 2000). Set to 0 for no truncation."
+            ),
+        ] = 2000,
     ) -> str:
         """
         Read one or more specific vault notes by path or title.
@@ -384,7 +443,9 @@ def register(mcp: FastMCP) -> None:
             if resolved and resolved.exists():
                 return resolved
             # 2. Exact path + .md extension
-            candidate_md = vault_path / (ident if ident.endswith(".md") else ident + ".md")
+            candidate_md = vault_path / (
+                ident if ident.endswith(".md") else ident + ".md"
+            )
             resolved_md = _resolve_path(candidate_md)
             if resolved_md and resolved_md.exists():
                 return resolved_md
@@ -398,7 +459,9 @@ def register(mcp: FastMCP) -> None:
             # Single-note path (original behavior)
             note_path = _resolve_identifier(identifier.strip())
             if note_path is None:
-                raise ToolError(f"Note not found: {identifier}. Try cb_recall to search.")
+                raise ToolError(
+                    f"Note not found: {identifier}. Try cb_recall to search."
+                )
             try:
                 content = note_path.read_text(encoding="utf-8")
             except OSError as e:
@@ -416,19 +479,23 @@ def register(mcp: FastMCP) -> None:
             if content.startswith("---"):
                 end = content.find("\n---", 3)
                 if end != -1:
-                    body = content[end + 4:].strip()
-            note_summaries = [{
-                "title": title,
-                "type": fm.get("type", ""),
-                "date": str(fm.get("date", ""))[:10],
-                "tags": fm.get("tags", []) or [],
-                "summary": fm.get("summary", ""),
-                "source": rel,
-                "body_excerpt": body[:500],
-            }]
+                    body = content[end + 4 :].strip()
+            note_summaries = [
+                {
+                    "title": title,
+                    "type": fm.get("type", ""),
+                    "date": str(fm.get("date", ""))[:10],
+                    "tags": fm.get("tags", []) or [],
+                    "summary": fm.get("summary", ""),
+                    "source": rel,
+                    "body_excerpt": body[:500],
+                }
+            ]
             notes_block = f"# {title}\n\n{content}"
             effective_query = query or "Summarize the key information from these notes."
-            return _synthesize_recall(effective_query, notes_block, note_summaries, config)
+            return _synthesize_recall(
+                effective_query, notes_block, note_summaries, config
+            )
 
         # Multi-note path
         resolved_notes = []
@@ -461,27 +528,34 @@ def register(mcp: FastMCP) -> None:
             if content.startswith("---"):
                 end = content.find("\n---", 3)
                 if end != -1:
-                    body = content[end + 4:].strip()
+                    body = content[end + 4 :].strip()
 
-            note_summaries.append({
-                "title": title,
-                "type": fm.get("type", ""),
-                "date": str(fm.get("date", ""))[:10],
-                "tags": fm.get("tags", []) or [],
-                "summary": fm.get("summary", ""),
-                "source": rel,
-                "body_excerpt": body[:500],
-            })
+            note_summaries.append(
+                {
+                    "title": title,
+                    "type": fm.get("type", ""),
+                    "date": str(fm.get("date", ""))[:10],
+                    "tags": fm.get("tags", []) or [],
+                    "summary": fm.get("summary", ""),
+                    "source": rel,
+                    "body_excerpt": body[:500],
+                }
+            )
 
             if synthesize:
                 parts.append(f"# {title}\n\n{content}")
             else:
                 # Truncate body per note when not synthesizing; 0 means no truncation
                 if MAX_CHARS_PER_NOTE > 0 and len(body) > MAX_CHARS_PER_NOTE:
-                    truncated_body = body[:MAX_CHARS_PER_NOTE] + "\n\n*(truncated — use cb_read with this identifier alone for the full note)*"
+                    truncated_body = (
+                        body[:MAX_CHARS_PER_NOTE]
+                        + "\n\n*(truncated — use cb_read with this identifier alone for the full note)*"
+                    )
                 else:
                     truncated_body = body
-                parts.append(f"# {title}\n\n{content[:content.find(body)]}{truncated_body}\n\n---\nSource: {rel}")
+                parts.append(
+                    f"# {title}\n\n{content[: content.find(body)]}{truncated_body}\n\n---\nSource: {rel}"
+                )
 
         if not parts:
             raise ToolError(f"All notes failed to read: {', '.join(identifiers)}")
@@ -495,5 +569,7 @@ def register(mcp: FastMCP) -> None:
 
         effective_query = query or "Summarize the key information from these notes."
         notes_block = "\n\n---\n\n".join(parts)
-        result = _synthesize_recall(effective_query, notes_block, note_summaries, config)
+        result = _synthesize_recall(
+            effective_query, notes_block, note_summaries, config
+        )
         return result + warning

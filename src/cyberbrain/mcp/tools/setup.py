@@ -16,8 +16,9 @@ def _run_analyzer(vault: Path) -> dict:
     """Import and run the vault analyzer. Returns report dict (never raises)."""
     try:
         from cyberbrain.extractors.analyze_vault import analyze_vault
+
         return analyze_vault(str(vault))
-    except Exception as e:
+    except Exception as e:  # intentional: analyzer failures (import error, vault I/O, etc.) return error dict per docstring
         return {"error": str(e), "vault_path": str(vault), "total_notes": 0}
 
 
@@ -33,7 +34,9 @@ def _read_note_samples(vault: Path, md_files: list, vault_report: dict) -> str:
     else:
         sample_count = 70
 
-    hub_stems = {n["note"] for n in vault_report.get("links", {}).get("hub_nodes", [])[:10]}
+    hub_stems = {
+        n["note"] for n in vault_report.get("links", {}).get("hub_nodes", [])[:10]
+    }
     priority = [f for f in md_files if f.stem in hub_stems]
     rest = [f for f in md_files if f.stem not in hub_stems]
     selected = (priority + rest)[:sample_count]
@@ -44,24 +47,29 @@ def _read_note_samples(vault: Path, md_files: list, vault_report: dict) -> str:
             content = f.read_text(encoding="utf-8", errors="replace")[:2000]
             rel = f.relative_to(vault)
             samples.append(f"=== {rel} ===\n{content}")
-        except Exception:
+        except (OSError, ValueError):
             pass
 
     return "\n\n".join(samples)
 
 
 def _build_report_summary(vault_report: dict, md_files: list) -> str:
-    return json.dumps({
-        "total_notes": vault_report.get("total_notes", len(md_files)),
-        "folder_structure": vault_report.get("folder_structure", {}),
-        "entity_types": vault_report.get("entity_types", {}),
-        "naming_conventions": vault_report.get("naming_conventions", {}),
-        "tags": {"top_tags": vault_report.get("tags", {}).get("top_tags", [])[:20]},
-        "links": {
-            "hub_nodes": vault_report.get("links", {}).get("hub_nodes", [])[:10],
-            "notes_with_no_incoming_links": vault_report.get("links", {}).get("notes_with_no_incoming_links", 0),
+    return json.dumps(
+        {
+            "total_notes": vault_report.get("total_notes", len(md_files)),
+            "folder_structure": vault_report.get("folder_structure", {}),
+            "entity_types": vault_report.get("entity_types", {}),
+            "naming_conventions": vault_report.get("naming_conventions", {}),
+            "tags": {"top_tags": vault_report.get("tags", {}).get("top_tags", [])[:20]},
+            "links": {
+                "hub_nodes": vault_report.get("links", {}).get("hub_nodes", [])[:10],
+                "notes_with_no_incoming_links": vault_report.get("links", {}).get(
+                    "notes_with_no_incoming_links", 0
+                ),
+            },
         },
-    }, indent=2)
+        indent=2,
+    )
 
 
 _ANALYSIS_SYSTEM_PROMPT = """\
@@ -177,21 +185,34 @@ call cb_file to save it.
 def register(mcp: FastMCP) -> None:
     @mcp.tool()
     def cb_setup(
-        vault_path: Annotated[str, Field(
-            description="Absolute path to the vault. Empty = read from config."
-        )] = "",
-        types: Annotated[str, Field(
-            description="Comma-separated type vocabulary override, e.g. 'decision,insight,problem,reference'. Skips archetype analysis if provided."
-        )] = "",
-        answers: Annotated[str, Field(
-            description="JSON string of user answers to questions returned by a Phase 1 call. When provided, triggers Phase 2 (CLAUDE.md generation)."
-        )] = "",
-        dry_run: Annotated[bool, Field(
-            description="Return the generated CLAUDE.md without writing it to disk."
-        )] = False,
-        write: Annotated[bool, Field(
-            description="Write the generated CLAUDE.md to the vault root. Requires answers to be provided (Phase 2)."
-        )] = False,
+        vault_path: Annotated[
+            str,
+            Field(description="Absolute path to the vault. Empty = read from config."),
+        ] = "",
+        types: Annotated[
+            str,
+            Field(
+                description="Comma-separated type vocabulary override, e.g. 'decision,insight,problem,reference'. Skips archetype analysis if provided."
+            ),
+        ] = "",
+        answers: Annotated[
+            str,
+            Field(
+                description="JSON string of user answers to questions returned by a Phase 1 call. When provided, triggers Phase 2 (CLAUDE.md generation)."
+            ),
+        ] = "",
+        dry_run: Annotated[
+            bool,
+            Field(
+                description="Return the generated CLAUDE.md without writing it to disk."
+            ),
+        ] = False,
+        write: Annotated[
+            bool,
+            Field(
+                description="Write the generated CLAUDE.md to the vault root. Requires answers to be provided (Phase 2)."
+            ),
+        ] = False,
     ) -> str:
         """
         Analyze an Obsidian vault and generate or update its CLAUDE.md.
@@ -220,13 +241,16 @@ def register(mcp: FastMCP) -> None:
             raise ToolError(f"Vault path does not exist: {vault}")
 
         md_files = [
-            f for f in vault.rglob("*.md")
+            f
+            for f in vault.rglob("*.md")
             if not any(part.startswith(".") for part in f.relative_to(vault).parts)
         ]
 
         claude_md_path = vault / "CLAUDE.md"
         existing_claude_md = (
-            claude_md_path.read_text(encoding="utf-8") if claude_md_path.exists() else ""
+            claude_md_path.read_text(encoding="utf-8")
+            if claude_md_path.exists()
+            else ""
         )
 
         vault_report = _run_analyzer(vault)
@@ -238,14 +262,18 @@ def register(mcp: FastMCP) -> None:
             types_note = (
                 f"\nNote: User specified type vocabulary: {types}. "
                 "Focus questions on other aspects — do not ask about types."
-                if types else ""
+                if types
+                else ""
             )
             user_message = (
                 f"Vault path: {vault}\n\n"
                 f"Vault analysis report:\n{report_summary}\n\n"
                 f"Sample notes (representative selection):\n{note_samples[:20000]}\n\n"
-                + (f"Existing CLAUDE.md:\n{existing_claude_md[:3000]}\n\n"
-                   if existing_claude_md else "No existing CLAUDE.md found.\n\n")
+                + (
+                    f"Existing CLAUDE.md:\n{existing_claude_md[:3000]}\n\n"
+                    if existing_claude_md
+                    else "No existing CLAUDE.md found.\n\n"
+                )
                 + types_note
                 + "\nAnalyze this vault and return the JSON object."
             )
@@ -258,30 +286,35 @@ def register(mcp: FastMCP) -> None:
                 return json.dumps(result, indent=2)
             except json.JSONDecodeError:
                 return raw
-            except Exception as e:
+            except Exception as e:  # intentional: catches BackendError and any other LLM call failure; re-raises as ToolError
                 raise ToolError(f"Phase 1 analysis failed: {e}")
 
         else:
             # ── Phase 2: generate CLAUDE.md from analysis + user answers ──
             types_note = (
                 f"\nType vocabulary specified by user: {types}"
-                if types else
-                "\nDetermine the type vocabulary from the analysis and user answers."
+                if types
+                else "\nDetermine the type vocabulary from the analysis and user answers."
             )
             user_message = (
                 f"Vault path: {vault}\n\n"
                 f"Vault analysis:\n{report_summary}\n\n"
                 f"Sample notes (for style and convention reference):\n{note_samples[:15000]}\n\n"
-                + (f"Existing CLAUDE.md (preserve custom sections):\n{existing_claude_md[:3000]}\n\n"
-                   if existing_claude_md else "No existing CLAUDE.md.\n\n")
+                + (
+                    f"Existing CLAUDE.md (preserve custom sections):\n{existing_claude_md[:3000]}\n\n"
+                    if existing_claude_md
+                    else "No existing CLAUDE.md.\n\n"
+                )
                 + f"User answers to clarifying questions:\n{answers}\n"
                 + types_note
                 + "\n\nGenerate the complete CLAUDE.md for this vault."
             )
 
             try:
-                claude_md_content = call_model(_GENERATION_SYSTEM_PROMPT, user_message, config)
-            except Exception as e:
+                claude_md_content = call_model(
+                    _GENERATION_SYSTEM_PROMPT, user_message, config
+                )
+            except Exception as e:  # intentional: catches BackendError and any other LLM call failure; re-raises as ToolError
                 raise ToolError(f"Phase 2 generation failed: {e}")
 
             if dry_run or not write:
@@ -290,8 +323,7 @@ def register(mcp: FastMCP) -> None:
                     "## Generated CLAUDE.md\n\n"
                     f"```markdown\n{claude_md_content}\n```\n\n"
                     f"{prefix}No files written. "
-                    "Call cb_setup(answers=..., write=True) to save."
-                    + _SETUP_GUIDANCE
+                    "Call cb_setup(answers=..., write=True) to save." + _SETUP_GUIDANCE
                 )
 
             try:
@@ -305,6 +337,5 @@ def register(mcp: FastMCP) -> None:
                 f"  Vault: {vault}\n"
                 f"  Size:  {word_count} words\n\n"
                 "Recommended next step: Run cb_enrich(dry_run=True) to see which "
-                "notes are missing metadata."
-                + _SETUP_GUIDANCE
+                "notes are missing metadata." + _SETUP_GUIDANCE
             )

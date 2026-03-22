@@ -11,8 +11,9 @@
 - **Question**: `restructure.py` is 2,171 lines. The phase separation (audit/group/decide/generate/execute prompts) exists but orchestration is monolithic. Is the current size creating maintenance risk?
 - **Source**: specs/plan/architecture.md (Design Tension T3)
 - **Impact**: Monolithic orchestration makes it harder to test individual phases, debug failures, and add new grouping strategies.
-- **Status**: open
-- **Reexamination trigger**: When adding a new grouping strategy or debugging a phase-specific failure.
+- **Status**: resolved
+- **Resolution**: restructure.py decomposed into an 11-file phase-based sub-package (collect, cluster, cache, audit, decide, generate, execute, format, utils, pipeline, __init__) via WI-062. See curation/D-7.
+- **Resolved in**: cycle 012
 
 ## Q-3: Frontmatter parsing consolidation — complete migration to frontmatter.py?
 - **Question**: Three files (`shared.py`, `analyze_vault.py`, `search_backends.py`) still contain their own frontmatter parsing implementations despite `frontmatter.py` being canonical. Should all be migrated?

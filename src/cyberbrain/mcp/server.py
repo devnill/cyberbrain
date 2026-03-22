@@ -14,8 +14,18 @@ from fastmcp import FastMCP
 
 mcp = FastMCP("cyberbrain")
 
-from cyberbrain.mcp.tools import extract, file, recall, manage, setup, enrich, restructure, review, reindex
 from cyberbrain.mcp import resources
+from cyberbrain.mcp.tools import (
+    enrich,
+    extract,
+    file,
+    manage,
+    recall,
+    reindex,
+    restructure,
+    review,
+    setup,
+)
 
 extract.register(mcp)
 file.register(mcp)

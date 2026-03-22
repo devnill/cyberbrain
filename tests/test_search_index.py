@@ -10,7 +10,6 @@ Coverage:
 No real backends are loaded — all tests use mocks.
 """
 
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -37,6 +36,7 @@ def clear_backend_cache():
 # _get_backend
 # ===========================================================================
 
+
 class TestGetBackend:
     """_get_backend() returns a cached backend or None."""
 
@@ -50,7 +50,10 @@ class TestGetBackend:
         mock_backend = MagicMock()
         config = {"vault_path": str(tmp_path), "search_backend": "fts5"}
 
-        with patch("cyberbrain.extractors.search_backends.get_search_backend", return_value=mock_backend) as mock_factory:
+        with patch(
+            "cyberbrain.extractors.search_backends.get_search_backend",
+            return_value=mock_backend,
+        ) as mock_factory:
             b1 = si._get_backend(config)
             b2 = si._get_backend(config)
 
@@ -65,7 +68,10 @@ class TestGetBackend:
         config1 = {"vault_path": str(tmp_path), "search_backend": "grep"}
         config2 = {"vault_path": str(tmp_path), "search_backend": "fts5"}
 
-        with patch("cyberbrain.extractors.search_backends.get_search_backend", side_effect=[mock_backend_1, mock_backend_2]):
+        with patch(
+            "cyberbrain.extractors.search_backends.get_search_backend",
+            side_effect=[mock_backend_1, mock_backend_2],
+        ):
             b1 = si._get_backend(config1)
             b2 = si._get_backend(config2)
 
@@ -74,7 +80,10 @@ class TestGetBackend:
     def test_returns_none_on_import_error(self, tmp_path):
         """If get_search_backend raises ImportError, returns None without propagating."""
         config = {"vault_path": str(tmp_path), "search_backend": "fts5"}
-        with patch("cyberbrain.extractors.search_backends.get_search_backend", side_effect=ImportError("no module")):
+        with patch(
+            "cyberbrain.extractors.search_backends.get_search_backend",
+            side_effect=ImportError("no module"),
+        ):
             result = si._get_backend(config)
         assert result is None
 
@@ -82,6 +91,7 @@ class TestGetBackend:
 # ===========================================================================
 # update_search_index
 # ===========================================================================
+
 
 class TestUpdateSearchIndex:
     """update_search_index() indexes a note post-write."""
@@ -117,6 +127,7 @@ class TestUpdateSearchIndex:
 # ===========================================================================
 # build_full_index
 # ===========================================================================
+
 
 class TestBuildFullIndex:
     """build_full_index() rebuilds the entire search index."""
@@ -159,6 +170,7 @@ class TestBuildFullIndex:
 # active_backend_name
 # ===========================================================================
 
+
 class TestActiveBackendName:
     """active_backend_name() returns the name of the active search backend."""
 
@@ -186,6 +198,7 @@ class TestActiveBackendName:
 # ===========================================================================
 # Additional exception path coverage
 # ===========================================================================
+
 
 class TestBuildFullIndexExceptions:
     """build_full_index handles backend exceptions gracefully."""

@@ -1,7 +1,7 @@
 # Constraints
 
 ## Technology Constraints
-1. **Python 3.8+ for all backend code.** The extractor, MCP server, search backends, and scripts are all Python. No other runtime.
+1. **Python 3.11+ for all backend code.** The extractor, MCP server, search backends, and scripts are all Python. No other runtime. The codebase uses 3.11+ features (match statements, `X | Y` union syntax, built-in generics).
 2. **FastMCP v3 for MCP server.** Stdio transport. Compatible with Claude Desktop, Claude Code, Cursor, Zed.
 3. **Obsidian-compatible markdown.** All vault notes must be valid Obsidian markdown with YAML frontmatter. Wikilinks use `[[Title]]` shortest-path resolution. No plugin dependencies — everything must work in vanilla Obsidian.
 4. **SQLite for derived data.** Search index, FTS5, and vector storage use SQLite. No external database servers in the current architecture (though this constraint may be revisited for hosted deployment).

@@ -2,7 +2,7 @@
 
 import json
 import re
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 
@@ -10,7 +10,18 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
-from cyberbrain.mcp.shared import _load_config, _get_search_backend, _parse_frontmatter, _prune_index, _index_paths, _move_to_trash, _load_tool_prompt as _load_prompt, _is_within_vault
+from cyberbrain.mcp.shared import (
+    _get_search_backend,
+    _index_paths,
+    _is_within_vault,
+    _load_config,
+    _move_to_trash,
+    _parse_frontmatter,
+    _prune_index,
+)
+from cyberbrain.mcp.shared import (
+    _load_tool_prompt as _load_prompt,
+)
 
 _PREFS_HEADING = "## Cyberbrain Preferences"
 
@@ -26,7 +37,7 @@ def _read_vault_prefs(vault_path: str) -> str:
     rest = text[idx:]
     for m in re.finditer(r"^## ", rest, re.MULTILINE):
         if m.start() > 0:
-            return rest[:m.start()].strip()
+            return rest[: m.start()].strip()
     return rest.strip()
 
 
@@ -53,17 +64,19 @@ def _find_due_notes(vault: Path, wm_root: Path, days_ahead: int) -> list[dict]:
             continue
         if review_after <= cutoff:
             days_overdue = (date.today() - review_after).days
-            due.append({
-                "path": path,
-                "rel_path": str(path.relative_to(vault)),
-                "content": content,
-                "fm": fm,
-                "title": str(fm.get("title") or path.stem),
-                "summary": str(fm.get("summary", "")),
-                "tags": fm.get("tags", []),
-                "review_after": review_after,
-                "days_overdue": days_overdue,
-            })
+            due.append(
+                {
+                    "path": path,
+                    "rel_path": str(path.relative_to(vault)),
+                    "content": content,
+                    "fm": fm,
+                    "title": str(fm.get("title") or path.stem),
+                    "summary": str(fm.get("summary", "")),
+                    "tags": fm.get("tags", []),
+                    "review_after": review_after,
+                    "days_overdue": days_overdue,
+                }
+            )
     return due
 
 
@@ -83,7 +96,7 @@ def _cluster_notes(notes: list[dict], backend) -> list[list[int]]:
         query = f"{note['title']}. {note['summary']}"
         try:
             results = backend.search(query, top_k=6)
-        except Exception:
+        except Exception:  # intentional: per-note search failure is non-fatal; skip adjacency for this note
             continue
         for result in results:
             rp = str(result.path)
@@ -120,7 +133,11 @@ def _format_notes_block(notes: list[dict], clusters: list[list[int]]) -> str:
         if len(cluster) == 1:
             i = cluster[0]
             note = notes[i]
-            overdue_str = f"{note['days_overdue']} days overdue" if note['days_overdue'] > 0 else "due today"
+            overdue_str = (
+                f"{note['days_overdue']} days overdue"
+                if note["days_overdue"] > 0
+                else "due today"
+            )
             lines = [
                 f"### Note {i}: {note['title']} ({overdue_str})",
                 f"Path: {note['rel_path']}",
@@ -138,7 +155,11 @@ def _format_notes_block(notes: list[dict], clusters: list[list[int]]) -> str:
             cluster_parts = [header]
             for i in cluster:
                 note = notes[i]
-                overdue_str = f"{note['days_overdue']} days overdue" if note['days_overdue'] > 0 else "due today"
+                overdue_str = (
+                    f"{note['days_overdue']} days overdue"
+                    if note["days_overdue"] > 0
+                    else "due today"
+                )
                 cluster_parts.append(f"\n**Note {i}: {note['title']}** ({overdue_str})")
                 cluster_parts.append(f"Path: {note['rel_path']}")
                 if note["summary"]:
@@ -180,7 +201,7 @@ def _append_errata(vault: Path, config: dict, entries: list[str]) -> None:
     log_rel = config.get("consolidation_log", "AI/Cyberbrain-Log.md")
     log_path = vault / log_rel
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     header = f"\n## {now.strftime('%Y-%m-%d')} — Working Memory Review\n\n"
     body = "\n".join(f"- {e}" for e in entries) + "\n"
     with open(log_path, "a", encoding="utf-8") as f:
@@ -190,24 +211,38 @@ def _append_errata(vault: Path, config: dict, entries: list[str]) -> None:
 def register(mcp: FastMCP) -> None:
     @mcp.tool()
     def cb_review(
-        days_ahead: Annotated[int, Field(
-            ge=0, le=90,
-            description="Also include notes whose review date is within this many days (0 = only past-due notes)."
-        )] = 0,
-        folder: Annotated[str, Field(
-            description="Vault-relative subfolder to scan. Defaults to your configured working_memory_folder."
-        )] = "",
-        dry_run: Annotated[bool, Field(
-            description="Preview proposed actions without modifying any files. Always start here."
-        )] = True,
-        extend_weeks: Annotated[int, Field(
-            ge=1, le=26,
-            description="How many weeks to extend the review date when action is 'extend'. Default: 4."
-        )] = 4,
-        limit: Annotated[int, Field(
-            ge=0,
-            description="Max notes to review in one run. 0 = no limit."
-        )] = 0,
+        days_ahead: Annotated[
+            int,
+            Field(
+                ge=0,
+                le=90,
+                description="Also include notes whose review date is within this many days (0 = only past-due notes).",
+            ),
+        ] = 0,
+        folder: Annotated[
+            str,
+            Field(
+                description="Vault-relative subfolder to scan. Defaults to your configured working_memory_folder."
+            ),
+        ] = "",
+        dry_run: Annotated[
+            bool,
+            Field(
+                description="Preview proposed actions without modifying any files. Always start here."
+            ),
+        ] = True,
+        extend_weeks: Annotated[
+            int,
+            Field(
+                ge=1,
+                le=26,
+                description="How many weeks to extend the review date when action is 'extend'. Default: 4.",
+            ),
+        ] = 4,
+        limit: Annotated[
+            int,
+            Field(ge=0, description="Max notes to review in one run. 0 = no limit."),
+        ] = 0,
     ) -> str:
         """
         Review working memory notes that are due and decide what to do with each one.
@@ -221,14 +256,20 @@ def register(mcp: FastMCP) -> None:
         Working memory notes are created automatically from extraction when beats
         are classified as 'working-memory' durability.
         """
-        from cyberbrain.extractors.backends import call_model, BackendError, get_model_for_tool
+        from cyberbrain.extractors.backends import (
+            BackendError,
+            call_model,
+            get_model_for_tool,
+        )
         from cyberbrain.extractors.quality_gate import quality_gate as _quality_gate
 
         config = _load_config()
         gate_enabled = config.get("quality_gate_enabled", True)
         vault_path_str = config.get("vault_path", "")
         if not vault_path_str:
-            raise ToolError("No vault configured. Run cb_configure(vault_path=...) first.")
+            raise ToolError(
+                "No vault configured. Run cb_configure(vault_path=...) first."
+            )
 
         vault = Path(vault_path_str).expanduser().resolve()
         if not vault.exists():
@@ -250,15 +291,17 @@ def register(mcp: FastMCP) -> None:
             notes = notes[:limit]
 
         if dry_run:
-            lines = [
-                f"[DRY RUN] {len(notes)} working memory note(s) due for review:\n"
-            ]
+            lines = [f"[DRY RUN] {len(notes)} working memory note(s) due for review:\n"]
             for note in notes:
-                overdue = f"{note['days_overdue']} days overdue" if note['days_overdue'] > 0 else "due today"
+                overdue = (
+                    f"{note['days_overdue']} days overdue"
+                    if note["days_overdue"] > 0
+                    else "due today"
+                )
                 lines.append(f"  - {note['title']} ({overdue}) → {note['rel_path']}")
             lines.append(
-                f"\nRun without dry_run=True to process. "
-                f"The LLM will propose promote / extend / delete for each note."
+                "\nRun without dry_run=True to process. "
+                "The LLM will propose promote / extend / delete for each note."
             )
             return "\n".join(lines)
 
@@ -295,10 +338,12 @@ def register(mcp: FastMCP) -> None:
         if not isinstance(decisions, list):
             raise ToolError("LLM response was not a JSON array.")
 
-        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
         errata: list[str] = []
         result_lines: list[str] = []
-        gate_flagged: list[tuple[list[str], str, str, object]] = []  # (titles, action, rationale, verdict)
+        gate_flagged: list[
+            tuple[list[str], str, str, object]
+        ] = []  # (titles, action, rationale, verdict)
         promoted = deleted = extended = 0
         written_paths: list[Path] = []
 
@@ -322,7 +367,11 @@ def register(mcp: FastMCP) -> None:
 
             # ── Quality gate ──
             if gate_enabled:
-                gate_op = f"review_{action}" if action in ("promote", "delete") else "review_decide"
+                gate_op = (
+                    f"review_{action}"
+                    if action in ("promote", "delete")
+                    else "review_decide"
+                )
                 note_summaries = "\n".join(
                     f"- {n['title']} (overdue {n['days_overdue']}d): {n['summary']}"
                     for n in affected_notes
@@ -332,6 +381,7 @@ def register(mcp: FastMCP) -> None:
                 verdict = _quality_gate(gate_op, gate_input, gate_output, config)
                 if not verdict.passed:
                     from cyberbrain.extractors.quality_gate import Verdict as _Verdict
+
                     if verdict.verdict == _Verdict.UNCERTAIN:
                         # Uncertain — flag for confirmation but still report
                         gate_flagged.append((titles, action, rationale, verdict))
@@ -357,12 +407,16 @@ def register(mcp: FastMCP) -> None:
                 promoted_content = decision.get("promoted_content", "")
 
                 if not promoted_path_rel or not promoted_content:
-                    result_lines.append(f"Promote skipped for {titles} — missing path or content")
+                    result_lines.append(
+                        f"Promote skipped for {titles} — missing path or content"
+                    )
                     continue
 
                 output_path = vault / promoted_path_rel
                 if not _is_within_vault(vault, output_path):
-                    result_lines.append(f"Promote skipped — path traversal rejected: {promoted_path_rel}")
+                    result_lines.append(
+                        f"Promote skipped — path traversal rejected: {promoted_path_rel}"
+                    )
                     continue
 
                 # Inject provenance
@@ -370,7 +424,9 @@ def register(mcp: FastMCP) -> None:
                 if promoted_content.startswith("---"):
                     end = promoted_content.find("\n---", 3)
                     if end != -1:
-                        promoted_content = promoted_content[:end] + prov + promoted_content[end:]
+                        promoted_content = (
+                            promoted_content[:end] + prov + promoted_content[end:]
+                        )
 
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 output_path.write_text(promoted_content, encoding="utf-8")
@@ -382,7 +438,9 @@ def register(mcp: FastMCP) -> None:
                         _move_to_trash(note["path"], vault, config)
                         deleted += 1
                     except OSError as e:
-                        result_lines.append(f"  Warning: could not trash {note['path'].name}: {e}")
+                        result_lines.append(
+                            f"  Warning: could not trash {note['path'].name}: {e}"
+                        )
 
                 result_lines.append(
                     f"Promoted: {', '.join(repr(t) for t in titles)} → **{promoted_title}** ({promoted_path_rel})"
@@ -409,7 +467,9 @@ def register(mcp: FastMCP) -> None:
                         result_lines.append(f"Trashed: {note['title']} — {rationale}")
                         errata.append(f"**Trashed:** {note['title']}")
                     except OSError as e:
-                        result_lines.append(f"  Warning: could not trash {note['path'].name}: {e}")
+                        result_lines.append(
+                            f"  Warning: could not trash {note['path'].name}: {e}"
+                        )
 
             else:
                 result_lines.append(f"Unknown action '{action}' for {titles} — skipped")
@@ -417,22 +477,28 @@ def register(mcp: FastMCP) -> None:
         # Handle any notes the LLM didn't address
         for i, note in enumerate(notes):
             if i not in handled:
-                result_lines.append(f"No decision returned for: {note['title']} — left unchanged")
+                result_lines.append(
+                    f"No decision returned for: {note['title']} — left unchanged"
+                )
 
         _index_paths(written_paths, config)
         _prune_index(config)
 
         _append_errata(vault, config, errata)
 
-        summary = [
-            "## Working Memory Review Complete\n",
-        ] + result_lines + [
-            "",
-            f"Promoted:  {promoted}",
-            f"Extended:  {extended}",
-            f"Deleted:   {deleted}",
-            f"Blocked:   {len(gate_flagged)}",
-        ]
+        summary = (
+            [
+                "## Working Memory Review Complete\n",
+            ]
+            + result_lines
+            + [
+                "",
+                f"Promoted:  {promoted}",
+                f"Extended:  {extended}",
+                f"Deleted:   {deleted}",
+                f"Blocked:   {len(gate_flagged)}",
+            ]
+        )
         log_rel = config.get("consolidation_log", "AI/Cyberbrain-Log.md")
         if errata and config.get("consolidation_log_enabled", True):
             summary.append(f"Logged to:  {log_rel}")

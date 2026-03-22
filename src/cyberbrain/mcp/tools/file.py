@@ -1,7 +1,7 @@
 """cb_file tool — file a specific piece of information into the vault."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -10,8 +10,13 @@ from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from cyberbrain.mcp.shared import (
-    _extract_beats, write_beat, autofile_beat, write_journal_entry,
-    BackendError, _load_config, _relpath,
+    BackendError,
+    _extract_beats,
+    _load_config,
+    _relpath,
+    autofile_beat,
+    write_beat,
+    write_journal_entry,
 )
 
 
@@ -40,24 +45,42 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     def cb_file(
         content: str,
-        title: Annotated[str | None, Field(
-            description="Note title. When provided, skips LLM extraction and files the document directly (document intake mode). When omitted, the content is passed through LLM extraction for classification, titling, and tagging (single-beat capture mode)."
-        )] = None,
-        type: Annotated[str | None, Field(
-            description="Note type (e.g. 'reference', 'decision', 'insight', 'problem'). For document intake: defaults to 'reference'. For single-beat capture: overrides LLM classification if provided. Valid values from your vault CLAUDE.md."
-        )] = None,
-        tags: Annotated[str | None, Field(
-            description="Comma-separated tags (e.g. 'python, async, performance'). For document intake: applied as-is. For single-beat capture: merged with LLM-generated tags."
-        )] = None,
-        durability: Annotated[str | None, Field(
-            description="Durability for document intake. 'durable' (default) routes normally; 'working-memory' sends the note to the Working Memory folder. Ignored for single-beat capture — the LLM decides."
-        )] = None,
-        folder: Annotated[str | None, Field(
-            description="Vault-relative folder path to file into, e.g. 'Personal/Recipes' or 'Work/Projects/hermes'. Omit to use the configured inbox folder."
-        )] = None,
-        cwd: Annotated[str | None, Field(
-            description="Absolute path to the project directory. Enables project-scoped routing to the project's dedicated vault folder (requires .claude/cyberbrain.local.json in that directory). Omit to route to the global inbox."
-        )] = None,
+        title: Annotated[
+            str | None,
+            Field(
+                description="Note title. When provided, skips LLM extraction and files the document directly (document intake mode). When omitted, the content is passed through LLM extraction for classification, titling, and tagging (single-beat capture mode)."
+            ),
+        ] = None,
+        type: Annotated[
+            str | None,
+            Field(
+                description="Note type (e.g. 'reference', 'decision', 'insight', 'problem'). For document intake: defaults to 'reference'. For single-beat capture: overrides LLM classification if provided. Valid values from your vault CLAUDE.md."
+            ),
+        ] = None,
+        tags: Annotated[
+            str | None,
+            Field(
+                description="Comma-separated tags (e.g. 'python, async, performance'). For document intake: applied as-is. For single-beat capture: merged with LLM-generated tags."
+            ),
+        ] = None,
+        durability: Annotated[
+            str | None,
+            Field(
+                description="Durability for document intake. 'durable' (default) routes normally; 'working-memory' sends the note to the Working Memory folder. Ignored for single-beat capture — the LLM decides."
+            ),
+        ] = None,
+        folder: Annotated[
+            str | None,
+            Field(
+                description="Vault-relative folder path to file into, e.g. 'Personal/Recipes' or 'Work/Projects/hermes'. Omit to use the configured inbox folder."
+            ),
+        ] = None,
+        cwd: Annotated[
+            str | None,
+            Field(
+                description="Absolute path to the project directory. Enables project-scoped routing to the project's dedicated vault folder (requires .claude/cyberbrain.local.json in that directory). Omit to route to the global inbox."
+            ),
+        ] = None,
     ) -> str:
         """
         File content into the knowledge vault.
@@ -82,7 +105,7 @@ def register(mcp: FastMCP) -> None:
         """
         effective_cwd = cwd or str(Path.home())
         config = _load_config(effective_cwd)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         session_id = str(uuid.uuid4())
 
         # Apply folder override to config so routing uses it
@@ -112,7 +135,9 @@ def register(mcp: FastMCP) -> None:
         else:
             # UC2: Single-beat capture — use LLM extraction
             try:
-                beats = _extract_beats(content, effective_config, "manual", effective_cwd)
+                beats = _extract_beats(
+                    content, effective_config, "manual", effective_cwd
+                )
             except BackendError as e:
                 backend = config.get("backend", "claude-code")
                 raise ToolError(f"Backend error ({backend}): {e}")
@@ -163,15 +188,33 @@ def register(mcp: FastMCP) -> None:
                 if autofile_enabled and not folder:
                     # can_ask only for single-beat scenarios: multi-beat extraction should
                     # not drop remaining beats by asking about the first one.
-                    path = autofile_beat(beat, effective_config, session_id, effective_cwd, now, vault_context=vault_context, source=source, can_ask=(len(beats) == 1))
+                    path = autofile_beat(
+                        beat,
+                        effective_config,
+                        session_id,
+                        effective_cwd,
+                        now,
+                        vault_context=vault_context,
+                        source=source,
+                        can_ask=(len(beats) == 1),
+                    )
                 else:
-                    path = write_beat(beat, effective_config, session_id, effective_cwd, now, source=source)
+                    path = write_beat(
+                        beat,
+                        effective_config,
+                        session_id,
+                        effective_cwd,
+                        now,
+                        source=source,
+                    )
                 if path is None and "_autofile_ask" in beat:
                     ask_data = beat["_autofile_ask"]
                     confidence = ask_data["confidence"]
                     rationale = ask_data.get("rationale", "")
                     decision = ask_data.get("decision", {})
-                    suggested = decision.get("path") or decision.get("target_path", "(unknown)")
+                    suggested = decision.get("path") or decision.get(
+                        "target_path", "(unknown)"
+                    )
                     return (
                         f"Confidence in routing is low (score: {confidence:.2f}). "
                         f"Suggested folder: {suggested}. "
@@ -182,12 +225,12 @@ def register(mcp: FastMCP) -> None:
                     written.append(path)
                     rel = _relpath(path, config["vault_path"])
                     lines.append(
-                        f"Filed: \"{beat.get('title', '?')}\"\n"
+                        f'Filed: "{beat.get("title", "?")}"\n'
                         f"  Type:   {beat.get('type', 'reference')}\n"
                         f"  Action: created {rel}\n"
                         f"  Tags:   {beat.get('tags', [])}"
                     )
-            except Exception as e:
+            except Exception as e:  # intentional: per-beat write failure is non-fatal; log and continue to next beat
                 lines.append(f"Error filing '{beat.get('title', '?')}': {e}")
 
         if config.get("daily_journal", False) and written:

@@ -17,71 +17,62 @@ import json
 import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Re-exports — all existing callers (server.py, import.py, tests) continue to
-# work unchanged. Import order follows the dependency graph.
+# Direct imports needed by main()
 # ---------------------------------------------------------------------------
-
-from cyberbrain.extractors.config import (
-    load_global_config,
-    find_project_config,
-    resolve_config,
-)
+from cyberbrain.extractors.autofile import autofile_beat
 from cyberbrain.extractors.backends import (
-    BackendError,
-    call_model,
-    _call_claude_code,
-    _call_bedrock,
-    _call_ollama,
-    DEFAULT_BACKEND,
     CLI_DEFAULT_MODEL,
-    MAX_TRANSCRIPT_CHARS,
+    DEFAULT_BACKEND,
+    BackendError,
 )
-from cyberbrain.extractors.transcript import parse_jsonl_transcript
+from cyberbrain.extractors.config import resolve_config
+from cyberbrain.extractors.extractor import extract_beats
 from cyberbrain.extractors.run_log import (
     is_session_already_extracted,
     write_extract_log_entry,
-    write_runs_log_entry,
     write_journal_entry,
-    RUNS_LOG_PATH,
+    write_runs_log_entry,
 )
+from cyberbrain.extractors.transcript import parse_jsonl_transcript
 from cyberbrain.extractors.vault import (
-    write_beat,
-    resolve_output_dir,
     make_filename,
-    build_vault_titles_set,
-    resolve_relations,
-    get_valid_types,
-    parse_valid_types_from_claude_md,
     read_vault_claude_md,
-    _is_within_vault,
-    _DEFAULT_VALID_TYPES,
+    resolve_output_dir,
+    write_beat,
 )
-from cyberbrain.extractors.extractor import extract_beats
-from cyberbrain.extractors.autofile import (
-    autofile_beat,
-    _merge_relations_into_note,
-)
-
-# Also re-export frontmatter helpers that tests reference via eb.*
-from cyberbrain.extractors.frontmatter import read_frontmatter as _read_frontmatter_as_dict
-
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Extract knowledge beats from a Claude Code transcript")
+    parser = argparse.ArgumentParser(
+        description="Extract knowledge beats from a Claude Code transcript"
+    )
     parser.add_argument("--transcript", help="Path to transcript JSONL file")
-    parser.add_argument("--beats-json", help="Path to pre-extracted beats JSON (skips transcript parsing and API call)")
+    parser.add_argument(
+        "--beats-json",
+        help="Path to pre-extracted beats JSON (skips transcript parsing and API call)",
+    )
     parser.add_argument("--session-id", required=True, help="Session ID")
-    parser.add_argument("--trigger", default="auto", help="Compaction trigger type (auto, manual, session-end, or any value Claude passes)")
-    parser.add_argument("--cwd", required=True, help="Working directory of the Claude Code session")
-    parser.add_argument("--dry-run", action="store_true", help="Preview beats without writing to vault or log")
+    parser.add_argument(
+        "--trigger",
+        default="auto",
+        help="Compaction trigger type (auto, manual, session-end, or any value Claude passes)",
+    )
+    parser.add_argument(
+        "--cwd", required=True, help="Working directory of the Claude Code session"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview beats without writing to vault or log",
+    )
     args = parser.parse_args()
 
     if not args.transcript and not args.beats_json:
@@ -101,29 +92,41 @@ def main():
 
     # Deduplication check (skip in dry-run mode — no writes happen)
     if not args.dry_run and is_session_already_extracted(session_id):
-        print(f"[extract_beats] Session '{session_id}' already extracted. Skipping.", file=sys.stderr)
+        print(
+            f"[extract_beats] Session '{session_id}' already extracted. Skipping.",
+            file=sys.stderr,
+        )
         sys.exit(0)
 
     start = time.monotonic()
     llm_duration = 0.0
 
     if args.beats_json:
-        print(f"[extract_beats] Loading pre-extracted beats from: {args.beats_json}", file=sys.stderr)
+        print(
+            f"[extract_beats] Loading pre-extracted beats from: {args.beats_json}",
+            file=sys.stderr,
+        )
         try:
-            with open(args.beats_json, "r", encoding="utf-8") as f:
+            with open(args.beats_json, encoding="utf-8") as f:
                 beats = json.load(f)
-        except Exception as e:
+        except (OSError, json.JSONDecodeError, ValueError) as e:
             print(f"[extract_beats] Failed to load beats JSON: {e}", file=sys.stderr)
             sys.exit(1)
         if not isinstance(beats, list):
-            print("[extract_beats] --beats-json must contain a JSON array.", file=sys.stderr)
+            print(
+                "[extract_beats] --beats-json must contain a JSON array.",
+                file=sys.stderr,
+            )
             sys.exit(1)
     else:
         print(f"[extract_beats] Parsing transcript: {args.transcript}", file=sys.stderr)
         transcript_text = parse_jsonl_transcript(args.transcript)
 
         if not transcript_text.strip():
-            print("[extract_beats] Transcript is empty or has no user/assistant turns. Nothing to extract.", file=sys.stderr)
+            print(
+                "[extract_beats] Transcript is empty or has no user/assistant turns. Nothing to extract.",
+                file=sys.stderr,
+            )
             sys.exit(0)
 
         print("[extract_beats] Calling LLM to extract beats...", file=sys.stderr)
@@ -154,15 +157,19 @@ def main():
             try:
                 output_dir = resolve_output_dir(beat, config)
                 filename = make_filename(title)
-                would_be_path = output_dir / filename
+                would_be_path = output_dir / filename  # type: ignore[operator]  # output_dir is None-guarded by except below
                 vault = Path(config["vault_path"])
                 rel_path = os.path.relpath(str(would_be_path), str(vault))
-            except Exception:
+            except Exception:  # intentional: path resolution can fail for missing config keys, bad vault_path, etc.
                 rel_path = "(could not compute path)"
 
-            autofile_note = " (routing not simulated in dry-run)" if autofile_enabled else ""
+            autofile_note = (
+                " (routing not simulated in dry-run)" if autofile_enabled else ""
+            )
 
-            lines_out.append(f"━━━ Beat {idx} of {total} {separator[:max(0, 48 - len(str(idx)) - len(str(total)))]}")
+            lines_out.append(
+                f"━━━ Beat {idx} of {total} {separator[: max(0, 48 - len(str(idx)) - len(str(total)))]}"
+            )
             lines_out.append(f"Type:    {beat_type}")
             lines_out.append(f"Title:   {title}")
             tags_str = ", ".join(str(t) for t in tags) if tags else "(none)"
@@ -181,7 +188,7 @@ def main():
         print(f"{total} beat(s) would be written. Vault not modified.")
         sys.exit(0)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     written = []
     run_errors = []
     beat_records = []
@@ -190,32 +197,50 @@ def main():
     vault_context = None
     if autofile_enabled:
         vault_context_text = read_vault_claude_md(config["vault_path"])
-        vault_context = vault_context_text if vault_context_text is not None else \
-            "File notes using human-readable names with spaces. Use types: decision, insight, problem, reference."
+        vault_context = (
+            vault_context_text
+            if vault_context_text is not None
+            else "File notes using human-readable names with spaces. Use types: decision, insight, problem, reference."
+        )
 
     for beat in beats:
         try:
             if autofile_enabled:
                 try:
-                    path = autofile_beat(beat, config, session_id, args.cwd, now, vault_context=vault_context)
+                    path = autofile_beat(
+                        beat,
+                        config,
+                        session_id,
+                        args.cwd,
+                        now,
+                        vault_context=vault_context,
+                    )
                 except BackendError as e:
-                    print(f"[extract_beats] autofile failed, filing to inbox: {e}", file=sys.stderr)
+                    print(
+                        f"[extract_beats] autofile failed, filing to inbox: {e}",
+                        file=sys.stderr,
+                    )
                     path = write_beat(beat, config, session_id, args.cwd, now)
             else:
                 path = write_beat(beat, config, session_id, args.cwd, now)
             if path:
                 written.append(path)
-                beat_records.append({
-                    "title": beat.get("title", ""),
-                    "type": beat.get("type", ""),
-                    "scope": beat.get("scope", ""),
-                    "path": os.path.relpath(str(path), config["vault_path"]),
-                })
+                beat_records.append(
+                    {
+                        "title": beat.get("title", ""),
+                        "type": beat.get("type", ""),
+                        "scope": beat.get("scope", ""),
+                        "path": os.path.relpath(str(path), config["vault_path"]),
+                    }
+                )
                 print(f"[extract_beats] Wrote: {path}", file=sys.stderr)
-        except Exception as e:
+        except Exception as e:  # intentional: per-beat write failure is non-fatal; log and continue to next beat
             err_msg = f"write error on '{beat.get('title', '?')}': {e}"
             run_errors.append(err_msg)
-            print(f"[extract_beats] Failed on '{beat.get('title', '?')}': {e}", file=sys.stderr)
+            print(
+                f"[extract_beats] Failed on '{beat.get('title', '?')}': {e}",
+                file=sys.stderr,
+            )
 
     project_name = config.get("project_name", Path(args.cwd).name)
 
@@ -227,20 +252,22 @@ def main():
 
     # Write structured runs log entry
     duration = time.monotonic() - start
-    write_runs_log_entry({
-        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "session_id": session_id,
-        "trigger": args.trigger,
-        "project": project_name,
-        "backend": config.get("backend", DEFAULT_BACKEND),
-        "model": config.get("model", CLI_DEFAULT_MODEL),
-        "duration_seconds": round(duration, 1),
-        "llm_duration_seconds": round(llm_duration, 1),
-        "beats_extracted": len(beats),
-        "beats_written": len(written),
-        "beats": beat_records,
-        "errors": run_errors,
-    })
+    write_runs_log_entry(
+        {
+            "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "session_id": session_id,
+            "trigger": args.trigger,
+            "project": project_name,
+            "backend": config.get("backend", DEFAULT_BACKEND),
+            "model": config.get("model", CLI_DEFAULT_MODEL),
+            "duration_seconds": round(duration, 1),
+            "llm_duration_seconds": round(llm_duration, 1),
+            "beats_extracted": len(beats),
+            "beats_written": len(written),
+            "beats": beat_records,
+            "errors": run_errors,
+        }
+    )
 
     print(f"[extract_beats] Done. {len(written)} beat(s) written.", file=sys.stderr)
 

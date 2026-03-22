@@ -16,7 +16,7 @@ def parse_jsonl_transcript(transcript_path: str) -> str:
     """
     turns = []
 
-    with open(transcript_path, "r", encoding="utf-8") as f:
+    with open(transcript_path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:

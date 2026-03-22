@@ -23,9 +23,10 @@ def parse_frontmatter(content: str) -> dict:
         return {}
     try:
         import yaml
+
         fm = yaml.safe_load(content[3:end])
         return fm if isinstance(fm, dict) else {}
-    except Exception:
+    except yaml.YAMLError:
         return {}
 
 
@@ -45,13 +46,13 @@ def read_frontmatter_tags(path) -> set:
     except OSError:
         return set()
 
-    m = re.match(r'^---\s*\n(.*?)\n---', text, re.DOTALL)
+    m = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
     if not m:
         return set()
 
     frontmatter_block = m.group(1)
 
-    tags_match = re.search(r'^tags:\s*(.+)$', frontmatter_block, re.MULTILINE)
+    tags_match = re.search(r"^tags:\s*(.+)$", frontmatter_block, re.MULTILINE)
     if not tags_match:
         return set()
 
@@ -66,10 +67,10 @@ def read_frontmatter_tags(path) -> set:
         pass
 
     # Try YAML-style bracketed list: ["tag1", "tag2"] or [tag1, tag2]
-    m2 = re.match(r'^\[(.*)\]$', tags_raw)
+    m2 = re.match(r"^\[(.*)\]$", tags_raw)
     if m2:
         inner = m2.group(1)
-        parts = [p.strip().strip('"\'') for p in inner.split(',')]
+        parts = [p.strip().strip("\"'") for p in inner.split(",")]
         return {p.lower() for p in parts if p}
 
     return set()
@@ -93,4 +94,5 @@ def normalise_list(value) -> list:
 def derive_id(note_path: str) -> str:
     """Derive a stable ID from path when no UUID is in frontmatter."""
     import hashlib
+
     return hashlib.sha256(note_path.encode()).hexdigest()[:36]

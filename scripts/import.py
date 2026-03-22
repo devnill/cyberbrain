@@ -22,7 +22,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -39,26 +39,28 @@ MIN_CHARS_FOR_EXTRACTION = 100
 
 
 # ---------------------------------------------------------------------------
-# extract_beats library import
+# cyberbrain library imports — direct from source modules
 # ---------------------------------------------------------------------------
 
-def _import_extract_beats():
-    """Import the cyberbrain extract_beats module. Exits on failure."""
-    try:
-        import cyberbrain.extractors.extract_beats as eb  # noqa: PLC0415
-        return eb
-    except ImportError:
-        print(
-            "[import] cyberbrain package not found.\n"
-            "[import] Install with: uv pip install -e . (or pip install cyberbrain-mcp)",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+try:
+    from cyberbrain.extractors.autofile import autofile_beat
+    from cyberbrain.extractors.config import resolve_config
+    from cyberbrain.extractors.extractor import extract_beats
+    from cyberbrain.extractors.run_log import write_journal_entry
+    from cyberbrain.extractors.vault import write_beat
+except ImportError:
+    print(
+        "[import] cyberbrain package not found.\n"
+        "[import] Install with: uv pip install -e . (or pip install cyberbrain-mcp)",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -68,27 +70,38 @@ def build_arg_parser() -> argparse.ArgumentParser:
         epilog=__doc__,
     )
     parser.add_argument(
-        "--export", required=True, metavar="PATH",
+        "--export",
+        required=True,
+        metavar="PATH",
         help="Path to the export file (conversations.json)",
     )
     parser.add_argument(
-        "--format", required=True, choices=["claude", "claude-web", "chatgpt"],
+        "--format",
+        required=True,
+        choices=["claude", "claude-web", "chatgpt"],
         help="Export format: 'claude' (Desktop app), 'claude-web' (claude.ai), or 'chatgpt' (OpenAI)",
     )
     parser.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="Report what would be imported without writing anything or updating state",
     )
     parser.add_argument(
-        "--limit", type=int, default=None, metavar="N",
+        "--limit",
+        type=int,
+        default=None,
+        metavar="N",
         help="Process at most N conversations (useful for testing)",
     )
     parser.add_argument(
-        "--since", metavar="YYYY-MM-DD",
+        "--since",
+        metavar="YYYY-MM-DD",
         help="Only process conversations with a timestamp on or after this date",
     )
     parser.add_argument(
-        "--cwd", default=os.getcwd(), metavar="PATH",
+        "--cwd",
+        default=os.getcwd(),
+        metavar="PATH",
         help="Working directory for project routing lookup (default: current directory)",
     )
     return parser
@@ -97,6 +110,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 # ---------------------------------------------------------------------------
 # State file management
 # ---------------------------------------------------------------------------
+
 
 def load_state(state_path: Path) -> dict:
     """Load the import state file, returning a fresh dict if it doesn't exist or is corrupt."""
@@ -107,7 +121,10 @@ def load_state(state_path: Path) -> dict:
             if isinstance(data, dict):
                 return data
         except (json.JSONDecodeError, OSError) as e:
-            print(f"[import] Warning: could not read state file {state_path}: {e}", file=sys.stderr)
+            print(
+                f"[import] Warning: could not read state file {state_path}: {e}",
+                file=sys.stderr,
+            )
             print("[import] Starting with empty state.", file=sys.stderr)
     return {}
 
@@ -122,7 +139,7 @@ def save_state(state: dict, state_path: Path) -> None:
 
 def record_imported(state: dict, conv_id: str, beats_written: int) -> None:
     state[conv_id] = {
-        "imported_at": datetime.now(timezone.utc).isoformat(),
+        "imported_at": datetime.now(UTC).isoformat(),
         "beats_written": beats_written,
     }
 
@@ -130,6 +147,7 @@ def record_imported(state: dict, conv_id: str, beats_written: int) -> None:
 # ---------------------------------------------------------------------------
 # Claude export parsing
 # ---------------------------------------------------------------------------
+
 
 def _render_claude_message_text(msg: dict) -> str:
     """
@@ -146,7 +164,8 @@ def _render_claude_message_text(msg: dict) -> str:
 
     # Prefer content list text blocks
     text_blocks = [
-        block for block in msg.get("content", [])
+        block
+        for block in msg.get("content", [])
         if isinstance(block, dict) and block.get("type") == "text"
     ]
     if text_blocks:
@@ -192,7 +211,9 @@ def parse_claude_conversation(conv: dict) -> str:
 
     rendered = "\n".join(parts).strip()
     if len(rendered) > MAX_TRANSCRIPT_CHARS:
-        rendered = "...[earlier content truncated]...\n\n" + rendered[-MAX_TRANSCRIPT_CHARS:]
+        rendered = (
+            "...[earlier content truncated]...\n\n" + rendered[-MAX_TRANSCRIPT_CHARS:]
+        )
     return rendered
 
 
@@ -213,6 +234,7 @@ def get_claude_conv_title(conv: dict) -> str:
 # ChatGPT export parsing
 # TODO: verify against a real ChatGPT export — structure based on widely-documented format
 # ---------------------------------------------------------------------------
+
 
 def _extract_chatgpt_thread(mapping: dict, current_node: str) -> list[dict]:
     """Walk from current_node back through parent links; return messages in order."""
@@ -254,10 +276,14 @@ def parse_chatgpt_conversation(conv: dict) -> str:
     title = (conv.get("title") or "Untitled").strip()
     update_time = conv.get("update_time")
     if update_time:
-        date = datetime.fromtimestamp(update_time, tz=timezone.utc).strftime("%Y-%m-%d")
+        date = datetime.fromtimestamp(update_time, tz=UTC).strftime("%Y-%m-%d")
     else:
         create_time = conv.get("create_time")
-        date = datetime.fromtimestamp(create_time, tz=timezone.utc).strftime("%Y-%m-%d") if create_time else ""
+        date = (
+            datetime.fromtimestamp(create_time, tz=UTC).strftime("%Y-%m-%d")
+            if create_time
+            else ""
+        )
 
     parts.append(f"## {title}")
     if date:
@@ -283,7 +309,9 @@ def parse_chatgpt_conversation(conv: dict) -> str:
 
     rendered = "\n".join(parts).strip()
     if len(rendered) > MAX_TRANSCRIPT_CHARS:
-        rendered = "...[earlier content truncated]...\n\n" + rendered[-MAX_TRANSCRIPT_CHARS:]
+        rendered = (
+            "...[earlier content truncated]...\n\n" + rendered[-MAX_TRANSCRIPT_CHARS:]
+        )
     return rendered
 
 
@@ -295,7 +323,7 @@ def get_chatgpt_conv_date(conv: dict) -> str:
     """Return YYYY-MM-DD for date filtering."""
     ts = conv.get("update_time") or conv.get("create_time")
     if ts:
-        return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+        return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d")
     return ""
 
 
@@ -306,6 +334,7 @@ def get_chatgpt_conv_title(conv: dict) -> str:
 # ---------------------------------------------------------------------------
 # Format-agnostic dispatch
 # ---------------------------------------------------------------------------
+
 
 def get_conv_id(conv: dict, fmt: str) -> str:
     if fmt == "chatgpt":
@@ -334,6 +363,7 @@ def render_conversation(conv: dict, fmt: str) -> str:
 # ---------------------------------------------------------------------------
 # Export file loading
 # ---------------------------------------------------------------------------
+
 
 def load_export(path: str, fmt: str) -> list[dict]:
     """
@@ -374,12 +404,13 @@ def load_export(path: str, fmt: str) -> list[dict]:
 # Conversation timestamp for beat dating
 # ---------------------------------------------------------------------------
 
+
 def get_conv_timestamp(conv: dict, fmt: str) -> datetime:
     """Return a datetime for the conversation, used as the beat creation timestamp."""
     if fmt == "chatgpt":
         ts = conv.get("update_time") or conv.get("create_time")
         if ts:
-            return datetime.fromtimestamp(ts, tz=timezone.utc)
+            return datetime.fromtimestamp(ts, tz=UTC)
     else:
         ts_str = conv.get("updated_at") or conv.get("created_at") or ""
         if ts_str:
@@ -387,18 +418,18 @@ def get_conv_timestamp(conv: dict, fmt: str) -> datetime:
                 return datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
             except ValueError:
                 pass
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # ---------------------------------------------------------------------------
 # Processing a single conversation
 # ---------------------------------------------------------------------------
 
+
 def process_conversation(
     conv: dict,
     fmt: str,
     config: dict,
-    eb,
     cwd: str,
 ) -> tuple[int, list[Path]]:
     """
@@ -406,7 +437,7 @@ def process_conversation(
 
     Returns (beats_written_count, list_of_written_paths).
     Raises on any unrecoverable exception (caller records error in state).
-    All vault writes go through eb.write_beat / eb.autofile_beat (P7).
+    All vault writes go through write_beat / autofile_beat (P7).
     """
     conv_id = get_conv_id(conv, fmt)
     transcript = render_conversation(conv, fmt)
@@ -416,7 +447,7 @@ def process_conversation(
     autofile_enabled = config.get("autofile", False)
     now = get_conv_timestamp(conv, fmt)
 
-    beats = eb.extract_beats(transcript, config, "import", cwd)
+    beats = extract_beats(transcript, config, "import", cwd)
     if not beats:
         return 0, []
 
@@ -439,9 +470,17 @@ def process_conversation(
     for beat in beats:
         try:
             if autofile_enabled:
-                path = eb.autofile_beat(beat, config, conv_id, cwd, now, vault_context=vault_context, source=cb_source)
+                path = autofile_beat(
+                    beat,
+                    config,
+                    conv_id,
+                    cwd,
+                    now,
+                    vault_context=vault_context,
+                    source=cb_source,
+                )
             else:
-                path = eb.write_beat(beat, config, conv_id, cwd, now, source=cb_source)
+                path = write_beat(beat, config, conv_id, cwd, now, source=cb_source)
             if path:
                 written.append(path)
         except Exception as exc:
@@ -457,6 +496,7 @@ def process_conversation(
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     parser = build_arg_parser()
     args = parser.parse_args()
@@ -467,9 +507,6 @@ def main() -> None:
     limit = args.limit
     since = args.since
     cwd = args.cwd
-
-    # Load the extractor (fail fast if not installed)
-    eb = _import_extract_beats()
 
     # Load the export file
     conversations = load_export(export_path, fmt)
@@ -522,7 +559,7 @@ def main() -> None:
 
     # Load config for actual processing
     if not dry_run:
-        config = dict(eb.resolve_config(cwd))
+        config = dict(resolve_config(cwd))
         # Run the extraction subprocess from $HOME so it doesn't pick up any
         # project-specific CLAUDE.md that would narrow extraction scope.
         config["subprocess_cwd"] = str(Path.home())
@@ -548,13 +585,13 @@ def main() -> None:
             continue
 
         if dry_run:
-            print(f"[{idx}/{total_to_process}] \"{title}\" → would extract ~? beats")
+            print(f'[{idx}/{total_to_process}] "{title}" → would extract ~? beats')
             continue
 
-        print(f"[{idx}/{total_to_process}] \"{title}\"{date_str}", end="", flush=True)
+        print(f'[{idx}/{total_to_process}] "{title}"{date_str}', end="", flush=True)
 
         try:
-            beats_written, written_paths = process_conversation(conv, fmt, config, eb, cwd)
+            beats_written, written_paths = process_conversation(conv, fmt, config, cwd)
             all_written_paths.extend(written_paths)
             counts["processed"] += 1
             counts["beats"] += beats_written
@@ -569,14 +606,14 @@ def main() -> None:
             print(f" → error: {exc}")
 
     if dry_run:
-        print(f"\nNo files were written.")
+        print("\nNo files were written.")
         return
 
     # Write journal entry if enabled and beats were written
     if journal_enabled and all_written_paths:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         project = config.get("project_name", f"{fmt}-import")
-        eb.write_journal_entry(all_written_paths, config, f"{fmt}-import", project, now)
+        write_journal_entry(all_written_paths, config, f"{fmt}-import", project, now)
 
     # Summary
     print(

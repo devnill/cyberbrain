@@ -17,10 +17,9 @@ import json
 import os
 import sys
 import time
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Optional
 
 from cyberbrain.extractors.backends import call_model
 from cyberbrain.extractors.config import load_prompt
@@ -29,6 +28,7 @@ from cyberbrain.extractors.config import load_prompt
 @dataclass
 class Variant:
     """A configuration variant to evaluate."""
+
     name: str
     overrides: dict = field(default_factory=dict)
     # overrides can include: model, prompt_path, params (dict of tool-specific params)
@@ -37,28 +37,31 @@ class Variant:
 @dataclass
 class VariantOutput:
     """Output from running a single variant."""
+
     variant: Variant
     raw_output: str = ""
     duration_ms: int = 0
-    error: Optional[str] = None
+    error: str | None = None
 
 
 @dataclass
 class Score:
     """Quality score from LLM-as-judge or manual evaluation."""
+
     variant_index: int = 0
-    accuracy: Optional[int] = None
-    structure: Optional[int] = None
-    discoverability: Optional[int] = None
-    signal_to_noise: Optional[int] = None
-    grouping_quality: Optional[int] = None
-    overall: Optional[int] = None
+    accuracy: int | None = None
+    structure: int | None = None
+    discoverability: int | None = None
+    signal_to_noise: int | None = None
+    grouping_quality: int | None = None
+    overall: int | None = None
     notes: str = ""
 
 
 @dataclass
 class EvalResult:
     """Complete evaluation result."""
+
     operation: str
     timestamp: str = ""
     input_notes: list = field(default_factory=list)
@@ -87,8 +90,9 @@ def _compute_diff(text_a: str, text_b: str, label_a: str, label_b: str) -> str:
     return "".join(diff)
 
 
-def _run_operation(operation: str, notes_content: list, config: dict,
-                   params: dict) -> str:
+def _run_operation(
+    operation: str, notes_content: list, config: dict, params: dict
+) -> str:
     """Run a curation operation and return raw output.
 
     This is the integration point — each operation type calls the appropriate
@@ -101,7 +105,9 @@ def _run_operation(operation: str, notes_content: list, config: dict,
     elif operation == "restructure":
         return _run_restructure(notes_content, config, params)
     else:
-        raise ValueError(f"Unknown operation: {operation}. Supported: enrich, extract, restructure")
+        raise ValueError(
+            f"Unknown operation: {operation}. Supported: enrich, extract, restructure"
+        )
 
 
 def _run_enrich(notes_content: list, config: dict, params: dict) -> str:
@@ -115,12 +121,13 @@ def _run_enrich(notes_content: list, config: dict, params: dict) -> str:
         notes_block_parts.append(f"--- Note {idx}: {path} ---\n{content[:3000]}")
     notes_block = "\n\n".join(notes_block_parts)
 
-    vault_type_context = params.get("vault_type_context", "Use default types: decision, insight, problem, reference.")
+    vault_type_context = params.get(
+        "vault_type_context",
+        "Use default types: decision, insight, problem, reference.",
+    )
     system_prompt = system_template.replace("{vault_type_context}", vault_type_context)
-    user_message = (
-        user_template
-        .replace("{count}", str(len(notes_content)))
-        .replace("{notes_block}", notes_block)
+    user_message = user_template.replace("{count}", str(len(notes_content))).replace(
+        "{notes_block}", notes_block
     )
 
     return call_model(system_prompt, user_message, config)
@@ -152,8 +159,9 @@ def _run_restructure(notes_content: list, config: dict, params: dict) -> str:
     return call_model(system_prompt, user_message, config)
 
 
-def _score_with_llm(operation: str, notes_content: list,
-                    outputs: list, config: dict) -> list:
+def _score_with_llm(
+    operation: str, notes_content: list, outputs: list, config: dict
+) -> list:
     """Use LLM-as-judge to score variant outputs."""
     system_prompt = load_prompt("evaluate-system.md")
 
@@ -175,13 +183,14 @@ def _score_with_llm(operation: str, notes_content: list,
         raw = call_model(system_prompt, user_message, config)
         # Strip code fences if present
         import re
+
         stripped = re.sub(r"^```(?:json)?\s*", "", raw.strip())
         stripped = re.sub(r"\s*```$", "", stripped).strip()
         scores_data = json.loads(stripped)
         if isinstance(scores_data, list):
             return scores_data
         return []
-    except Exception as e:
+    except Exception as e:  # intentional: captures BackendError, JSONDecodeError, and any other failure; returns error record
         return [{"error": str(e)}]
 
 
@@ -191,7 +200,7 @@ def evaluate(
     variants: list,
     base_config: dict,
     judge: bool = False,
-    judge_config: Optional[dict] = None,
+    judge_config: dict | None = None,
 ) -> EvalResult:
     """Run an evaluation comparing multiple variants of a curation operation.
 
@@ -208,9 +217,11 @@ def evaluate(
     """
     result = EvalResult(
         operation=operation,
-        timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        input_notes=[{"path": p, "content": c[:500] + "..." if len(c) > 500 else c}
-                      for p, c in notes],
+        timestamp=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        input_notes=[
+            {"path": p, "content": c[:500] + "..." if len(c) > 500 else c}
+            for p, c in notes
+        ],
     )
 
     # Run each variant
@@ -223,8 +234,10 @@ def evaluate(
         try:
             raw = _run_operation(operation, notes, config, params)
             duration = int((time.time() - start) * 1000)
-            output = VariantOutput(variant=variant, raw_output=raw, duration_ms=duration)
-        except Exception as e:
+            output = VariantOutput(
+                variant=variant, raw_output=raw, duration_ms=duration
+            )
+        except Exception as e:  # intentional: any failure in the eval operation is recorded as an error variant
             duration = int((time.time() - start) * 1000)
             output = VariantOutput(variant=variant, error=str(e), duration_ms=duration)
 
@@ -251,11 +264,13 @@ def evaluate(
                     variant_outputs[i].variant.name,
                     variant_outputs[j].variant.name,
                 )
-                result.diffs.append({
-                    "a": variant_outputs[i].variant.name,
-                    "b": variant_outputs[j].variant.name,
-                    "diff": diff,
-                })
+                result.diffs.append(
+                    {
+                        "a": variant_outputs[i].variant.name,
+                        "b": variant_outputs[j].variant.name,
+                        "diff": diff,
+                    }
+                )
 
     # Optional LLM scoring
     if judge and any(vo.raw_output for vo in variant_outputs):
@@ -377,34 +392,42 @@ def main():
         description="Evaluate curation tool outputs across multiple configurations"
     )
     parser.add_argument(
-        "--operation", required=True, choices=["enrich", "extract", "restructure"],
-        help="Curation operation to evaluate"
+        "--operation",
+        required=True,
+        choices=["enrich", "extract", "restructure"],
+        help="Curation operation to evaluate",
     )
     parser.add_argument(
-        "--notes", nargs="+", required=True,
-        help="Paths to vault notes (or transcript files for extract)"
+        "--notes",
+        nargs="+",
+        required=True,
+        help="Paths to vault notes (or transcript files for extract)",
     )
     parser.add_argument(
-        "--variants", nargs="+", required=True,
-        help="JSON strings defining variant overrides, e.g. '{\"model\":\"claude-haiku-4-5\"}'"
+        "--variants",
+        nargs="+",
+        required=True,
+        help='JSON strings defining variant overrides, e.g. \'{"model":"claude-haiku-4-5"}\'',
     )
     parser.add_argument(
-        "--judge", action="store_true",
-        help="Run LLM-as-judge scoring on outputs"
+        "--judge", action="store_true", help="Run LLM-as-judge scoring on outputs"
     )
     parser.add_argument(
-        "--judge-model", default=None,
-        help="Model to use for LLM-as-judge (defaults to base config model)"
+        "--judge-model",
+        default=None,
+        help="Model to use for LLM-as-judge (defaults to base config model)",
     )
     parser.add_argument(
-        "--output-dir", default=None,
-        help="Directory for saving results (default: ~/.claude/cyberbrain/evaluations/)"
+        "--output-dir",
+        default=None,
+        help="Directory for saving results (default: ~/.claude/cyberbrain/evaluations/)",
     )
 
     args = parser.parse_args()
 
     # Load base config
     from cyberbrain.extractors.config import resolve_config
+
     base_config = resolve_config(os.getcwd())
 
     # Read note files
@@ -445,9 +468,9 @@ def main():
     )
 
     # Save results
-    output_dir = args.output_dir or str(
-        Path.home() / ".claude" / "cyberbrain" / "evaluations"
-    )
+    from cyberbrain.extractors.state import EVALUATIONS_DIR
+
+    output_dir = args.output_dir or str(EVALUATIONS_DIR)
     json_path, md_path = save_result(result, output_dir)
 
     # Print summary

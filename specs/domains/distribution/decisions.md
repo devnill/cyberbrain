@@ -54,3 +54,45 @@
 - **Rationale**: User request to reduce token spend during ideate cycles. Test suite was running 1200+ tests per change; expected reduction is 95%+ fewer tests and 99% less output volume.
 - **Source**: archive/cycles/002/decision-log.md (DL3, DL14)
 - **Status**: provisional (implemented; correctness unverified — see Q-10)
+
+## D-10: ruff + basedpyright adopted as the quality tooling stack
+- **Decision**: ruff (linter + formatter) and basedpyright (type checker) are the enforced quality tools. Both configured in pyproject.toml with targeted ignores. ruff was chosen as the de facto standard; basedpyright over mypy for speed, stricter defaults, and pyproject.toml-native config.
+- **Rationale**: Cycles 10-11 evaluated alternatives; ruff + basedpyright combination reaches 0 type errors on the codebase in basic mode.
+- **Source**: archive/cycles/012/decision-log.md (D1); archive/incremental/058-tooling-foundation.md
+- **Status**: settled
+
+## D-11: Per-file F401 ignores for re-export hubs, not global suppression
+- **Decision**: Modules that intentionally re-export symbols (extract_beats.py, shared.py) use per-file `# noqa: F401` or pyproject.toml per-file ignores rather than a global F401 suppression rule.
+- **Rationale**: Global F401 ignore was rejected in code review as too broad — it would suppress legitimate unused-import warnings across the whole codebase.
+- **Source**: archive/cycles/012/decision-log.md (D2); archive/incremental/058-tooling-foundation.md
+- **Status**: settled
+
+## D-12: pre-commit configured with ruff hooks; UP038 added to global ignore
+- **Decision**: Standard ruff-pre-commit integration. UP038 (`non-pep604-isinstance`) added to ruff's global ignore list because some cases require `--unsafe-fixes` to auto-correct.
+- **Rationale**: UP038 cannot be safely auto-applied everywhere; ignoring it globally avoids pre-commit blocking commits unnecessarily.
+- **Source**: archive/cycles/012/decision-log.md (D7); archive/incremental/068-cycle11.md
+- **Status**: settled
+
+## D-13: shared.py converted to direct imports; conftest sys.modules mock dependency removed
+- **Decision**: shared.py changed from importing via the extract_beats.py re-export hub to importing directly from source modules (e.g., `from cyberbrain.extractors.vault import ...`). This removed the prerequisite for conftest.py sys.modules mock injection in tests.
+- **Rationale**: The re-export hub added an indirection layer that forced tests to mock the hub rather than the real modules. Direct imports are more transparent and correct.
+- **Source**: archive/cycles/012/decision-log.md (D4); archive/incremental/063-lazy-imports.md
+- **Status**: settled
+
+## D-14: Exception handler ambiguity resolved by documentation, not narrowing
+- **Decision**: For exception handlers where the correct narrow type was ambiguous, `# intentional: <reason>` comments were added rather than narrowing to a potentially incorrect type. Approximately 10 handlers were narrowed where unambiguous; 40+ were documented.
+- **Rationale**: Incorrect narrowing can mask real errors at runtime. Documentation preserves the intentionality signal without introducing false-safety.
+- **Source**: archive/cycles/012/decision-log.md (D5); archive/incremental/070-cycle11.md
+- **Status**: settled
+
+## D-15: sys.modules patterns in tests documented and consolidated; full elimination deferred
+- **Decision**: sys.modules injection patterns in 10 test files were refactored to use a shared helper function with consistent structure, but not fully eliminated. Full elimination is deferred.
+- **Rationale**: Full rewrite would be high risk with low immediate benefit. The consolidation reduces inconsistency without touching behavior. Deferred per GP-10 (YAGNI).
+- **Source**: archive/cycles/012/decision-log.md (D6); archive/incremental/071-cycle11.md
+- **Status**: provisional (consolidated; full elimination deferred)
+
+## D-16: requires-python updated to >=3.11
+- **Decision**: pyproject.toml `requires-python` updated from `>=3.8` to `>=3.11`. Constraint C1 in specs updated accordingly.
+- **Rationale**: Tool configs (ruff, basedpyright) already target 3.11+ syntax. Aligning the declared minimum prevents false compatibility claims.
+- **Source**: archive/cycles/012/review-manifest.md (WI-067); archive/incremental/067-cycle11.md
+- **Status**: settled

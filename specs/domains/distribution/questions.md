@@ -69,3 +69,17 @@
 - **Impact**: If `--affected-only` has incorrect import graph analysis, it may produce false confidence in passing test suites by silently skipping affected tests.
 - **Status**: open
 - **Reexamination trigger**: Technical investigation of scripts/test.py and the AST-based import graph plugin; verify affected-only mapping against known dependency relationships.
+
+## Q-11: No CI/CD pipeline — quality gates are pre-commit only
+- **Question**: ruff and basedpyright are enforced by pre-commit, but there is no GitHub Actions or equivalent CI pipeline. Quality gates only run if the developer has pre-commit installed and does not bypass it.
+- **Source**: archive/cycles/012/gap-analysis.md (G3); archive/cycles/012/decision-log.md (G3)
+- **Impact**: PRs or direct pushes can bypass quality enforcement. The zero-error basedpyright baseline (WI-069) can regress silently.
+- **Status**: open
+- **Reexamination trigger**: When contributors outside the primary author submit PRs; or when a quality regression is found post-merge.
+
+## Q-12: CLAUDE.md references restructure.py as a single file after package decomposition
+- **Question**: CLAUDE.md documents `src/cyberbrain/mcp/tools/restructure.py` as a single module. WI-062 decomposed it into a sub-package with 11 files. The documentation is now stale.
+- **Source**: archive/cycles/012/gap-analysis.md (G4)
+- **Impact**: Agents and developers reading CLAUDE.md will look for a non-existent single file and miss the phase-based sub-module structure.
+- **Status**: open
+- **Reexamination trigger**: Next housekeeping pass; one documentation update.

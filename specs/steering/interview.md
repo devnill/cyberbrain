@@ -48,3 +48,31 @@ A: The critical bug fixes (install.sh, bare imports) should go first but don't b
 
 **Q: Any execution preferences — sequential vs parallel, model choices?**
 A: Parallel where possible, max 4 concurrent agents. Research and design work can use opus. Implementation uses sonnet. I only need to be consulted at the two pause points: design review for WI-040/041, and before WI-047 writes to the live vault. All other decisions are unilateral.
+
+---
+## Refinement Interview — 2026-03-22
+
+**Context**: Post-cycle-10 deferred tech debt items. User requested light-touch quick wins first, then heavier tasks.
+
+**Q: Do the existing guiding principles still apply?**
+A: Yes, confirmed unchanged (same session as cycle 10).
+
+**Q: What do you want this next cycle to focus on?**
+A: Take care of the deferred tasks from cycle 10.
+
+**Q: Priority and approach for the deferred items?**
+A: Start with light touch quick wins first before moving on to heavier tasks. For the sys.modules cleanup (10 test files), a lighter-touch approach is acceptable — consolidate patterns, add documentation, reduce fragility without full rewrites.
+
+---
+## Refinement Interview — 2026-03-22
+
+**Context**: Minor findings from cycle 012 review. All trivial/small items.
+
+**Q: What do you want this cycle to focus on?**
+A: Handle the minor items. Remove the FastMCP pattern migration — it's a non-issue.
+
+**Decisions:**
+- FastMCP migration: dismissed (non-issue, current pattern works)
+- CI/CD: deferred (infrastructure decision, not a code change)
+- ruff ignore list: no action (documented, acceptable breadth)
+- All other minor items: address now

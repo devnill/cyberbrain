@@ -1,6 +1,6 @@
 [project]
 name = "cyberbrain-mcp"
-version = "1.0.2"
+version = "1.1.0"
 description = "Knowledge capture and retrieval for Claude sessions"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -30,7 +30,6 @@ dependencies = [
 [project.optional-dependencies]
 bedrock = ["anthropic>=0.40.0"]
 semantic = ["fastembed>=0.3", "usearch==2.23.0"]
-dev = ["pytest>=7.0.0"]
 
 [project.scripts]
 cyberbrain-mcp = "cyberbrain.mcp.server:main"
@@ -52,3 +51,48 @@ markers = [
     "extended: Integration tests - run on full regression only",
     "slow: Performance tests - run manually only",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "ruff>=0.9",
+    "basedpyright>=1.20",
+    "pre-commit>=4.0",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "PTH"]
+ignore = [
+    "B008",   # function calls in default args — FastMCP Depends() pattern
+    "E501",   # line length — handled by formatter for code, not for strings/comments
+    "E402",   # module-level imports not at top — needed for sys.path manipulation in tests
+    "B904",   # raise-from in except — implicit chaining used intentionally
+    "B905",   # zip-strict — not applicable in all contexts
+    "E741",   # ambiguous variable name — short names in comprehensions
+    "F841",   # unused local variable — some assigned for readability
+    "SIM102", # collapsible if — nested ifs often clearer
+    "SIM103", # return bool directly — explicit if/else often clearer
+    "SIM105", # use contextlib.suppress — try/except pass is explicit
+    "SIM108", # ternary — if/else often clearer
+    "SIM109", # compare-or — multiple equality comparisons sometimes clearer
+    "B007",   # unused loop variable — rename to _var is cosmetic
+    "SIM117", # nested with — separate with statements often clearer
+    "PTH",    # pathlib replacements for os.path/open — too many changes for a formatting pass
+    "UP038",  # isinstance union — fix requires --unsafe-fixes for some cases
+    "UP042",  # StrEnum — fix requires --unsafe-fixes
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/cyberbrain/extractors/extract_beats.py" = ["F401"]  # re-export hub
+"src/cyberbrain/mcp/shared.py" = ["F401"]  # re-exports from extract_beats
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.basedpyright]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"

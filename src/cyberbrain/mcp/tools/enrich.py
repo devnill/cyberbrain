@@ -3,7 +3,7 @@
 import json
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -11,8 +11,14 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
-from cyberbrain.mcp.shared import _load_config, _index_paths, _load_tool_prompt as _load_prompt
 from cyberbrain.extractors.frontmatter import parse_frontmatter as _parse_frontmatter
+from cyberbrain.mcp.shared import (
+    _index_paths,
+    _load_config,
+)
+from cyberbrain.mcp.shared import (
+    _load_tool_prompt as _load_prompt,
+)
 
 _DAILY_JOURNAL_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
 _BATCH_SIZE = 10
@@ -120,7 +126,7 @@ def _apply_frontmatter_update(
     """Apply classification to the note's frontmatter. Returns True on success."""
     fm = _parse_frontmatter(content)
     # Check for actual frontmatter: starts with --- and has a closing ---
-    has_fm = content.strip().startswith("---") and content.find("\n---", 3) != -1
+    has_fm = content.strip().startswith("---") and content.find("\n---\n", 3) != -1
     # Malformed: starts with --- but no closing ---
     if content.strip().startswith("---") and not has_fm:
         return False
@@ -146,12 +152,12 @@ def _apply_frontmatter_update(
     if not fields_to_set:
         return True  # nothing to update
 
-    fields_to_set["cb_modified"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    fields_to_set["cb_modified"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
 
     if has_fm:
         # Insert new fields before the closing ---
         # Find the closing --- separator (not the opening one at position 0)
-        fm_end = content.find("\n---", 3)
+        fm_end = content.find("\n---\n", 3)
         if fm_end == -1:
             # Check if file ends with --- (malformed or empty frontmatter)
             stripped_end = content.rstrip()
@@ -164,7 +170,9 @@ def _apply_frontmatter_update(
                 return False
 
         lines_to_add = _format_fm_fields(fields_to_set)
-        new_content = content[:fm_end] + "\n" + "\n".join(lines_to_add) + content[fm_end:]
+        new_content = (
+            content[:fm_end] + "\n" + "\n".join(lines_to_add) + content[fm_end:]
+        )
     else:
         # Prepend a complete frontmatter block
         new_id = str(uuid.uuid4())
@@ -197,22 +205,34 @@ def _format_fm_fields(fields: dict) -> list[str]:
 def register(mcp: FastMCP) -> None:
     @mcp.tool()
     def cb_enrich(
-        folder: Annotated[str, Field(
-            description="Vault-relative subfolder to scan. Empty = entire vault."
-        )] = "",
-        dry_run: Annotated[bool, Field(
-            description="Report what would change without modifying any files."
-        )] = False,
-        since: Annotated[str, Field(
-            description="ISO date (YYYY-MM-DD). Only process notes modified on or after this date."
-        )] = "",
-        limit: Annotated[int, Field(
-            ge=0,
-            description="Maximum number of notes to enrich. 0 = unlimited."
-        )] = 0,
-        overwrite: Annotated[bool, Field(
-            description="Replace existing type/summary/tags values instead of additive-only."
-        )] = False,
+        folder: Annotated[
+            str,
+            Field(
+                description="Vault-relative subfolder to scan. Empty = entire vault."
+            ),
+        ] = "",
+        dry_run: Annotated[
+            bool,
+            Field(description="Report what would change without modifying any files."),
+        ] = False,
+        since: Annotated[
+            str,
+            Field(
+                description="ISO date (YYYY-MM-DD). Only process notes modified on or after this date."
+            ),
+        ] = "",
+        limit: Annotated[
+            int,
+            Field(
+                ge=0, description="Maximum number of notes to enrich. 0 = unlimited."
+            ),
+        ] = 0,
+        overwrite: Annotated[
+            bool,
+            Field(
+                description="Replace existing type/summary/tags values instead of additive-only."
+            ),
+        ] = False,
     ) -> str:
         """
         Scan the vault for notes missing metadata (type, summary, tags) and enrich them.
@@ -231,7 +251,9 @@ def register(mcp: FastMCP) -> None:
         gate_enabled = config.get("quality_gate_enabled", True)
         vault_path_str = config.get("vault_path", "")
         if not vault_path_str:
-            raise ToolError("No vault configured. Run cb_configure(vault_path=...) first.")
+            raise ToolError(
+                "No vault configured. Run cb_configure(vault_path=...) first."
+            )
 
         vault = Path(vault_path_str).expanduser().resolve()
         if not vault.exists():
@@ -244,20 +266,22 @@ def register(mcp: FastMCP) -> None:
         since_dt = None
         if since:
             try:
-                since_dt = datetime.fromisoformat(since).replace(tzinfo=timezone.utc)
+                since_dt = datetime.fromisoformat(since).replace(tzinfo=UTC)
             except ValueError:
                 raise ToolError(f"Invalid date for 'since': {since}. Use YYYY-MM-DD.")
 
         # ── Scan for candidate files ──
         all_files = sorted(
-            f for f in scan_root.rglob("*.md")
+            f
+            for f in scan_root.rglob("*.md")
             if not any(part.startswith(".") for part in f.relative_to(vault).parts)
         )
 
         if since_dt:
             all_files = [
-                f for f in all_files
-                if datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc) >= since_dt
+                f
+                for f in all_files
+                if datetime.fromtimestamp(f.stat().st_mtime, tz=UTC) >= since_dt
             ]
 
         needs_enrichment: list[tuple[Path, str, str]] = []
@@ -277,7 +301,9 @@ def register(mcp: FastMCP) -> None:
 
             needs, reason = _needs_enrichment(content, valid_types)
             if needs or overwrite:
-                needs_enrichment.append((f, content, reason if needs else "overwrite mode"))
+                needs_enrichment.append(
+                    (f, content, reason if needs else "overwrite mode")
+                )
             else:
                 already_done += 1
 
@@ -299,7 +325,9 @@ def register(mcp: FastMCP) -> None:
                     rel = f.relative_to(vault)
                     lines.append(f"  + {rel}  — {reason}")
             lines.append(f"\nAlready done: {already_done} notes")
-            lines.append(f"Skipped:      {skipped} notes (templates, daily journals, enrich:skip)")
+            lines.append(
+                f"Skipped:      {skipped} notes (templates, daily journals, enrich:skip)"
+            )
             lines.append("\nNo files were modified. Run without dry_run=True to apply.")
             return "\n".join(lines)
 
@@ -315,11 +343,13 @@ def register(mcp: FastMCP) -> None:
 
         enriched: list[tuple[Path, dict]] = []
         errors: list[tuple[Path, str]] = []
-        gate_skipped: list[tuple[Path, dict, object]] = []
+        from cyberbrain.extractors.quality_gate import GateVerdict as _GateVerdict
+
+        gate_skipped: list[tuple[Path, dict, _GateVerdict]] = []
 
         # ── Process in batches ──
         for batch_start in range(0, len(needs_enrichment), _BATCH_SIZE):
-            batch = needs_enrichment[batch_start: batch_start + _BATCH_SIZE]
+            batch = needs_enrichment[batch_start : batch_start + _BATCH_SIZE]
 
             notes_block_parts = []
             for idx, (f, content, _) in enumerate(batch):
@@ -327,12 +357,12 @@ def register(mcp: FastMCP) -> None:
                 notes_block_parts.append(f"--- Note {idx}: {rel} ---\n{content[:3000]}")
             notes_block = "\n\n".join(notes_block_parts)
 
-            system_prompt = system_prompt_template.replace("{vault_type_context}", vault_type_context)
-            user_message = (
-                user_prompt_template
-                .replace("{count}", str(len(batch)))
-                .replace("{notes_block}", notes_block)
+            system_prompt = system_prompt_template.replace(
+                "{vault_type_context}", vault_type_context
             )
+            user_message = user_prompt_template.replace(
+                "{count}", str(len(batch))
+            ).replace("{notes_block}", notes_block)
 
             tool_config = {**config, "model": get_model_for_tool(config, "enrich")}
             try:
@@ -344,7 +374,7 @@ def register(mcp: FastMCP) -> None:
                 for f, _, _ in batch:
                     errors.append((f, f"JSON parse error: {e}"))
                 continue
-            except Exception as e:
+            except Exception as e:  # intentional: catches BackendError and any other LLM call failure; batch is skipped
                 for f, _, _ in batch:
                     errors.append((f, str(e)))
                 continue
@@ -368,7 +398,9 @@ def register(mcp: FastMCP) -> None:
                 if gate_enabled:
                     gate_input = f"Note path: {f.relative_to(vault)}\n\nNote content:\n{content[:2000]}"
                     gate_output = json.dumps(cls)
-                    verdict = _quality_gate("enrich_classify", gate_input, gate_output, config)
+                    verdict = _quality_gate(
+                        "enrich_classify", gate_input, gate_output, config
+                    )
                     if not verdict.passed:
                         gate_skipped.append((f, cls, verdict))
                         continue
@@ -396,14 +428,15 @@ def register(mcp: FastMCP) -> None:
             for f, cls in enriched:
                 rel = f.relative_to(vault)
                 tags_str = ", ".join(cls.get("tags", [])[:3])
-                lines.append(f"  + {rel}  → type: {cls.get('type', '?')}, tags: [{tags_str}]")
+                lines.append(
+                    f"  + {rel}  → type: {cls.get('type', '?')}, tags: [{tags_str}]"
+                )
         if gate_skipped:
             lines.append("\nBlocked by quality gate (not applied):")
             for f, cls, verdict in gate_skipped:
                 rel = f.relative_to(vault)
                 lines.append(
-                    f"  ✗ {rel}  → type: {cls.get('type', '?')} — "
-                    f"{verdict.rationale}"
+                    f"  ✗ {rel}  → type: {cls.get('type', '?')} — {verdict.rationale}"
                 )
             lines.append(
                 "\nCall cb_configure(quality_gate_enabled=False) to disable quality gates."

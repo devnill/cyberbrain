@@ -15,7 +15,7 @@ Per spec Section 14 — test behavior, not implementation. Mock at the LLM bound
 import json
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -37,9 +37,12 @@ if str(SCRIPTS_DIR) not in sys.path:
 import importlib
 import importlib.util
 
+
 def _load_import_module():
     """Load scripts/import.py as a module named 'kg_import' (avoids 'import' keyword clash)."""
-    spec = importlib.util.spec_from_file_location("kg_import", SCRIPTS_DIR / "import.py")
+    spec = importlib.util.spec_from_file_location(
+        "kg_import", SCRIPTS_DIR / "import.py"
+    )
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -54,6 +57,7 @@ kg_import = _load_import_module()
 # ---------------------------------------------------------------------------
 # Claude export parsing tests
 # ---------------------------------------------------------------------------
+
 
 class TestParseClaudeConversation:
     """Tests for parse_claude_conversation() — Claude Desktop export format."""
@@ -72,7 +76,9 @@ class TestParseClaudeConversation:
             "updated_at": "2026-02-10T10:00:00Z",
             "chat_messages": [
                 self._make_message("human", "How do I configure connection pooling?"),
-                self._make_message("assistant", "Set pool_timeout to 10 in database.yml."),
+                self._make_message(
+                    "assistant", "Set pool_timeout to 10 in database.yml."
+                ),
             ],
         }
         result = kg_import.parse_claude_conversation(conv)
@@ -85,7 +91,11 @@ class TestParseClaudeConversation:
             "name": "Mixed senders",
             "updated_at": "2026-02-10T10:00:00Z",
             "chat_messages": [
-                {"sender": "system", "text": "You are a helpful assistant.", "content": []},
+                {
+                    "sender": "system",
+                    "text": "You are a helpful assistant.",
+                    "content": [],
+                },
                 {"sender": "tool", "text": "tool_result_data", "content": []},
                 self._make_message("human", "What is Redis?"),
                 self._make_message("assistant", "A fast in-memory data store."),
@@ -107,12 +117,19 @@ class TestParseClaudeConversation:
                 {
                     "sender": "human",
                     "text": "This block is not supported",  # artifact in text field
-                    "content": [{"type": "text", "text": "Real question about auth middleware."}],
+                    "content": [
+                        {"type": "text", "text": "Real question about auth middleware."}
+                    ],
                 },
                 {
                     "sender": "assistant",
                     "text": "This block is not supported",
-                    "content": [{"type": "text", "text": "Auth middleware should run before rate limiting."}],
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Auth middleware should run before rate limiting.",
+                        }
+                    ],
                 },
             ],
         }
@@ -166,7 +183,9 @@ class TestParseClaudeConversation:
         }
         result = kg_import.parse_claude_conversation(conv)
         assert "truncated" in result
-        assert len(result) <= kg_import.MAX_TRANSCRIPT_CHARS + len("...[earlier content truncated]...\n\n")
+        assert len(result) <= kg_import.MAX_TRANSCRIPT_CHARS + len(
+            "...[earlier content truncated]...\n\n"
+        )
 
     def test_skips_empty_messages(self):
         conv = {
@@ -200,10 +219,16 @@ class TestParseClaudeConversation:
 # ChatGPT export parsing tests
 # ---------------------------------------------------------------------------
 
+
 class TestParseChatGPTConversation:
     """Tests for parse_chatgpt_conversation() — ChatGPT export format."""
 
-    def _make_conv(self, messages: list[tuple[str, str]], title: str = "Test", ts: float = 1738800000.0) -> dict:
+    def _make_conv(
+        self,
+        messages: list[tuple[str, str]],
+        title: str = "Test",
+        ts: float = 1738800000.0,
+    ) -> dict:
         """
         Build a minimal ChatGPT conversation dict from a list of (role, text) tuples.
         Constructs a simple linear chain from msg-1 to msg-N.
@@ -237,30 +262,36 @@ class TestParseChatGPTConversation:
         }
 
     def test_extracts_user_and_assistant_turns(self):
-        conv = self._make_conv([
-            ("user", "What is the best Redis eviction policy for sessions?"),
-            ("assistant", "Use allkeys-lru for session caching."),
-        ])
+        conv = self._make_conv(
+            [
+                ("user", "What is the best Redis eviction policy for sessions?"),
+                ("assistant", "Use allkeys-lru for session caching."),
+            ]
+        )
         result = kg_import.parse_chatgpt_conversation(conv)
         assert "Human: What is the best Redis eviction policy for sessions?" in result
         assert "Assistant: Use allkeys-lru for session caching." in result
 
     def test_skips_system_messages(self):
-        conv = self._make_conv([
-            ("system", "You are a helpful assistant."),
-            ("user", "How do I configure Redis?"),
-            ("assistant", "Set maxmemory-policy allkeys-lru."),
-        ])
+        conv = self._make_conv(
+            [
+                ("system", "You are a helpful assistant."),
+                ("user", "How do I configure Redis?"),
+                ("assistant", "Set maxmemory-policy allkeys-lru."),
+            ]
+        )
         result = kg_import.parse_chatgpt_conversation(conv)
         assert "You are a helpful assistant." not in result
         assert "Human: How do I configure Redis?" in result
 
     def test_skips_tool_messages(self):
-        conv = self._make_conv([
-            ("user", "Search the web for Redis docs."),
-            ("tool", "tool_result: <search results>"),
-            ("assistant", "Redis documentation is at redis.io."),
-        ])
+        conv = self._make_conv(
+            [
+                ("user", "Search the web for Redis docs."),
+                ("tool", "tool_result: <search results>"),
+                ("assistant", "Redis documentation is at redis.io."),
+            ]
+        )
         result = kg_import.parse_chatgpt_conversation(conv)
         assert "tool_result" not in result
         assert "Human: Search the web for Redis docs." in result
@@ -292,7 +323,10 @@ class TestParseChatGPTConversation:
                     "message": {
                         "id": "msg-1",
                         "author": {"role": "user"},
-                        "content": {"content_type": "multimodal_text", "parts": ["[image]"]},
+                        "content": {
+                            "content_type": "multimodal_text",
+                            "parts": ["[image]"],
+                        },
                     },
                 },
                 "msg-2": {
@@ -302,7 +336,10 @@ class TestParseChatGPTConversation:
                     "message": {
                         "id": "msg-2",
                         "author": {"role": "assistant"},
-                        "content": {"content_type": "text", "parts": ["I see an image."]},
+                        "content": {
+                            "content_type": "text",
+                            "parts": ["I see an image."],
+                        },
                     },
                 },
             },
@@ -327,6 +364,7 @@ class TestParseChatGPTConversation:
 # State file management tests
 # ---------------------------------------------------------------------------
 
+
 class TestStateManagement:
     """Tests for load_state, save_state, and record_imported."""
 
@@ -348,7 +386,9 @@ class TestStateManagement:
     def test_load_state_reads_existing_state(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             state_path = Path(tmpdir) / "state.json"
-            existing = {"conv-001": {"imported_at": "2026-02-01T00:00:00Z", "beats_written": 3}}
+            existing = {
+                "conv-001": {"imported_at": "2026-02-01T00:00:00Z", "beats_written": 3}
+            }
             state_path.write_text(json.dumps(existing), encoding="utf-8")
             state = kg_import.load_state(state_path)
             assert "conv-001" in state
@@ -357,7 +397,9 @@ class TestStateManagement:
     def test_save_state_writes_json(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             state_path = Path(tmpdir) / "state.json"
-            state = {"conv-001": {"imported_at": "2026-02-01T00:00:00Z", "beats_written": 2}}
+            state = {
+                "conv-001": {"imported_at": "2026-02-01T00:00:00Z", "beats_written": 2}
+            }
             kg_import.save_state(state, state_path)
             assert state_path.exists()
             loaded = json.loads(state_path.read_text(encoding="utf-8"))
@@ -375,19 +417,29 @@ class TestStateManagement:
 # Import idempotency tests
 # ---------------------------------------------------------------------------
 
+
 class TestImportIdempotency:
     """Tests that already-imported conversations are skipped correctly."""
 
-    def _make_claude_conversation(self, uid: str, title: str = "Test", msgs: int = 4) -> dict:
+    def _make_claude_conversation(
+        self, uid: str, title: str = "Test", msgs: int = 4
+    ) -> dict:
         """Create a minimal Claude export conversation."""
         messages = []
         for i in range(msgs):
             sender = "human" if i % 2 == 0 else "assistant"
-            messages.append({
-                "sender": sender,
-                "text": f"Message {i} with enough content to pass the length check.",
-                "content": [{"type": "text", "text": f"Message {i} with enough content to pass the length check."}],
-            })
+            messages.append(
+                {
+                    "sender": sender,
+                    "text": f"Message {i} with enough content to pass the length check.",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Message {i} with enough content to pass the length check.",
+                        }
+                    ],
+                }
+            )
         return {
             "uuid": uid,
             "name": title,
@@ -400,7 +452,9 @@ class TestImportIdempotency:
         with tempfile.TemporaryDirectory() as tmpdir:
             state_path = Path(tmpdir) / "state.json"
             # Pre-populate state with conv-001
-            state = {"conv-001": {"imported_at": "2026-02-01T00:00:00Z", "beats_written": 2}}
+            state = {
+                "conv-001": {"imported_at": "2026-02-01T00:00:00Z", "beats_written": 2}
+            }
             kg_import.save_state(state, state_path)
 
             conversations = [
@@ -413,7 +467,8 @@ class TestImportIdempotency:
             already_imported_ids = set(loaded_state.keys())
 
             to_process = [
-                c for c in conversations
+                c
+                for c in conversations
                 if kg_import.get_conv_id(c, "claude") not in already_imported_ids
             ]
 
@@ -452,7 +507,8 @@ class TestImportIdempotency:
             loaded_state = kg_import.load_state(state_path)
             already_imported_ids = set(loaded_state.keys())
             to_process = [
-                c for c in conversations
+                c
+                for c in conversations
                 if kg_import.get_conv_id(c, "claude") not in already_imported_ids
             ]
             assert len(to_process) == 1
@@ -462,6 +518,7 @@ class TestImportIdempotency:
 # ---------------------------------------------------------------------------
 # Dry-run tests
 # ---------------------------------------------------------------------------
+
 
 class TestDryRun:
     """
@@ -493,10 +550,26 @@ class TestDryRun:
                     "name": "Would be processed",
                     "updated_at": "2026-02-10T10:00:00Z",
                     "chat_messages": [
-                        {"sender": "human", "text": "How do I fix a Postgres timeout?",
-                         "content": [{"type": "text", "text": "How do I fix a Postgres timeout?"}]},
-                        {"sender": "assistant", "text": "Increase pool_timeout in database.yml.",
-                         "content": [{"type": "text", "text": "Increase pool_timeout in database.yml."}]},
+                        {
+                            "sender": "human",
+                            "text": "How do I fix a Postgres timeout?",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "How do I fix a Postgres timeout?",
+                                }
+                            ],
+                        },
+                        {
+                            "sender": "assistant",
+                            "text": "Increase pool_timeout in database.yml.",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "Increase pool_timeout in database.yml.",
+                                }
+                            ],
+                        },
                     ],
                 }
             ]
@@ -530,10 +603,21 @@ class TestDryRun:
                 "name": "Some conversation",
                 "updated_at": "2026-02-10T10:00:00Z",
                 "chat_messages": [
-                    {"sender": "human", "text": "What is autofile?",
-                     "content": [{"type": "text", "text": "What is autofile?"}]},
-                    {"sender": "assistant", "text": "Autofile routes beats intelligently.",
-                     "content": [{"type": "text", "text": "Autofile routes beats intelligently."}]},
+                    {
+                        "sender": "human",
+                        "text": "What is autofile?",
+                        "content": [{"type": "text", "text": "What is autofile?"}],
+                    },
+                    {
+                        "sender": "assistant",
+                        "text": "Autofile routes beats intelligently.",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Autofile routes beats intelligently.",
+                            }
+                        ],
+                    },
                 ],
             }
         ]
@@ -556,6 +640,7 @@ class TestDryRun:
 # ---------------------------------------------------------------------------
 # Integration: full parse pipeline (no LLM calls)
 # ---------------------------------------------------------------------------
+
 
 class TestConversationRendering:
     """Tests for the full rendering pipeline of both formats."""
@@ -609,6 +694,7 @@ class TestConversationRendering:
 # _extract_chatgpt_thread tests (lines 47-58)
 # ---------------------------------------------------------------------------
 
+
 class TestRenderClaudeMessageText:
     """Tests for _render_claude_message_text() — line 147 branch."""
 
@@ -624,7 +710,11 @@ class TestRenderClaudeMessageText:
         assert result == ""
 
     def test_human_sender_returns_content(self):
-        msg = {"sender": "human", "text": "hello", "content": [{"type": "text", "text": "hello"}]}
+        msg = {
+            "sender": "human",
+            "text": "hello",
+            "content": [{"type": "text", "text": "hello"}],
+        }
         result = kg_import._render_claude_message_text(msg)
         assert result == "hello"
 
@@ -712,6 +802,7 @@ class TestExtractChatGPTThread:
 # _render_chatgpt_message_text tests (lines 66-96)
 # ---------------------------------------------------------------------------
 
+
 class TestRenderChatGPTMessageText:
     """Tests for _render_chatgpt_message_text() — content extraction."""
 
@@ -765,6 +856,7 @@ class TestRenderChatGPTMessageText:
 # ---------------------------------------------------------------------------
 # parse_chatgpt_conversation additional branches (lines 147, 261-262, 279, 288)
 # ---------------------------------------------------------------------------
+
 
 class TestParseChatGPTConversationBranches:
     """Tests for uncovered branches in parse_chatgpt_conversation()."""
@@ -826,7 +918,9 @@ class TestParseChatGPTConversationBranches:
             "current_node": "msg1",
         }
         result = kg_import.parse_chatgpt_conversation(conv)
-        assert len(result) <= kg_import.MAX_TRANSCRIPT_CHARS + len("...[earlier content truncated]...\n\n")
+        assert len(result) <= kg_import.MAX_TRANSCRIPT_CHARS + len(
+            "...[earlier content truncated]...\n\n"
+        )
         assert "truncated" in result
 
     def test_skips_unknown_role(self):
@@ -865,6 +959,7 @@ class TestParseChatGPTConversationBranches:
 # ---------------------------------------------------------------------------
 # ChatGPT dispatch helpers (lines 301, 305, 325-327)
 # ---------------------------------------------------------------------------
+
 
 class TestChatGPTHelpers:
     """Tests for get_chatgpt_conv_date, get_chatgpt_conv_title, render_conversation dispatch."""
@@ -929,12 +1024,15 @@ class TestChatGPTHelpers:
 # load_export tests (lines 348-372)
 # ---------------------------------------------------------------------------
 
+
 class TestLoadExport:
     """Tests for load_export() — file loading and format handling."""
 
     def test_file_not_found_exits(self):
         with pytest.raises(SystemExit):
-            kg_import.load_export("/nonexistent/path/that/does/not/exist.json", "claude")
+            kg_import.load_export(
+                "/nonexistent/path/that/does/not/exist.json", "claude"
+            )
 
     def test_bad_json_exits(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
@@ -978,6 +1076,7 @@ class TestLoadExport:
 # get_conv_timestamp tests (lines 381-392)
 # ---------------------------------------------------------------------------
 
+
 class TestGetConvTimestamp:
     """Tests for get_conv_timestamp() — returns datetime for beat dating."""
 
@@ -997,7 +1096,7 @@ class TestGetConvTimestamp:
         ts = kg_import.get_conv_timestamp({}, "chatgpt")
         assert isinstance(ts, datetime)
         # Should be very recent
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         delta = abs((now - ts).total_seconds())
         assert delta < 5
 
@@ -1020,14 +1119,14 @@ class TestGetConvTimestamp:
         conv = {"updated_at": "not-a-date"}
         ts = kg_import.get_conv_timestamp(conv, "claude")
         assert isinstance(ts, datetime)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         delta = abs((now - ts).total_seconds())
         assert delta < 5
 
     def test_claude_no_timestamp_returns_now(self):
         ts = kg_import.get_conv_timestamp({}, "claude")
         assert isinstance(ts, datetime)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         delta = abs((now - ts).total_seconds())
         assert delta < 5
 
@@ -1035,6 +1134,7 @@ class TestGetConvTimestamp:
 # ---------------------------------------------------------------------------
 # process_conversation tests (lines 413-455)
 # ---------------------------------------------------------------------------
+
 
 class TestProcessConversation:
     """Tests for process_conversation() — extract beats and write to vault."""
@@ -1053,7 +1153,12 @@ class TestProcessConversation:
                 {
                     "sender": "assistant",
                     "text": "This is a detailed and informative answer.",
-                    "content": [{"type": "text", "text": "This is a detailed and informative answer."}],
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "This is a detailed and informative answer.",
+                        }
+                    ],
                 },
             ],
         }
@@ -1076,23 +1181,23 @@ class TestProcessConversation:
         }
 
     def test_returns_count_and_paths(self, tmp_path):
-        eb = MagicMock()
-        eb.extract_beats.return_value = [self._make_beat()]
-        eb.write_beat.return_value = Path(tmp_path / "note.md")
-
         conv = self._make_claude_conv()
         config = self._make_config(tmp_path)
-        count, paths = kg_import.process_conversation(conv, "claude", config, eb, "/tmp")
+        with (
+            patch.object(kg_import, "extract_beats", return_value=[self._make_beat()]),
+            patch.object(
+                kg_import, "write_beat", return_value=Path(tmp_path / "note.md")
+            ) as mock_write,
+        ):
+            count, paths = kg_import.process_conversation(
+                conv, "claude", config, "/tmp"
+            )
 
         assert count == 1
         assert len(paths) == 1
-        eb.write_beat.assert_called_once()
+        mock_write.assert_called_once()
 
     def test_empty_transcript_returns_zero(self, tmp_path):
-        eb = MagicMock()
-        # Use a chatgpt conv whose mapping is empty and current_node is missing,
-        # so render produces just the header (title + no messages).
-        # We patch render_conversation to return "" to hit the empty-transcript branch.
         conv = {
             "uuid": "empty-123",
             "name": "Empty",
@@ -1100,70 +1205,102 @@ class TestProcessConversation:
             "chat_messages": [],
         }
         config = self._make_config(tmp_path)
-        with patch.object(kg_import, "render_conversation", return_value="   "):
-            count, paths = kg_import.process_conversation(conv, "claude", config, eb, "/tmp")
+        with (
+            patch.object(kg_import, "render_conversation", return_value="   "),
+            patch.object(kg_import, "extract_beats") as mock_extract,
+        ):
+            count, paths = kg_import.process_conversation(
+                conv, "claude", config, "/tmp"
+            )
 
         assert count == 0
         assert paths == []
-        eb.extract_beats.assert_not_called()
+        mock_extract.assert_not_called()
 
     def test_extract_beats_returns_empty_returns_zero(self, tmp_path):
-        eb = MagicMock()
-        eb.extract_beats.return_value = []
-
         conv = self._make_claude_conv()
         config = self._make_config(tmp_path)
-        count, paths = kg_import.process_conversation(conv, "claude", config, eb, "/tmp")
+        with (
+            patch.object(kg_import, "extract_beats", return_value=[]),
+            patch.object(kg_import, "write_beat") as mock_write,
+        ):
+            count, paths = kg_import.process_conversation(
+                conv, "claude", config, "/tmp"
+            )
 
         assert count == 0
         assert paths == []
-        eb.write_beat.assert_not_called()
+        mock_write.assert_not_called()
 
     def test_autofile_enabled_calls_autofile_beat(self, tmp_path):
-        eb = MagicMock()
-        eb.extract_beats.return_value = [self._make_beat()]
-        eb.autofile_beat.return_value = Path(tmp_path / "autofile-note.md")
-
         # Create a CLAUDE.md in vault for vault_context
         (tmp_path / "CLAUDE.md").write_text("## Vault config", encoding="utf-8")
 
         conv = self._make_claude_conv()
         config = self._make_config(tmp_path, autofile=True)
-        count, paths = kg_import.process_conversation(conv, "claude", config, eb, "/tmp")
+        with (
+            patch.object(kg_import, "extract_beats", return_value=[self._make_beat()]),
+            patch.object(
+                kg_import,
+                "autofile_beat",
+                return_value=Path(tmp_path / "autofile-note.md"),
+            ) as mock_autofile,
+            patch.object(kg_import, "write_beat") as mock_write,
+        ):
+            count, paths = kg_import.process_conversation(
+                conv, "claude", config, "/tmp"
+            )
 
         assert count == 1
-        eb.autofile_beat.assert_called_once()
-        eb.write_beat.assert_not_called()
+        mock_autofile.assert_called_once()
+        mock_write.assert_not_called()
 
     def test_autofile_no_claude_md_uses_fallback_context(self, tmp_path):
         """When vault has no CLAUDE.md, autofile uses a fallback vault_context string."""
-        eb = MagicMock()
-        eb.extract_beats.return_value = [self._make_beat()]
-        eb.autofile_beat.return_value = Path(tmp_path / "note.md")
-
         conv = self._make_claude_conv()
         config = self._make_config(tmp_path, autofile=True)
-        count, paths = kg_import.process_conversation(conv, "claude", config, eb, "/tmp")
+        with (
+            patch.object(kg_import, "extract_beats", return_value=[self._make_beat()]),
+            patch.object(
+                kg_import,
+                "autofile_beat",
+                return_value=Path(tmp_path / "note.md"),
+            ) as mock_autofile,
+        ):
+            count, paths = kg_import.process_conversation(
+                conv, "claude", config, "/tmp"
+            )
 
         assert count == 1
         # Check vault_context argument contains fallback text
-        call_kwargs = eb.autofile_beat.call_args
-        vault_ctx = call_kwargs.kwargs.get("vault_context", call_kwargs.args[4] if len(call_kwargs.args) > 4 else None)
+        call_kwargs = mock_autofile.call_args
+        vault_ctx = call_kwargs.kwargs.get(
+            "vault_context", call_kwargs.args[4] if len(call_kwargs.args) > 4 else None
+        )
         # The fallback string contains "decision"
         if vault_ctx is not None:
-            assert "decision" in vault_ctx or "ontology" in vault_ctx.lower() or "File notes" in vault_ctx
+            assert (
+                "decision" in vault_ctx
+                or "ontology" in vault_ctx.lower()
+                or "File notes" in vault_ctx
+            )
 
     def test_write_beat_exception_continues(self, tmp_path):
         """If write_beat raises, process_conversation prints a warning and continues."""
-        eb = MagicMock()
         beats = [self._make_beat("Beat 1"), self._make_beat("Beat 2")]
-        eb.extract_beats.return_value = beats
-        # First beat fails, second succeeds
-        eb.write_beat.side_effect = [Exception("disk full"), Path(tmp_path / "note2.md")]
-
         conv = self._make_claude_conv()
         config = self._make_config(tmp_path)
-        count, paths = kg_import.process_conversation(conv, "claude", config, eb, "/tmp")
+        with (
+            patch.object(kg_import, "extract_beats", return_value=beats),
+            patch.object(
+                kg_import,
+                "write_beat",
+                side_effect=[Exception("disk full"), Path(tmp_path / "note2.md")],
+            ),
+        ):
+            count, paths = kg_import.process_conversation(
+                conv, "claude", config, "/tmp"
+            )
 
         # Only the successful beat is counted
         assert count == 1
@@ -1171,30 +1308,38 @@ class TestProcessConversation:
 
     def test_write_beat_returning_none_not_counted(self, tmp_path):
         """If write_beat returns None (e.g. dupe), it's not added to written list."""
-        eb = MagicMock()
-        eb.extract_beats.return_value = [self._make_beat()]
-        eb.write_beat.return_value = None
-
         conv = self._make_claude_conv()
         config = self._make_config(tmp_path)
-        count, paths = kg_import.process_conversation(conv, "claude", config, eb, "/tmp")
+        with (
+            patch.object(kg_import, "extract_beats", return_value=[self._make_beat()]),
+            patch.object(kg_import, "write_beat", return_value=None),
+        ):
+            count, paths = kg_import.process_conversation(
+                conv, "claude", config, "/tmp"
+            )
 
         assert count == 0
         assert paths == []
 
     def test_multiple_beats_all_written(self, tmp_path):
-        eb = MagicMock()
         beats = [self._make_beat(f"Beat {i}") for i in range(3)]
-        eb.extract_beats.return_value = beats
-        eb.write_beat.side_effect = [
-            Path(tmp_path / "note1.md"),
-            Path(tmp_path / "note2.md"),
-            Path(tmp_path / "note3.md"),
-        ]
-
         conv = self._make_claude_conv()
         config = self._make_config(tmp_path)
-        count, paths = kg_import.process_conversation(conv, "claude", config, eb, "/tmp")
+        with (
+            patch.object(kg_import, "extract_beats", return_value=beats),
+            patch.object(
+                kg_import,
+                "write_beat",
+                side_effect=[
+                    Path(tmp_path / "note1.md"),
+                    Path(tmp_path / "note2.md"),
+                    Path(tmp_path / "note3.md"),
+                ],
+            ),
+        ):
+            count, paths = kg_import.process_conversation(
+                conv, "claude", config, "/tmp"
+            )
 
         assert count == 3
         assert len(paths) == 3
@@ -1203,6 +1348,7 @@ class TestProcessConversation:
 # ---------------------------------------------------------------------------
 # main() tests (lines 463-590)
 # ---------------------------------------------------------------------------
+
 
 class TestMain:
     """Tests for main() — CLI entry point."""
@@ -1223,7 +1369,12 @@ class TestMain:
                         {
                             "sender": "assistant",
                             "text": "Python is a high-level programming language.",
-                            "content": [{"type": "text", "text": "Python is a high-level programming language."}],
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "Python is a high-level programming language.",
+                                }
+                            ],
                         },
                     ],
                 }
@@ -1232,49 +1383,67 @@ class TestMain:
         export_file.write_text(json.dumps(conversations), encoding="utf-8")
         return export_file
 
-    def _make_mock_eb(self, beats=None):
-        eb = MagicMock()
-        if beats is None:
-            beats = []
-        eb.extract_beats.return_value = beats
-        eb.resolve_config.return_value = {
-            "vault_path": "/tmp/vault",
+    def _make_default_config(self, tmp_path=None):
+        vault = str(tmp_path) if tmp_path else "/tmp/vault"
+        return {
+            "vault_path": vault,
             "inbox": "AI/Claude-Sessions",
             "autofile": False,
             "backend": "claude-code",
             "model": "claude-haiku-4-5",
             "daily_journal": False,
         }
-        return eb
 
     def test_main_dry_run_no_writes(self, tmp_path):
         export_file = self._make_claude_export(tmp_path)
-        mock_eb = self._make_mock_eb()
 
-        with patch.object(kg_import, "_import_extract_beats", return_value=mock_eb), \
-             patch("sys.argv", ["import.py", "--export", str(export_file), "--format", "claude", "--dry-run"]):
+        with (
+            patch.object(kg_import, "extract_beats") as mock_extract,
+            patch(
+                "sys.argv",
+                [
+                    "import.py",
+                    "--export",
+                    str(export_file),
+                    "--format",
+                    "claude",
+                    "--dry-run",
+                ],
+            ),
+        ):
             kg_import.main()
 
         # In dry-run, extract_beats should NOT be called
-        mock_eb.extract_beats.assert_not_called()
+        mock_extract.assert_not_called()
 
     def test_main_dry_run_prints_would_process(self, tmp_path, capsys):
         export_file = self._make_claude_export(tmp_path)
-        mock_eb = self._make_mock_eb()
 
-        with patch.object(kg_import, "_import_extract_beats", return_value=mock_eb), \
-             patch("sys.argv", ["import.py", "--export", str(export_file), "--format", "claude", "--dry-run"]):
+        with patch(
+            "sys.argv",
+            [
+                "import.py",
+                "--export",
+                str(export_file),
+                "--format",
+                "claude",
+                "--dry-run",
+            ],
+        ):
             kg_import.main()
 
         out = capsys.readouterr().out
-        assert "DRY RUN" in out or "would process" in out.lower() or "Would process" in out
+        assert (
+            "DRY RUN" in out or "would process" in out.lower() or "Would process" in out
+        )
 
     def test_main_empty_export_exits_cleanly(self, tmp_path, capsys):
         export_file = self._make_claude_export(tmp_path, conversations=[])
-        mock_eb = self._make_mock_eb()
 
-        with patch.object(kg_import, "_import_extract_beats", return_value=mock_eb), \
-             patch("sys.argv", ["import.py", "--export", str(export_file), "--format", "claude"]):
+        with patch(
+            "sys.argv",
+            ["import.py", "--export", str(export_file), "--format", "claude"],
+        ):
             kg_import.main()
 
         out = capsys.readouterr().out
@@ -1283,18 +1452,24 @@ class TestMain:
     def test_main_all_already_imported_skips(self, tmp_path, capsys):
         """Conversations already in state file are skipped without processing."""
         export_file = self._make_claude_export(tmp_path)
-        mock_eb = self._make_mock_eb()
 
         state_path = tmp_path / "state.json"
-        existing_state = {"conv-main-001": {"imported_at": "2024-01-01T00:00:00Z", "beats_written": 2}}
+        existing_state = {
+            "conv-main-001": {"imported_at": "2024-01-01T00:00:00Z", "beats_written": 2}
+        }
         state_path.write_text(json.dumps(existing_state), encoding="utf-8")
 
-        with patch.object(kg_import, "_import_extract_beats", return_value=mock_eb), \
-             patch.object(kg_import, "STATE_PATH", state_path), \
-             patch("sys.argv", ["import.py", "--export", str(export_file), "--format", "claude"]):
+        with (
+            patch.object(kg_import, "extract_beats") as mock_extract,
+            patch.object(kg_import, "STATE_PATH", state_path),
+            patch(
+                "sys.argv",
+                ["import.py", "--export", str(export_file), "--format", "claude"],
+            ),
+        ):
             kg_import.main()
 
-        mock_eb.extract_beats.assert_not_called()
+        mock_extract.assert_not_called()
 
     def test_main_limit_respected(self, tmp_path, capsys):
         """--limit N processes at most N conversations."""
@@ -1304,19 +1479,45 @@ class TestMain:
                 "name": f"Conversation {i}",
                 "updated_at": "2024-01-01T00:00:00Z",
                 "chat_messages": [
-                    {"sender": "human", "text": f"Question {i} with some text to pass min chars check",
-                     "content": [{"type": "text", "text": f"Question {i} with some text to pass min chars check"}]},
-                    {"sender": "assistant", "text": f"Answer {i} providing detailed information about the topic",
-                     "content": [{"type": "text", "text": f"Answer {i} providing detailed information about the topic"}]},
+                    {
+                        "sender": "human",
+                        "text": f"Question {i} with some text to pass min chars check",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": f"Question {i} with some text to pass min chars check",
+                            }
+                        ],
+                    },
+                    {
+                        "sender": "assistant",
+                        "text": f"Answer {i} providing detailed information about the topic",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": f"Answer {i} providing detailed information about the topic",
+                            }
+                        ],
+                    },
                 ],
             }
             for i in range(5)
         ]
         export_file = self._make_claude_export(tmp_path, conversations)
-        mock_eb = self._make_mock_eb()
 
-        with patch.object(kg_import, "_import_extract_beats", return_value=mock_eb), \
-             patch("sys.argv", ["import.py", "--export", str(export_file), "--format", "claude", "--dry-run", "--limit", "2"]):
+        with patch(
+            "sys.argv",
+            [
+                "import.py",
+                "--export",
+                str(export_file),
+                "--format",
+                "claude",
+                "--dry-run",
+                "--limit",
+                "2",
+            ],
+        ):
             kg_import.main()
 
         out = capsys.readouterr().out
@@ -1330,8 +1531,11 @@ class TestMain:
                 "name": "Old conversation",
                 "updated_at": "2023-01-01T00:00:00Z",
                 "chat_messages": [
-                    {"sender": "human", "text": "old question",
-                     "content": [{"type": "text", "text": "old question"}]},
+                    {
+                        "sender": "human",
+                        "text": "old question",
+                        "content": [{"type": "text", "text": "old question"}],
+                    },
                 ],
             },
             {
@@ -1339,19 +1543,44 @@ class TestMain:
                 "name": "New conversation",
                 "updated_at": "2024-06-01T00:00:00Z",
                 "chat_messages": [
-                    {"sender": "human", "text": "new question that is long enough to pass min chars",
-                     "content": [{"type": "text", "text": "new question that is long enough to pass min chars"}]},
-                    {"sender": "assistant", "text": "new answer that is detailed and informative",
-                     "content": [{"type": "text", "text": "new answer that is detailed and informative"}]},
+                    {
+                        "sender": "human",
+                        "text": "new question that is long enough to pass min chars",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "new question that is long enough to pass min chars",
+                            }
+                        ],
+                    },
+                    {
+                        "sender": "assistant",
+                        "text": "new answer that is detailed and informative",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "new answer that is detailed and informative",
+                            }
+                        ],
+                    },
                 ],
             },
         ]
         export_file = self._make_claude_export(tmp_path, conversations)
-        mock_eb = self._make_mock_eb()
 
-        with patch.object(kg_import, "_import_extract_beats", return_value=mock_eb), \
-             patch("sys.argv", ["import.py", "--export", str(export_file), "--format", "claude",
-                                "--dry-run", "--since", "2024-01-01"]):
+        with patch(
+            "sys.argv",
+            [
+                "import.py",
+                "--export",
+                str(export_file),
+                "--format",
+                "claude",
+                "--dry-run",
+                "--since",
+                "2024-01-01",
+            ],
+        ):
             kg_import.main()
 
         out = capsys.readouterr().out
@@ -1365,14 +1594,16 @@ class TestMain:
                 "name": "Short",
                 "updated_at": "2024-01-01T00:00:00Z",
                 "chat_messages": [
-                    {"sender": "human", "text": "hi",
-                     "content": [{"type": "text", "text": "hi"}]},
+                    {
+                        "sender": "human",
+                        "text": "hi",
+                        "content": [{"type": "text", "text": "hi"}],
+                    },
                 ],
             }
         ]
         export_file = self._make_claude_export(tmp_path, conversations)
-        mock_eb = self._make_mock_eb()
-        mock_eb.resolve_config.return_value = {
+        mock_config = {
             "vault_path": str(tmp_path),
             "inbox": "AI",
             "autofile": False,
@@ -1382,9 +1613,14 @@ class TestMain:
         }
 
         state_path = tmp_path / "state.json"
-        with patch.object(kg_import, "_import_extract_beats", return_value=mock_eb), \
-             patch.object(kg_import, "STATE_PATH", state_path), \
-             patch("sys.argv", ["import.py", "--export", str(export_file), "--format", "claude"]):
+        with (
+            patch.object(kg_import, "resolve_config", return_value=mock_config),
+            patch.object(kg_import, "STATE_PATH", state_path),
+            patch(
+                "sys.argv",
+                ["import.py", "--export", str(export_file), "--format", "claude"],
+            ),
+        ):
             kg_import.main()
 
         out = capsys.readouterr().out
@@ -1404,7 +1640,10 @@ class TestMain:
                         "children": [],
                         "message": {
                             "author": {"role": "user"},
-                            "content": {"content_type": "text", "parts": ["Hello ChatGPT, what is Python?"]},
+                            "content": {
+                                "content_type": "text",
+                                "parts": ["Hello ChatGPT, what is Python?"],
+                            },
                         },
                     }
                 },
@@ -1413,10 +1652,18 @@ class TestMain:
         ]
         export_file = tmp_path / "chatgpt_export.json"
         export_file.write_text(json.dumps(conversations), encoding="utf-8")
-        mock_eb = self._make_mock_eb()
 
-        with patch.object(kg_import, "_import_extract_beats", return_value=mock_eb), \
-             patch("sys.argv", ["import.py", "--export", str(export_file), "--format", "chatgpt", "--dry-run"]):
+        with patch(
+            "sys.argv",
+            [
+                "import.py",
+                "--export",
+                str(export_file),
+                "--format",
+                "chatgpt",
+                "--dry-run",
+            ],
+        ):
             kg_import.main()
 
         out = capsys.readouterr().out
@@ -1436,18 +1683,42 @@ class TestMain:
                 "name": "Valid",
                 "updated_at": "2024-01-01T00:00:00Z",
                 "chat_messages": [
-                    {"sender": "human", "text": "Valid question with enough content to test",
-                     "content": [{"type": "text", "text": "Valid question with enough content to test"}]},
-                    {"sender": "assistant", "text": "Valid answer that provides detailed information",
-                     "content": [{"type": "text", "text": "Valid answer that provides detailed information"}]},
+                    {
+                        "sender": "human",
+                        "text": "Valid question with enough content to test",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Valid question with enough content to test",
+                            }
+                        ],
+                    },
+                    {
+                        "sender": "assistant",
+                        "text": "Valid answer that provides detailed information",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Valid answer that provides detailed information",
+                            }
+                        ],
+                    },
                 ],
             },
         ]
         export_file = self._make_claude_export(tmp_path, conversations)
-        mock_eb = self._make_mock_eb()
 
-        with patch.object(kg_import, "_import_extract_beats", return_value=mock_eb), \
-             patch("sys.argv", ["import.py", "--export", str(export_file), "--format", "claude", "--dry-run"]):
+        with patch(
+            "sys.argv",
+            [
+                "import.py",
+                "--export",
+                str(export_file),
+                "--format",
+                "claude",
+                "--dry-run",
+            ],
+        ):
             kg_import.main()
 
         out = capsys.readouterr().out
@@ -1462,16 +1733,31 @@ class TestMain:
                 "name": "Error conversation",
                 "updated_at": "2024-01-01T00:00:00Z",
                 "chat_messages": [
-                    {"sender": "human", "text": "Question with sufficient length to pass the min chars check",
-                     "content": [{"type": "text", "text": "Question with sufficient length to pass the min chars check"}]},
-                    {"sender": "assistant", "text": "Answer with sufficient length providing detailed information",
-                     "content": [{"type": "text", "text": "Answer with sufficient length providing detailed information"}]},
+                    {
+                        "sender": "human",
+                        "text": "Question with sufficient length to pass the min chars check",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Question with sufficient length to pass the min chars check",
+                            }
+                        ],
+                    },
+                    {
+                        "sender": "assistant",
+                        "text": "Answer with sufficient length providing detailed information",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Answer with sufficient length providing detailed information",
+                            }
+                        ],
+                    },
                 ],
             }
         ]
         export_file = self._make_claude_export(tmp_path, conversations)
-        mock_eb = self._make_mock_eb()
-        mock_eb.resolve_config.return_value = {
+        mock_config = {
             "vault_path": str(tmp_path),
             "inbox": "AI",
             "autofile": False,
@@ -1479,12 +1765,19 @@ class TestMain:
             "model": "claude-haiku-4-5",
             "daily_journal": False,
         }
-        mock_eb.extract_beats.side_effect = Exception("LLM failure")
 
         state_path = tmp_path / "state.json"
-        with patch.object(kg_import, "_import_extract_beats", return_value=mock_eb), \
-             patch.object(kg_import, "STATE_PATH", state_path), \
-             patch("sys.argv", ["import.py", "--export", str(export_file), "--format", "claude"]):
+        with (
+            patch.object(kg_import, "resolve_config", return_value=mock_config),
+            patch.object(
+                kg_import, "extract_beats", side_effect=Exception("LLM failure")
+            ),
+            patch.object(kg_import, "STATE_PATH", state_path),
+            patch(
+                "sys.argv",
+                ["import.py", "--export", str(export_file), "--format", "claude"],
+            ),
+        ):
             kg_import.main()
 
         out = capsys.readouterr().out
@@ -1498,16 +1791,31 @@ class TestMain:
                 "name": "Success conversation",
                 "updated_at": "2024-01-01T00:00:00Z",
                 "chat_messages": [
-                    {"sender": "human", "text": "Question with sufficient length to pass the minimum chars check threshold",
-                     "content": [{"type": "text", "text": "Question with sufficient length to pass the minimum chars check threshold"}]},
-                    {"sender": "assistant", "text": "Answer with sufficient length providing very detailed information about the topic",
-                     "content": [{"type": "text", "text": "Answer with sufficient length providing very detailed information about the topic"}]},
+                    {
+                        "sender": "human",
+                        "text": "Question with sufficient length to pass the minimum chars check threshold",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Question with sufficient length to pass the minimum chars check threshold",
+                            }
+                        ],
+                    },
+                    {
+                        "sender": "assistant",
+                        "text": "Answer with sufficient length providing very detailed information about the topic",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Answer with sufficient length providing very detailed information about the topic",
+                            }
+                        ],
+                    },
                 ],
             }
         ]
         export_file = self._make_claude_export(tmp_path, conversations)
-        mock_eb = self._make_mock_eb()
-        mock_eb.resolve_config.return_value = {
+        mock_config = {
             "vault_path": str(tmp_path),
             "inbox": "AI",
             "autofile": False,
@@ -1515,12 +1823,17 @@ class TestMain:
             "model": "claude-haiku-4-5",
             "daily_journal": False,
         }
-        mock_eb.extract_beats.return_value = []  # no beats but no error
 
         state_path = tmp_path / "state.json"
-        with patch.object(kg_import, "_import_extract_beats", return_value=mock_eb), \
-             patch.object(kg_import, "STATE_PATH", state_path), \
-             patch("sys.argv", ["import.py", "--export", str(export_file), "--format", "claude"]):
+        with (
+            patch.object(kg_import, "resolve_config", return_value=mock_config),
+            patch.object(kg_import, "extract_beats", return_value=[]),
+            patch.object(kg_import, "STATE_PATH", state_path),
+            patch(
+                "sys.argv",
+                ["import.py", "--export", str(export_file), "--format", "claude"],
+            ),
+        ):
             kg_import.main()
 
         # State should have been written
@@ -1536,16 +1849,31 @@ class TestMain:
                 "name": "Journal test",
                 "updated_at": "2024-01-01T00:00:00Z",
                 "chat_messages": [
-                    {"sender": "human", "text": "Question with sufficient length to pass the minimum chars check threshold",
-                     "content": [{"type": "text", "text": "Question with sufficient length to pass the minimum chars check threshold"}]},
-                    {"sender": "assistant", "text": "Answer with sufficient length providing very detailed information about the topic",
-                     "content": [{"type": "text", "text": "Answer with sufficient length providing very detailed information about the topic"}]},
+                    {
+                        "sender": "human",
+                        "text": "Question with sufficient length to pass the minimum chars check threshold",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Question with sufficient length to pass the minimum chars check threshold",
+                            }
+                        ],
+                    },
+                    {
+                        "sender": "assistant",
+                        "text": "Answer with sufficient length providing very detailed information about the topic",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Answer with sufficient length providing very detailed information about the topic",
+                            }
+                        ],
+                    },
                 ],
             }
         ]
         export_file = self._make_claude_export(tmp_path, conversations)
-        mock_eb = self._make_mock_eb()
-        mock_eb.resolve_config.return_value = {
+        mock_config = {
             "vault_path": str(tmp_path),
             "inbox": "AI",
             "autofile": False,
@@ -1553,27 +1881,47 @@ class TestMain:
             "model": "claude-haiku-4-5",
             "daily_journal": True,  # enabled
         }
-        mock_eb.extract_beats.return_value = [
-            {"title": "Beat", "type": "insight", "summary": "x", "tags": []}
-        ]
-        mock_eb.write_beat.return_value = Path(tmp_path / "note.md")
+        beat = {"title": "Beat", "type": "insight", "summary": "x", "tags": []}
 
         state_path = tmp_path / "state.json"
-        with patch.object(kg_import, "_import_extract_beats", return_value=mock_eb), \
-             patch.object(kg_import, "STATE_PATH", state_path), \
-             patch("sys.argv", ["import.py", "--export", str(export_file), "--format", "claude"]):
+        with (
+            patch.object(kg_import, "resolve_config", return_value=mock_config),
+            patch.object(kg_import, "extract_beats", return_value=[beat]),
+            patch.object(
+                kg_import, "write_beat", return_value=Path(tmp_path / "note.md")
+            ),
+            patch.object(kg_import, "write_journal_entry") as mock_journal,
+            patch.object(kg_import, "STATE_PATH", state_path),
+            patch(
+                "sys.argv",
+                ["import.py", "--export", str(export_file), "--format", "claude"],
+            ),
+        ):
             kg_import.main()
 
-        mock_eb.write_journal_entry.assert_called_once()
+        mock_journal.assert_called_once()
 
     def test_main_extractor_not_found_exits(self, tmp_path):
-        """_import_extract_beats exits with sys.exit(1) when extractor is missing."""
-        # Force the import to fail by blocking the module in sys.modules (None = blocked).
-        # Without this, the full test suite has the real module cached and the import succeeds.
-        with patch.dict(sys.modules, {"cyberbrain.extractors.extract_beats": None}), \
-             patch("sys.argv", ["import.py", "--export", "/dev/null", "--format", "claude"]):
-            with pytest.raises(SystemExit):
-                kg_import._import_extract_beats()
+        """import.py exits with sys.exit(1) when the cyberbrain package is not importable."""
+        # Force the import to fail by blocking the cyberbrain package in sys.modules.
+        # We reload the script module with the package blocked to trigger the ImportError guard.
+        blocked = {
+            "cyberbrain": None,
+            "cyberbrain.extractors": None,
+            "cyberbrain.extractors.autofile": None,
+            "cyberbrain.extractors.config": None,
+            "cyberbrain.extractors.extractor": None,
+            "cyberbrain.extractors.run_log": None,
+            "cyberbrain.extractors.vault": None,
+        }
+        with patch.dict(sys.modules, blocked):
+            spec = importlib.util.spec_from_file_location(
+                "_kg_import_reload", SCRIPTS_DIR / "import.py"
+            )
+            fresh_mod = importlib.util.module_from_spec(spec)
+            with pytest.raises(SystemExit) as exc_info:
+                spec.loader.exec_module(fresh_mod)
+            assert exc_info.value.code == 1
 
     def test_main_summary_printed(self, tmp_path, capsys):
         """Import complete summary is printed after non-dry-run."""
@@ -1583,16 +1931,31 @@ class TestMain:
                 "name": "Summary test",
                 "updated_at": "2024-01-01T00:00:00Z",
                 "chat_messages": [
-                    {"sender": "human", "text": "Question with sufficient length to pass the minimum chars check threshold",
-                     "content": [{"type": "text", "text": "Question with sufficient length to pass the minimum chars check threshold"}]},
-                    {"sender": "assistant", "text": "Answer with sufficient length providing very detailed information about the topic",
-                     "content": [{"type": "text", "text": "Answer with sufficient length providing very detailed information about the topic"}]},
+                    {
+                        "sender": "human",
+                        "text": "Question with sufficient length to pass the minimum chars check threshold",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Question with sufficient length to pass the minimum chars check threshold",
+                            }
+                        ],
+                    },
+                    {
+                        "sender": "assistant",
+                        "text": "Answer with sufficient length providing very detailed information about the topic",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Answer with sufficient length providing very detailed information about the topic",
+                            }
+                        ],
+                    },
                 ],
             }
         ]
         export_file = self._make_claude_export(tmp_path, conversations)
-        mock_eb = self._make_mock_eb()
-        mock_eb.resolve_config.return_value = {
+        mock_config = {
             "vault_path": str(tmp_path),
             "inbox": "AI",
             "autofile": False,
@@ -1600,12 +1963,17 @@ class TestMain:
             "model": "claude-haiku-4-5",
             "daily_journal": False,
         }
-        mock_eb.extract_beats.return_value = []
 
         state_path = tmp_path / "state.json"
-        with patch.object(kg_import, "_import_extract_beats", return_value=mock_eb), \
-             patch.object(kg_import, "STATE_PATH", state_path), \
-             patch("sys.argv", ["import.py", "--export", str(export_file), "--format", "claude"]):
+        with (
+            patch.object(kg_import, "resolve_config", return_value=mock_config),
+            patch.object(kg_import, "extract_beats", return_value=[]),
+            patch.object(kg_import, "STATE_PATH", state_path),
+            patch(
+                "sys.argv",
+                ["import.py", "--export", str(export_file), "--format", "claude"],
+            ),
+        ):
             kg_import.main()
 
         out = capsys.readouterr().out

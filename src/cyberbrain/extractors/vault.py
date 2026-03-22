@@ -14,7 +14,6 @@ from pathlib import Path
 
 from cyberbrain.extractors.config import GLOBAL_CONFIG_PATH
 
-
 # ---------------------------------------------------------------------------
 # Beat type and scope vocabulary
 # ---------------------------------------------------------------------------
@@ -37,17 +36,21 @@ def parse_valid_types_from_claude_md(vault_claude_md_text: str) -> set:
     in_types_section = False
     for line in vault_claude_md_text.splitlines():
         stripped = line.strip()
-        if re.match(r'^#{1,3}\s+(entity\s+types?|beat\s+types?|note\s+types?|types?)\s*$', stripped, re.IGNORECASE):
+        if re.match(
+            r"^#{1,3}\s+(entity\s+types?|beat\s+types?|note\s+types?|types?)\s*$",
+            stripped,
+            re.IGNORECASE,
+        ):
             in_types_section = True
             continue
-        if in_types_section and re.match(r'^#{1,3}\s+\w', stripped):
+        if in_types_section and re.match(r"^#{1,3}\s+\w", stripped):
             in_types_section = False
         if in_types_section:
-            m = re.match(r'^#{2,4}\s+`?(\w[\w-]*)`?', stripped)
+            m = re.match(r"^#{2,4}\s+`?(\w[\w-]*)`?", stripped)
             if m:
                 types.add(m.group(1).lower())
                 continue
-            for match in re.finditer(r'`(\w[\w-]+)`', stripped):
+            for match in re.finditer(r"`(\w[\w-]+)`", stripped):
                 candidate = match.group(1).lower()
                 if 3 <= len(candidate) <= 20 and not candidate[0].isdigit():
                     types.add(candidate)
@@ -85,11 +88,11 @@ _FILENAME_INVALID = re.compile(r'[<>:"/\\|?*#\[\]^\x00-\x1f]')
 
 def make_filename(title: str) -> str:
     """Convert a title to a clean human-readable filename."""
-    clean = _FILENAME_INVALID.sub('', title)
-    clean = re.sub(r'\s+', ' ', clean).strip()
+    clean = _FILENAME_INVALID.sub("", title)
+    clean = re.sub(r"\s+", " ", clean).strip()
     if len(clean) > 80:
-        clean = clean[:80].rsplit(' ', 1)[0].strip()
-    return clean + '.md'
+        clean = clean[:80].rsplit(" ", 1)[0].strip()
+    return clean + ".md"
 
 
 def _is_within_vault(vault: Path, target: Path) -> bool:
@@ -158,7 +161,14 @@ def resolve_output_dir(beat: dict, config: dict) -> Path | None:
 # ---------------------------------------------------------------------------
 
 # Controlled predicate vocabulary grounded in SKOS / Dublin Core / PROV-O.
-VALID_PREDICATES = {"related", "references", "broader", "narrower", "supersedes", "wasderivedfrom"}
+VALID_PREDICATES = {
+    "related",
+    "references",
+    "broader",
+    "narrower",
+    "supersedes",
+    "wasderivedfrom",
+}
 
 
 def build_vault_titles_set(vault_path: str) -> set:
@@ -215,6 +225,7 @@ def resolve_relations(raw_relations: list, vault_titles: set) -> list:
 # Vault search
 # ---------------------------------------------------------------------------
 
+
 def search_vault(beat: dict, vault_path: str, max_results: int = 5) -> list:
     """
     Search vault for files related to a beat by tags and title keywords.
@@ -233,7 +244,8 @@ def search_vault(beat: dict, vault_path: str, max_results: int = 5) -> list:
     for term in terms:
         result = subprocess.run(
             ["grep", "-r", "-l", "--include=*.md", "-i", term, vault_path],
-            capture_output=True, text=True
+            capture_output=True,
+            text=True,
         )
         for path in result.stdout.strip().splitlines():
             if path:
@@ -256,8 +268,14 @@ def search_vault(beat: dict, vault_path: str, max_results: int = 5) -> list:
 # Beat writing
 # ---------------------------------------------------------------------------
 
-def inject_provenance(content: str, source: str, session_id: str | None, now: datetime,
-                      extra_fields: str | None = None) -> str:
+
+def inject_provenance(
+    content: str,
+    source: str,
+    session_id: str | None,
+    now: datetime,
+    extra_fields: str | None = None,
+) -> str:
     """
     Inject cb_ provenance fields into YAML frontmatter of a markdown content string.
 
@@ -289,17 +307,27 @@ def inject_provenance(content: str, source: str, session_id: str | None, now: da
 def _wm_frontmatter_fields(beat: dict, config: dict, now: datetime) -> str:
     """Return additional YAML frontmatter lines for working-memory beats."""
     from datetime import timedelta
+
     ttl_config = config.get("working_memory_ttl", {})
     beat_type = beat.get("type", "")
-    default_days = ttl_config.get("default", config.get("working_memory_review_days", 28))
+    default_days = ttl_config.get(
+        "default", config.get("working_memory_review_days", 28)
+    )
     review_days = ttl_config.get(beat_type, default_days)
     review_after = (now + timedelta(days=review_days)).strftime("%Y-%m-%d")
     return f"cb_ephemeral: true\ncb_review_after: {review_after}"
 
 
-def write_beat(beat: dict, config: dict, session_id: str, cwd: str, now: datetime,
-               vault_titles: set | None = None, source: str = "hook-extraction") -> Path:
-    """Write a single beat to a markdown file. Returns the file path."""
+def write_beat(
+    beat: dict,
+    config: dict,
+    session_id: str,
+    cwd: str,
+    now: datetime,
+    vault_titles: set | None = None,
+    source: str = "hook-extraction",
+) -> Path | None:
+    """Write a single beat to a markdown file. Returns the file path, or None if routing fails."""
     valid_types = get_valid_types(config)
     beat_type = beat.get("type", "reference")
     if beat_type not in valid_types:
@@ -383,16 +411,21 @@ cb_created: {date_str}{wm_fields}{uncertain_routing_field}
 
     # Update search index (FTS5/hybrid) post-write
     from cyberbrain.extractors.search_index import update_search_index
-    update_search_index(str(output_path), {
-        "id": beat_id,
-        "title": title,
-        "summary": summary,
-        "tags": tags,
-        "related": related_wikilinks,
-        "type": beat_type,
-        "scope": scope,
-        "project": project_name,
-        "date": date_str,
-    }, config)
+
+    update_search_index(
+        str(output_path),
+        {
+            "id": beat_id,
+            "title": title,
+            "summary": summary,
+            "tags": tags,
+            "related": related_wikilinks,
+            "type": beat_type,
+            "scope": scope,
+            "project": project_name,
+            "date": date_str,
+        },
+        config,
+    )
 
     return output_path

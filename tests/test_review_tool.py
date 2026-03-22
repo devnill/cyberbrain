@@ -14,7 +14,7 @@ Covers:
 
 import json
 import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -26,24 +26,37 @@ import pytest
 
 REPO_ROOT = Path(__file__).parent.parent
 
-# conftest.py installs shared extract_beats mock.
-# Pre-install a mock quality_gate module so the real one (which imports from
-# backends at module level) is never loaded during tests.
+# ---------------------------------------------------------------------------
+# sys.modules setup — why this file needs it
+#
+# Module guarded:  cyberbrain.extractors.quality_gate  (if not yet imported)
+# Module cleared:  cyberbrain.mcp.tools.review
+#
+# quality_gate imports from cyberbrain.extractors.backends at module level.
+# If it loads before the conftest mock is in place it would try to connect to
+# a real LLM backend.  We install a MagicMock guard the first time this module
+# runs; subsequent runs leave the existing (mock or real) entry untouched.
+#
+# review.py is evicted from the cache so it re-imports against the current
+# conftest mock state and its register() call binds to this file's FakeMCP.
+# ---------------------------------------------------------------------------
+from tests.conftest import _clear_module_cache
+
 if "cyberbrain.extractors.quality_gate" not in sys.modules:
     _mock_qg = MagicMock()
     sys.modules["cyberbrain.extractors.quality_gate"] = _mock_qg
 
-for _mod in ["cyberbrain.mcp.tools.review"]:
-    sys.modules.pop(_mod, None)
+_clear_module_cache(["cyberbrain.mcp.tools.review"])
+
+from fastmcp.exceptions import ToolError  # noqa: E402
 
 import cyberbrain.mcp.shared as _shared
 import cyberbrain.mcp.tools.review as review_mod
-from fastmcp.exceptions import ToolError  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # FakeMCP + tool registration
 # ---------------------------------------------------------------------------
+
 
 class FakeMCP:
     def __init__(self):
@@ -53,6 +66,7 @@ class FakeMCP:
         def decorator(fn):
             self._tools[fn.__name__] = {"fn": fn}
             return fn
+
         return decorator
 
 
@@ -67,6 +81,7 @@ def _cb_review():
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
+
 
 def _make_wm_note(tmp_path, name, review_after, summary="", ephemeral=True):
     """Write a working-memory markdown note to tmp_path."""
@@ -87,6 +102,7 @@ def _make_wm_note(tmp_path, name, review_after, summary="", ephemeral=True):
 # _read_vault_prefs
 # ===========================================================================
 
+
 class TestReadVaultPrefs:
     def test_returns_empty_when_no_claude_md(self, tmp_path):
         result = review_mod._read_vault_prefs(str(tmp_path))
@@ -104,7 +120,9 @@ class TestReadVaultPrefs:
         assert "Do this." in result
 
     def test_prefs_stops_at_next_h2(self, tmp_path):
-        content = "## Cyberbrain Preferences\n\nPref text.\n\n## Other Section\n\nOther.\n"
+        content = (
+            "## Cyberbrain Preferences\n\nPref text.\n\n## Other Section\n\nOther.\n"
+        )
         (tmp_path / "CLAUDE.md").write_text(content)
         result = review_mod._read_vault_prefs(str(tmp_path))
         assert "Pref text." in result
@@ -114,6 +132,7 @@ class TestReadVaultPrefs:
 # ===========================================================================
 # _is_within_vault
 # ===========================================================================
+
 
 class TestIsWithinVault:
     def test_path_inside_vault(self, tmp_path):
@@ -132,12 +151,14 @@ class TestIsWithinVault:
 # _find_due_notes
 # ===========================================================================
 
+
 class TestFindDueNotes:
     def test_finds_overdue_note(self, tmp_path):
         yesterday = (date.today() - timedelta(days=1)).isoformat()
         _make_wm_note(tmp_path, "Old Task", yesterday)
-        with patch.object(review_mod, "_parse_frontmatter",
-                          wraps=review_mod._parse_frontmatter):
+        with patch.object(
+            review_mod, "_parse_frontmatter", wraps=review_mod._parse_frontmatter
+        ):
             result = review_mod._find_due_notes(tmp_path, tmp_path, 0)
         assert len(result) == 1
         assert result[0]["title"] == "Old Task"
@@ -193,6 +214,7 @@ class TestFindDueNotes:
 # _cluster_notes
 # ===========================================================================
 
+
 class TestClusterNotes:
     def _note(self, title):
         return {"path": Path(f"/vault/{title}.md"), "title": title, "summary": ""}
@@ -244,6 +266,7 @@ class TestClusterNotes:
 # _format_notes_block
 # ===========================================================================
 
+
 class TestFormatNotesBlock:
     def _note(self, title, overdue=0):
         return {
@@ -288,6 +311,7 @@ class TestFormatNotesBlock:
 # _extend_review_after
 # ===========================================================================
 
+
 class TestExtendReviewAfter:
     def test_bumps_review_date(self, tmp_path):
         p = tmp_path / "note.md"
@@ -313,6 +337,7 @@ class TestExtendReviewAfter:
 # ===========================================================================
 # _append_errata
 # ===========================================================================
+
 
 class TestAppendErrata:
     def test_skips_when_empty(self, tmp_path):
@@ -346,6 +371,7 @@ class TestAppendErrata:
 # ===========================================================================
 # cb_review (the main tool)
 # ===========================================================================
+
 
 def _base_config(tmp_path):
     return {
@@ -435,13 +461,18 @@ class TestCbReviewActions:
         config, path = self._setup(tmp_path)
         decisions = [{"action": "delete", "indices": [0], "rationale": "stale"}]
 
-        with patch.object(review_mod, "_load_config", return_value=config), \
-             patch.object(review_mod, "_get_search_backend", return_value=None), \
-             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
-             patch.object(review_mod, "_index_paths"), \
-             patch.object(review_mod, "_prune_index"), \
-             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(decisions)), \
-             patch("cyberbrain.extractors.backends.BackendError", Exception):
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch.object(review_mod, "_index_paths"),
+            patch.object(review_mod, "_prune_index"),
+            patch(
+                "cyberbrain.extractors.backends.call_model",
+                return_value=json.dumps(decisions),
+            ),
+            patch("cyberbrain.extractors.backends.BackendError", Exception),
+        ):
             result = _cb_review()(dry_run=False)
         assert not path.exists()
         assert "Deleted" in result
@@ -450,13 +481,18 @@ class TestCbReviewActions:
         config, path = self._setup(tmp_path)
         decisions = [{"action": "extend", "indices": [0], "rationale": "still active"}]
 
-        with patch.object(review_mod, "_load_config", return_value=config), \
-             patch.object(review_mod, "_get_search_backend", return_value=None), \
-             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
-             patch.object(review_mod, "_index_paths"), \
-             patch.object(review_mod, "_prune_index"), \
-             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(decisions)), \
-             patch("cyberbrain.extractors.backends.BackendError", Exception):
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch.object(review_mod, "_index_paths"),
+            patch.object(review_mod, "_prune_index"),
+            patch(
+                "cyberbrain.extractors.backends.call_model",
+                return_value=json.dumps(decisions),
+            ),
+            patch("cyberbrain.extractors.backends.BackendError", Exception),
+        ):
             result = _cb_review()(dry_run=False, extend_weeks=2)
         assert "Extended" in result
         # Date should be bumped
@@ -465,59 +501,87 @@ class TestCbReviewActions:
 
     def test_promote_action_writes_new_file(self, tmp_path):
         config, path = self._setup(tmp_path)
-        promoted_content = "---\ntitle: Promoted\ntype: reference\nsummary: s\ntags: []\n---\n\nBody\n"
-        decisions = [{
-            "action": "promote",
-            "indices": [0],
-            "rationale": "valuable",
-            "promoted_title": "My Promoted Note",
-            "promoted_path": "Knowledge/Promoted.md",
-            "promoted_content": promoted_content,
-        }]
+        promoted_content = (
+            "---\ntitle: Promoted\ntype: reference\nsummary: s\ntags: []\n---\n\nBody\n"
+        )
+        decisions = [
+            {
+                "action": "promote",
+                "indices": [0],
+                "rationale": "valuable",
+                "promoted_title": "My Promoted Note",
+                "promoted_path": "Knowledge/Promoted.md",
+                "promoted_content": promoted_content,
+            }
+        ]
 
-        with patch.object(review_mod, "_load_config", return_value=config), \
-             patch.object(review_mod, "_get_search_backend", return_value=None), \
-             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
-             patch.object(review_mod, "_index_paths"), \
-             patch.object(review_mod, "_prune_index"), \
-             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(decisions)), \
-             patch("cyberbrain.extractors.backends.BackendError", Exception):
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch.object(review_mod, "_index_paths"),
+            patch.object(review_mod, "_prune_index"),
+            patch(
+                "cyberbrain.extractors.backends.call_model",
+                return_value=json.dumps(decisions),
+            ),
+            patch("cyberbrain.extractors.backends.BackendError", Exception),
+        ):
             result = _cb_review()(dry_run=False)
         assert (tmp_path / "Knowledge" / "Promoted.md").exists()
         assert "Promoted" in result
 
     def test_promote_skips_path_traversal(self, tmp_path):
         config, path = self._setup(tmp_path)
-        decisions = [{
-            "action": "promote",
-            "indices": [0],
-            "rationale": "valuable",
-            "promoted_title": "Escape",
-            "promoted_path": "../../etc/passwd",
-            "promoted_content": "---\ntitle: X\n---\nbody",
-        }]
+        decisions = [
+            {
+                "action": "promote",
+                "indices": [0],
+                "rationale": "valuable",
+                "promoted_title": "Escape",
+                "promoted_path": "../../etc/passwd",
+                "promoted_content": "---\ntitle: X\n---\nbody",
+            }
+        ]
 
-        with patch.object(review_mod, "_load_config", return_value=config), \
-             patch.object(review_mod, "_get_search_backend", return_value=None), \
-             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
-             patch.object(review_mod, "_index_paths"), \
-             patch.object(review_mod, "_prune_index"), \
-             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(decisions)), \
-             patch("cyberbrain.extractors.backends.BackendError", Exception):
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch.object(review_mod, "_index_paths"),
+            patch.object(review_mod, "_prune_index"),
+            patch(
+                "cyberbrain.extractors.backends.call_model",
+                return_value=json.dumps(decisions),
+            ),
+            patch("cyberbrain.extractors.backends.BackendError", Exception),
+        ):
             result = _cb_review()(dry_run=False)
         assert "path traversal rejected" in result
 
     def test_promote_skips_missing_content(self, tmp_path):
         config, path = self._setup(tmp_path)
-        decisions = [{"action": "promote", "indices": [0], "promoted_path": "", "promoted_content": ""}]
+        decisions = [
+            {
+                "action": "promote",
+                "indices": [0],
+                "promoted_path": "",
+                "promoted_content": "",
+            }
+        ]
 
-        with patch.object(review_mod, "_load_config", return_value=config), \
-             patch.object(review_mod, "_get_search_backend", return_value=None), \
-             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
-             patch.object(review_mod, "_index_paths"), \
-             patch.object(review_mod, "_prune_index"), \
-             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(decisions)), \
-             patch("cyberbrain.extractors.backends.BackendError", Exception):
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch.object(review_mod, "_index_paths"),
+            patch.object(review_mod, "_prune_index"),
+            patch(
+                "cyberbrain.extractors.backends.call_model",
+                return_value=json.dumps(decisions),
+            ),
+            patch("cyberbrain.extractors.backends.BackendError", Exception),
+        ):
             result = _cb_review()(dry_run=False)
         assert "missing path or content" in result
 
@@ -525,13 +589,18 @@ class TestCbReviewActions:
         config, path = self._setup(tmp_path)
         decisions = [{"action": "teleport", "indices": [0], "rationale": "??"}]
 
-        with patch.object(review_mod, "_load_config", return_value=config), \
-             patch.object(review_mod, "_get_search_backend", return_value=None), \
-             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
-             patch.object(review_mod, "_index_paths"), \
-             patch.object(review_mod, "_prune_index"), \
-             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(decisions)), \
-             patch("cyberbrain.extractors.backends.BackendError", Exception):
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch.object(review_mod, "_index_paths"),
+            patch.object(review_mod, "_prune_index"),
+            patch(
+                "cyberbrain.extractors.backends.call_model",
+                return_value=json.dumps(decisions),
+            ),
+            patch("cyberbrain.extractors.backends.BackendError", Exception),
+        ):
             result = _cb_review()(dry_run=False)
         assert "Unknown action" in result
 
@@ -539,13 +608,18 @@ class TestCbReviewActions:
         config, path = self._setup(tmp_path)
         decisions = [{"action": "delete", "indices": []}]
 
-        with patch.object(review_mod, "_load_config", return_value=config), \
-             patch.object(review_mod, "_get_search_backend", return_value=None), \
-             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
-             patch.object(review_mod, "_index_paths"), \
-             patch.object(review_mod, "_prune_index"), \
-             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(decisions)), \
-             patch("cyberbrain.extractors.backends.BackendError", Exception):
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch.object(review_mod, "_index_paths"),
+            patch.object(review_mod, "_prune_index"),
+            patch(
+                "cyberbrain.extractors.backends.call_model",
+                return_value=json.dumps(decisions),
+            ),
+            patch("cyberbrain.extractors.backends.BackendError", Exception),
+        ):
             result = _cb_review()(dry_run=False)
         # Unhandled note should be noted
         assert "No decision returned" in result
@@ -556,33 +630,45 @@ class TestCbReviewActions:
         class FakeBackendError(Exception):
             pass
 
-        with patch.object(review_mod, "_load_config", return_value=config), \
-             patch.object(review_mod, "_get_search_backend", return_value=None), \
-             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
-             patch("cyberbrain.extractors.backends.call_model", side_effect=FakeBackendError("oops")), \
-             patch("cyberbrain.extractors.backends.BackendError", FakeBackendError):
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch(
+                "cyberbrain.extractors.backends.call_model",
+                side_effect=FakeBackendError("oops"),
+            ),
+            patch("cyberbrain.extractors.backends.BackendError", FakeBackendError),
+        ):
             with pytest.raises(ToolError, match="Backend error"):
                 _cb_review()(dry_run=False)
 
     def test_invalid_json_raises_tool_error(self, tmp_path):
         config, _ = self._setup(tmp_path)
 
-        with patch.object(review_mod, "_load_config", return_value=config), \
-             patch.object(review_mod, "_get_search_backend", return_value=None), \
-             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
-             patch("cyberbrain.extractors.backends.call_model", return_value="not json"), \
-             patch("cyberbrain.extractors.backends.BackendError", Exception):
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch("cyberbrain.extractors.backends.call_model", return_value="not json"),
+            patch("cyberbrain.extractors.backends.BackendError", Exception),
+        ):
             with pytest.raises(ToolError, match="invalid JSON"):
                 _cb_review()(dry_run=False)
 
     def test_non_list_json_raises_tool_error(self, tmp_path):
         config, _ = self._setup(tmp_path)
 
-        with patch.object(review_mod, "_load_config", return_value=config), \
-             patch.object(review_mod, "_get_search_backend", return_value=None), \
-             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
-             patch("cyberbrain.extractors.backends.call_model", return_value='{"key": "val"}'), \
-             patch("cyberbrain.extractors.backends.BackendError", Exception):
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch(
+                "cyberbrain.extractors.backends.call_model",
+                return_value='{"key": "val"}',
+            ),
+            patch("cyberbrain.extractors.backends.BackendError", Exception),
+        ):
             with pytest.raises(ToolError, match="not a JSON array"):
                 _cb_review()(dry_run=False)
 
@@ -590,13 +676,18 @@ class TestCbReviewActions:
         config, path = self._setup(tmp_path)
         decisions = [{"action": "delete", "indices": [0], "rationale": "old"}]
 
-        with patch.object(review_mod, "_load_config", return_value=config), \
-             patch.object(review_mod, "_get_search_backend", return_value=None), \
-             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
-             patch.object(review_mod, "_index_paths"), \
-             patch.object(review_mod, "_prune_index"), \
-             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(decisions)), \
-             patch("cyberbrain.extractors.backends.BackendError", Exception):
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch.object(review_mod, "_index_paths"),
+            patch.object(review_mod, "_prune_index"),
+            patch(
+                "cyberbrain.extractors.backends.call_model",
+                return_value=json.dumps(decisions),
+            ),
+            patch("cyberbrain.extractors.backends.BackendError", Exception),
+        ):
             result = _cb_review()(dry_run=False)
         assert "Deleted:" in result
         assert "Working Memory Review Complete" in result
@@ -623,14 +714,22 @@ class TestCbReviewQualityGate:
         fail_verdict.rationale = "Note is only 1 day old and topic may still be active"
         fail_verdict.confidence = 0.3
 
-        with patch.object(review_mod, "_load_config", return_value=config), \
-             patch.object(review_mod, "_get_search_backend", return_value=None), \
-             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
-             patch.object(review_mod, "_index_paths"), \
-             patch.object(review_mod, "_prune_index"), \
-             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(decisions)), \
-             patch("cyberbrain.extractors.backends.BackendError", Exception), \
-             patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=fail_verdict):
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch.object(review_mod, "_index_paths"),
+            patch.object(review_mod, "_prune_index"),
+            patch(
+                "cyberbrain.extractors.backends.call_model",
+                return_value=json.dumps(decisions),
+            ),
+            patch("cyberbrain.extractors.backends.BackendError", Exception),
+            patch(
+                "cyberbrain.extractors.quality_gate.quality_gate",
+                return_value=fail_verdict,
+            ),
+        ):
             result = _cb_review()(dry_run=False)
 
         # File should still exist
@@ -648,14 +747,22 @@ class TestCbReviewQualityGate:
         pass_verdict.passed = True
         pass_verdict.confidence = 0.9
 
-        with patch.object(review_mod, "_load_config", return_value=config), \
-             patch.object(review_mod, "_get_search_backend", return_value=None), \
-             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
-             patch.object(review_mod, "_index_paths"), \
-             patch.object(review_mod, "_prune_index"), \
-             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(decisions)), \
-             patch("cyberbrain.extractors.backends.BackendError", Exception), \
-             patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=pass_verdict):
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch.object(review_mod, "_index_paths"),
+            patch.object(review_mod, "_prune_index"),
+            patch(
+                "cyberbrain.extractors.backends.call_model",
+                return_value=json.dumps(decisions),
+            ),
+            patch("cyberbrain.extractors.backends.BackendError", Exception),
+            patch(
+                "cyberbrain.extractors.quality_gate.quality_gate",
+                return_value=pass_verdict,
+            ),
+        ):
             result = _cb_review()(dry_run=False)
 
         assert not path.exists()
@@ -666,28 +773,38 @@ class TestCbReviewQualityGate:
         """A promote decision that fails the gate is not executed."""
         config, path = self._setup(tmp_path)
         promoted_content = "---\ntitle: Promoted\ntype: reference\n---\n\nBody\n"
-        decisions = [{
-            "action": "promote",
-            "indices": [0],
-            "rationale": "valuable",
-            "promoted_title": "My Note",
-            "promoted_path": "Knowledge/Promoted.md",
-            "promoted_content": promoted_content,
-        }]
+        decisions = [
+            {
+                "action": "promote",
+                "indices": [0],
+                "rationale": "valuable",
+                "promoted_title": "My Note",
+                "promoted_path": "Knowledge/Promoted.md",
+                "promoted_content": promoted_content,
+            }
+        ]
 
         fail_verdict = MagicMock()
         fail_verdict.passed = False
         fail_verdict.rationale = "Content is still working-memory level"
         fail_verdict.confidence = 0.4
 
-        with patch.object(review_mod, "_load_config", return_value=config), \
-             patch.object(review_mod, "_get_search_backend", return_value=None), \
-             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
-             patch.object(review_mod, "_index_paths"), \
-             patch.object(review_mod, "_prune_index"), \
-             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(decisions)), \
-             patch("cyberbrain.extractors.backends.BackendError", Exception), \
-             patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=fail_verdict):
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch.object(review_mod, "_index_paths"),
+            patch.object(review_mod, "_prune_index"),
+            patch(
+                "cyberbrain.extractors.backends.call_model",
+                return_value=json.dumps(decisions),
+            ),
+            patch("cyberbrain.extractors.backends.BackendError", Exception),
+            patch(
+                "cyberbrain.extractors.quality_gate.quality_gate",
+                return_value=fail_verdict,
+            ),
+        ):
             result = _cb_review()(dry_run=False)
 
         # Promoted file should NOT exist
@@ -701,14 +818,22 @@ class TestCbReviewQualityGate:
         config["quality_gate_enabled"] = False
         decisions = [{"action": "delete", "indices": [0], "rationale": "stale"}]
 
-        with patch.object(review_mod, "_load_config", return_value=config), \
-             patch.object(review_mod, "_get_search_backend", return_value=None), \
-             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
-             patch.object(review_mod, "_index_paths"), \
-             patch.object(review_mod, "_prune_index"), \
-             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(decisions)), \
-             patch("cyberbrain.extractors.backends.BackendError", Exception), \
-             patch("cyberbrain.extractors.quality_gate.quality_gate", side_effect=AssertionError("should not be called")) as mock_gate:
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch.object(review_mod, "_index_paths"),
+            patch.object(review_mod, "_prune_index"),
+            patch(
+                "cyberbrain.extractors.backends.call_model",
+                return_value=json.dumps(decisions),
+            ),
+            patch("cyberbrain.extractors.backends.BackendError", Exception),
+            patch(
+                "cyberbrain.extractors.quality_gate.quality_gate",
+                side_effect=AssertionError("should not be called"),
+            ) as mock_gate,
+        ):
             result = _cb_review()(dry_run=False)
 
         assert not path.exists()
@@ -738,20 +863,29 @@ class TestCbReviewQualityGate:
         fail_verdict.confidence = 0.2
 
         call_count = [0]
+
         def gate_side_effect(op, inp, out, cfg):
             call_count[0] += 1
             if "Active Bug" in inp:
                 return fail_verdict
             return pass_verdict
 
-        with patch.object(review_mod, "_load_config", return_value=config), \
-             patch.object(review_mod, "_get_search_backend", return_value=None), \
-             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
-             patch.object(review_mod, "_index_paths"), \
-             patch.object(review_mod, "_prune_index"), \
-             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(decisions)), \
-             patch("cyberbrain.extractors.backends.BackendError", Exception), \
-             patch("cyberbrain.extractors.quality_gate.quality_gate", side_effect=gate_side_effect):
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch.object(review_mod, "_index_paths"),
+            patch.object(review_mod, "_prune_index"),
+            patch(
+                "cyberbrain.extractors.backends.call_model",
+                return_value=json.dumps(decisions),
+            ),
+            patch("cyberbrain.extractors.backends.BackendError", Exception),
+            patch(
+                "cyberbrain.extractors.quality_gate.quality_gate",
+                side_effect=gate_side_effect,
+            ),
+        ):
             result = _cb_review()(dry_run=False)
 
         assert "Deleted:   1" in result
@@ -768,14 +902,22 @@ class TestCbReviewQualityGate:
         fail_verdict.rationale = "Topic seems resolved"
         fail_verdict.confidence = 0.45
 
-        with patch.object(review_mod, "_load_config", return_value=config), \
-             patch.object(review_mod, "_get_search_backend", return_value=None), \
-             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
-             patch.object(review_mod, "_index_paths"), \
-             patch.object(review_mod, "_prune_index"), \
-             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(decisions)), \
-             patch("cyberbrain.extractors.backends.BackendError", Exception), \
-             patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=fail_verdict):
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch.object(review_mod, "_index_paths"),
+            patch.object(review_mod, "_prune_index"),
+            patch(
+                "cyberbrain.extractors.backends.call_model",
+                return_value=json.dumps(decisions),
+            ),
+            patch("cyberbrain.extractors.backends.BackendError", Exception),
+            patch(
+                "cyberbrain.extractors.quality_gate.quality_gate",
+                return_value=fail_verdict,
+            ),
+        ):
             result = _cb_review()(dry_run=False)
 
         assert "confidence: 0.45" in result
@@ -791,14 +933,22 @@ class TestCbReviewQualityGate:
         fail_verdict.rationale = "Note is still relevant"
         fail_verdict.confidence = 0.3
 
-        with patch.object(review_mod, "_load_config", return_value=config), \
-             patch.object(review_mod, "_get_search_backend", return_value=None), \
-             patch.object(review_mod, "_load_prompt", return_value="prompt"), \
-             patch.object(review_mod, "_index_paths"), \
-             patch.object(review_mod, "_prune_index"), \
-             patch("cyberbrain.extractors.backends.call_model", return_value=json.dumps(decisions)), \
-             patch("cyberbrain.extractors.backends.BackendError", Exception), \
-             patch("cyberbrain.extractors.quality_gate.quality_gate", return_value=fail_verdict):
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch.object(review_mod, "_index_paths"),
+            patch.object(review_mod, "_prune_index"),
+            patch(
+                "cyberbrain.extractors.backends.call_model",
+                return_value=json.dumps(decisions),
+            ),
+            patch("cyberbrain.extractors.backends.BackendError", Exception),
+            patch(
+                "cyberbrain.extractors.quality_gate.quality_gate",
+                return_value=fail_verdict,
+            ),
+        ):
             result = _cb_review()(dry_run=False)
 
         assert "cb_configure(quality_gate_enabled=False)" in result
@@ -812,8 +962,12 @@ class TestCbReviewLoadPromptError:
         yesterday = (date.today() - timedelta(days=1)).isoformat()
         _make_wm_note(wm, "Task", yesterday)
 
-        with patch.object(review_mod, "_load_config", return_value=config), \
-             patch.object(review_mod, "_get_search_backend", return_value=None), \
-             patch.object(review_mod, "_load_prompt", side_effect=ToolError("no prompt")):
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(
+                review_mod, "_load_prompt", side_effect=ToolError("no prompt")
+            ),
+        ):
             with pytest.raises(ToolError):
                 _cb_review()(dry_run=False)

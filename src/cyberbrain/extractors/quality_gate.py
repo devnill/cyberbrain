@@ -11,7 +11,7 @@ import sys
 from dataclasses import dataclass
 from enum import Enum
 
-from cyberbrain.extractors.backends import call_model, BackendError, get_judge_model
+from cyberbrain.extractors.backends import BackendError, call_model, get_judge_model
 from cyberbrain.extractors.config import load_prompt
 
 
@@ -54,10 +54,7 @@ def quality_gate(
     system_prompt = load_prompt("quality-gate-system.md")
     system_prompt = system_prompt.replace("{operation}", operation)
 
-    user_message = (
-        f"## Input Context\n\n{input_context}\n\n"
-        f"## Tool Output\n\n{output}"
-    )
+    user_message = f"## Input Context\n\n{input_context}\n\n## Tool Output\n\n{output}"
 
     judge_config = {**config, "model": get_judge_model(config)}
 
@@ -88,7 +85,10 @@ def _parse_verdict(raw: str, config: dict) -> GateVerdict:
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
-        print(f"[quality_gate] Failed to parse judge response as JSON: {text[:200]}", file=sys.stderr)
+        print(
+            f"[quality_gate] Failed to parse judge response as JSON: {text[:200]}",
+            file=sys.stderr,
+        )
         return GateVerdict(
             verdict=Verdict.UNCERTAIN,
             passed=False,

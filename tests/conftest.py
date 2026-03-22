@@ -3,69 +3,14 @@ conftest.py — shared fixtures and helpers for the cyberbrain test suite.
 """
 
 import json
-import os
 import sys
-import tempfile
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
 REPO_ROOT = Path(__file__).parent.parent
-
-# ---------------------------------------------------------------------------
-# Shared extract_beats mock — installed ONCE before any test module imports it.
-#
-# All test files that need to mock extract_beats (test_mcp_server.py,
-# test_extract_file_tools.py, test_recall_read_tools.py) must use the SAME
-# BackendError class, otherwise `except BackendError` in the tool code won't
-# catch the test's side_effect exception.
-#
-# Installing here in conftest.py (which runs before any test module) ensures
-# there is exactly one BackendError class across the whole test session.
-# ---------------------------------------------------------------------------
-
-
-class _SharedBackendError(Exception):
-    """Shared BackendError used by all MCP tool tests.
-
-    This must be a common base for any BackendError class used by individual
-    test files. test_mcp_server.py creates its own `_BackendError(Exception)`
-    and uses it as a side_effect. For `except BackendError` in the tool code
-    to catch it, `BackendError` must be a superclass. Using `Exception` as a
-    shared base ensures any `_BackendError(Exception)` is caught.
-    """
-    pass
-
-
-if "cyberbrain.extractors.extract_beats" not in sys.modules:
-    _shared_mock_eb = MagicMock()
-    # Use Exception as BackendError so any exception subclassing Exception is caught
-    # by the `except BackendError` clause in tool code. This is safe for tests.
-    _shared_mock_eb.BackendError = Exception
-    _shared_mock_eb.RUNS_LOG_PATH = "/tmp/fake-runs.log"
-    _shared_mock_eb.resolve_config = MagicMock(return_value={
-        "vault_path": "/tmp/test_vault",
-        "inbox": "AI/Claude-Sessions",
-        "backend": "claude-code",
-        "model": "claude-haiku-4-5",
-        "autofile": False,
-        "daily_journal": False,
-    })
-    _shared_mock_eb.parse_jsonl_transcript = MagicMock(return_value="User: hello\nAssistant: hi")
-    _shared_mock_eb.extract_beats = MagicMock(return_value=[])
-    _shared_mock_eb.write_beat = MagicMock()
-    _shared_mock_eb.autofile_beat = MagicMock()
-    _shared_mock_eb.write_journal_entry = MagicMock()
-    _shared_mock_eb._call_claude_code = MagicMock(return_value="synthesis result")
-    # Add __spec__ to avoid breaking runpy.run_module in tests that use it
-    import importlib.util
-    _shared_mock_eb.__spec__ = importlib.util.spec_from_loader("cyberbrain.extractors.extract_beats", loader=None)
-    _shared_mock_eb.__spec__.origin = str(REPO_ROOT / "src" / "cyberbrain" / "extractors" / "extract_beats.py")
-    _shared_mock_eb.__file__ = str(REPO_ROOT / "src" / "cyberbrain" / "extractors" / "extract_beats.py")
-    sys.modules["cyberbrain.extractors.extract_beats"] = _shared_mock_eb
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -73,6 +18,7 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def temp_vault(tmp_path):
@@ -139,12 +85,33 @@ def sample_transcript_path():
 @pytest.fixture
 def fixed_now():
     """A fixed datetime for deterministic test output."""
-    return datetime(2026, 3, 1, 14, 32, 0, tzinfo=timezone.utc)
+    return datetime(2026, 3, 1, 14, 32, 0, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------
 # Helper utilities available to tests
 # ---------------------------------------------------------------------------
+
+
+def _clear_module_cache(modules: list) -> None:
+    """Remove the given module names from sys.modules so subsequent imports get a fresh copy.
+
+    Several test files must control which version of a module (real or mock) is active
+    at the time their imports are executed.  Python caches every successful import in
+    sys.modules, so the *first* test file that imports cyberbrain.mcp.shared (or any
+    other shared module) owns the cached object for the rest of the process.
+
+    Calling this helper before an import forces Python to re-execute the module, which
+    lets the test file inject its own mocks *before* the module binds its dependencies.
+
+    Args:
+        modules: List of fully-qualified module names to evict (e.g.
+                 ["cyberbrain.mcp.shared", "cyberbrain.mcp.tools.reindex"]).
+                 Names that are not currently in sys.modules are silently skipped.
+    """
+    for name in modules:
+        sys.modules.pop(name, None)
+
 
 def make_beat(
     title="Test Beat",
@@ -168,6 +135,7 @@ def make_beat(
 # ---------------------------------------------------------------------------
 # New shared fixtures for search and KGE tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def vault_with_notes(temp_vault):
@@ -221,6 +189,7 @@ def mock_search_result():
 # --affected-only: run only tests touched by recently changed source files
 # ---------------------------------------------------------------------------
 
+
 def pytest_addoption(parser):
     parser.addoption(
         "--affected-only",
@@ -233,12 +202,12 @@ def pytest_addoption(parser):
 def pytest_configure(config):
     if config.getoption("--affected-only", default=False):
         import subprocess
+
         from _dependency_map import TestMapper
 
         # Get changed files from git
         result = subprocess.run(
-            ["git", "diff", "--name-only", "HEAD~1"],
-            capture_output=True, text=True
+            ["git", "diff", "--name-only", "HEAD~1"], capture_output=True, text=True
         )
         changed = {Path(f) for f in result.stdout.splitlines() if f.endswith(".py")}
 

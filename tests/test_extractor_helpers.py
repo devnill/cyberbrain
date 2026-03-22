@@ -16,10 +16,9 @@ Covers:
 import json
 import sys
 import textwrap
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch, mock_open
-import subprocess
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -49,20 +48,28 @@ class TestLoadGlobalConfig:
 
     def test_exits_for_placeholder_vault_path(self, tmp_path):
         cfg = tmp_path / "config.json"
-        cfg.write_text(json.dumps({
-            "vault_path": "/path/to/your/ObsidianVault",
-            "inbox": "AI/Inbox",
-        }))
+        cfg.write_text(
+            json.dumps(
+                {
+                    "vault_path": "/path/to/your/ObsidianVault",
+                    "inbox": "AI/Inbox",
+                }
+            )
+        )
         with patch.object(config_mod, "GLOBAL_CONFIG_PATH", cfg):
             with pytest.raises(SystemExit):
                 config_mod.load_global_config()
 
     def test_exits_when_vault_path_does_not_exist(self, tmp_path):
         cfg = tmp_path / "config.json"
-        cfg.write_text(json.dumps({
-            "vault_path": str(tmp_path / "nonexistent_vault"),
-            "inbox": "AI/Inbox",
-        }))
+        cfg.write_text(
+            json.dumps(
+                {
+                    "vault_path": str(tmp_path / "nonexistent_vault"),
+                    "inbox": "AI/Inbox",
+                }
+            )
+        )
         with patch.object(config_mod, "GLOBAL_CONFIG_PATH", cfg):
             with pytest.raises(SystemExit):
                 config_mod.load_global_config()
@@ -70,20 +77,28 @@ class TestLoadGlobalConfig:
     def test_exits_when_vault_is_home_directory(self, tmp_path):
         cfg = tmp_path / "config.json"
         home = Path.home()
-        cfg.write_text(json.dumps({
-            "vault_path": str(home),
-            "inbox": "AI/Inbox",
-        }))
+        cfg.write_text(
+            json.dumps(
+                {
+                    "vault_path": str(home),
+                    "inbox": "AI/Inbox",
+                }
+            )
+        )
         with patch.object(config_mod, "GLOBAL_CONFIG_PATH", cfg):
             with pytest.raises(SystemExit):
                 config_mod.load_global_config()
 
     def test_exits_when_vault_is_filesystem_root(self, tmp_path):
         cfg = tmp_path / "config.json"
-        cfg.write_text(json.dumps({
-            "vault_path": "/",
-            "inbox": "AI/Inbox",
-        }))
+        cfg.write_text(
+            json.dumps(
+                {
+                    "vault_path": "/",
+                    "inbox": "AI/Inbox",
+                }
+            )
+        )
         with patch.object(config_mod, "GLOBAL_CONFIG_PATH", cfg):
             with pytest.raises(SystemExit):
                 config_mod.load_global_config()
@@ -92,11 +107,15 @@ class TestLoadGlobalConfig:
         vault = tmp_path / "vault"
         vault.mkdir()
         cfg = tmp_path / "config.json"
-        cfg.write_text(json.dumps({
-            "vault_path": str(vault),
-            "inbox": "AI/Inbox",
-            "backend": "claude-code",
-        }))
+        cfg.write_text(
+            json.dumps(
+                {
+                    "vault_path": str(vault),
+                    "inbox": "AI/Inbox",
+                    "backend": "claude-code",
+                }
+            )
+        )
         with patch.object(config_mod, "GLOBAL_CONFIG_PATH", cfg):
             result = config_mod.load_global_config()
         assert result["vault_path"] == str(vault.resolve())
@@ -119,7 +138,9 @@ class TestFindProjectConfig:
         dot_claude = tmp_path / ".claude"
         dot_claude.mkdir()
         local_cfg = dot_claude / "cyberbrain.local.json"
-        local_cfg.write_text(json.dumps({"project_name": "myproj", "vault_folder": "Projects/myproj"}))
+        local_cfg.write_text(
+            json.dumps({"project_name": "myproj", "vault_folder": "Projects/myproj"})
+        )
 
         result = config_mod.find_project_config(str(tmp_path))
         assert result["project_name"] == "myproj"
@@ -146,11 +167,17 @@ class TestResolveConfig:
     def test_merges_global_and_project_configs(self, tmp_path):
         vault = tmp_path / "vault"
         vault.mkdir()
-        global_data = {"vault_path": str(vault), "inbox": "AI/Inbox", "backend": "claude-code"}
+        global_data = {
+            "vault_path": str(vault),
+            "inbox": "AI/Inbox",
+            "backend": "claude-code",
+        }
         project_data = {"project_name": "myproj", "vault_folder": "Projects/myproj"}
 
-        with patch.object(config_mod, "load_global_config", return_value=global_data), \
-             patch.object(config_mod, "find_project_config", return_value=project_data):
+        with (
+            patch.object(config_mod, "load_global_config", return_value=global_data),
+            patch.object(config_mod, "find_project_config", return_value=project_data),
+        ):
             result = config_mod.resolve_config("/some/cwd")
 
         assert result["vault_path"] == str(vault)
@@ -161,8 +188,10 @@ class TestResolveConfig:
         global_data = {"vault_path": "/global/vault", "inbox": "AI/Global"}
         project_data = {"inbox": "Projects/Override"}
 
-        with patch.object(config_mod, "load_global_config", return_value=global_data), \
-             patch.object(config_mod, "find_project_config", return_value=project_data):
+        with (
+            patch.object(config_mod, "load_global_config", return_value=global_data),
+            patch.object(config_mod, "find_project_config", return_value=project_data),
+        ):
             result = config_mod.resolve_config("/cwd")
 
         assert result["inbox"] == "Projects/Override"
@@ -510,7 +539,9 @@ class TestBuildVaultTitlesSet:
         assert result == {"NoteA", "NoteB", "NoteC"}
 
     def test_returns_empty_on_oserror(self, tmp_path):
-        with patch("cyberbrain.extractors.vault.Path.rglob", side_effect=OSError("no access")):
+        with patch(
+            "cyberbrain.extractors.vault.Path.rglob", side_effect=OSError("no access")
+        ):
             result = vault_mod.build_vault_titles_set(str(tmp_path))
         assert result == set()
 
@@ -547,7 +578,9 @@ class TestResolveRelations:
         assert result == []
 
     def test_skips_empty_target(self):
-        result = vault_mod.resolve_relations([{"type": "related", "target": ""}], {"NoteA"})
+        result = vault_mod.resolve_relations(
+            [{"type": "related", "target": ""}], {"NoteA"}
+        )
         assert result == []
 
     def test_multiple_valid_relations(self):
@@ -606,7 +639,9 @@ class TestInjectProvenance:
     def test_extra_fields_included(self):
         content = "---\ntitle: X\n---\n"
         now = datetime(2026, 3, 7)
-        result = vault_mod.inject_provenance(content, "src", None, now, extra_fields="cb_foo: bar")
+        result = vault_mod.inject_provenance(
+            content, "src", None, now, extra_fields="cb_foo: bar"
+        )
         assert "cb_foo: bar" in result
 
     def test_unclosed_frontmatter_returned_unchanged(self):
@@ -628,7 +663,10 @@ class TestWmFrontmatterFields:
 
     def test_uses_type_specific_ttl(self):
         beat = {"type": "problem"}
-        config = {"working_memory_ttl": {"problem": 7}, "working_memory_review_days": 28}
+        config = {
+            "working_memory_ttl": {"problem": 7},
+            "working_memory_review_days": 28,
+        }
         now = datetime(2026, 3, 1)
         result = vault_mod._wm_frontmatter_fields(beat, config, now)
         assert "2026-03-08" in result  # 7 days from March 1
@@ -662,8 +700,9 @@ class TestWriteBeat:
             "relations": [],
         }
         now = datetime(2026, 3, 7, 12, 0, 0)
-        path = vault_mod.write_beat(beat, self._config(tmp_path), "sess-1", "/cwd", now,
-                                    vault_titles=set())
+        path = vault_mod.write_beat(
+            beat, self._config(tmp_path), "sess-1", "/cwd", now, vault_titles=set()
+        )
         assert path is not None
         assert path.exists()
         content = path.read_text()
@@ -672,9 +711,16 @@ class TestWriteBeat:
 
     def test_returns_none_when_no_inbox(self, tmp_path):
         config = {"vault_path": str(tmp_path)}
-        beat = {"title": "X", "type": "reference", "scope": "general", "durability": "durable"}
+        beat = {
+            "title": "X",
+            "type": "reference",
+            "scope": "general",
+            "durability": "durable",
+        }
         now = datetime(2026, 3, 7)
-        result = vault_mod.write_beat(beat, config, "sess", "/cwd", now, vault_titles=set())
+        result = vault_mod.write_beat(
+            beat, config, "sess", "/cwd", now, vault_titles=set()
+        )
         assert result is None
 
     def test_deduplicates_filename_collision(self, tmp_path):
@@ -711,8 +757,9 @@ class TestWriteBeat:
             "relations": [],
         }
         now = datetime(2026, 3, 7)
-        path = vault_mod.write_beat(beat, self._config(tmp_path), "s", "/cwd", now,
-                                    vault_titles=set())
+        path = vault_mod.write_beat(
+            beat, self._config(tmp_path), "s", "/cwd", now, vault_titles=set()
+        )
         content = path.read_text()
         assert "type: reference" in content
 
@@ -745,8 +792,9 @@ class TestWriteBeat:
             "relations": [],
         }
         now = datetime(2026, 3, 7)
-        path = vault_mod.write_beat(beat, self._config(tmp_path), "s", "/cwd", now,
-                                    vault_titles=set())
+        path = vault_mod.write_beat(
+            beat, self._config(tmp_path), "s", "/cwd", now, vault_titles=set()
+        )
         content = path.read_text()
         assert '"python"' in content
         assert '"testing"' in content
@@ -756,10 +804,22 @@ class TestWriteBeat:
 # extractor.py
 # ===========================================================================
 
-# extractor.py imports backends.call_model and config.load_prompt at top level,
-# so we mock those modules before importing extractor.
+# ---------------------------------------------------------------------------
+# sys.modules setup — why this section needs it
+#
+# Modules conditionally guarded: backends, config  (bare module names)
+#
+# extractor.py uses bare-name imports (`import backends`, `import config`) to
+# support the legacy scripts/ layout.  It calls backends.call_model and
+# config.load_prompt at module level.  Installing stubs under the bare names
+# prevents real LLM calls during the extractor.py import.  The if-not-in check
+# avoids clobbering a real module that may already be loaded; this file only
+# registers its own stubs if nothing else got there first.
+# ---------------------------------------------------------------------------
 _mock_backends = MagicMock()
-_mock_backends.call_model = MagicMock(return_value='[{"title": "T", "type": "reference"}]')
+_mock_backends.call_model = MagicMock(
+    return_value='[{"title": "T", "type": "reference"}]'
+)
 _mock_backends.MAX_TRANSCRIPT_CHARS = 100_000
 
 if "backends" not in sys.modules:
@@ -781,44 +841,59 @@ class TestExtractBeats:
 
     def test_returns_list_of_beats(self, tmp_path):
         config = self._base_config(tmp_path)
-        with patch.object(extractor_mod, "call_model",
-                          return_value='[{"title": "Beat", "type": "reference"}]'), \
-             patch.object(extractor_mod, "load_prompt", return_value="prompt"), \
-             patch.object(extractor_mod, "read_vault_claude_md", return_value=None):
-            result = extractor_mod.extract_beats("transcript text", config, "manual", "/cwd")
+        with (
+            patch.object(
+                extractor_mod,
+                "call_model",
+                return_value='[{"title": "Beat", "type": "reference"}]',
+            ),
+            patch.object(extractor_mod, "load_prompt", return_value="prompt"),
+            patch.object(extractor_mod, "read_vault_claude_md", return_value=None),
+        ):
+            result = extractor_mod.extract_beats(
+                "transcript text", config, "manual", "/cwd"
+            )
         assert isinstance(result, list)
         assert len(result) == 1
 
     def test_returns_empty_on_empty_model_response(self, tmp_path):
         config = self._base_config(tmp_path)
-        with patch.object(extractor_mod, "call_model", return_value=""), \
-             patch.object(extractor_mod, "load_prompt", return_value="prompt"), \
-             patch.object(extractor_mod, "read_vault_claude_md", return_value=None):
+        with (
+            patch.object(extractor_mod, "call_model", return_value=""),
+            patch.object(extractor_mod, "load_prompt", return_value="prompt"),
+            patch.object(extractor_mod, "read_vault_claude_md", return_value=None),
+        ):
             result = extractor_mod.extract_beats("text", config, "manual", "/cwd")
         assert result == []
 
     def test_returns_empty_on_invalid_json(self, tmp_path):
         config = self._base_config(tmp_path)
-        with patch.object(extractor_mod, "call_model", return_value="not json"), \
-             patch.object(extractor_mod, "load_prompt", return_value="prompt"), \
-             patch.object(extractor_mod, "read_vault_claude_md", return_value=None):
+        with (
+            patch.object(extractor_mod, "call_model", return_value="not json"),
+            patch.object(extractor_mod, "load_prompt", return_value="prompt"),
+            patch.object(extractor_mod, "read_vault_claude_md", return_value=None),
+        ):
             result = extractor_mod.extract_beats("text", config, "manual", "/cwd")
         assert result == []
 
     def test_returns_empty_when_model_returns_non_list(self, tmp_path):
         config = self._base_config(tmp_path)
-        with patch.object(extractor_mod, "call_model", return_value='{"key": "val"}'), \
-             patch.object(extractor_mod, "load_prompt", return_value="prompt"), \
-             patch.object(extractor_mod, "read_vault_claude_md", return_value=None):
+        with (
+            patch.object(extractor_mod, "call_model", return_value='{"key": "val"}'),
+            patch.object(extractor_mod, "load_prompt", return_value="prompt"),
+            patch.object(extractor_mod, "read_vault_claude_md", return_value=None),
+        ):
             result = extractor_mod.extract_beats("text", config, "manual", "/cwd")
         assert result == []
 
     def test_strips_markdown_code_fences(self, tmp_path):
         config = self._base_config(tmp_path)
-        fenced = "```json\n[{\"title\": \"T\", \"type\": \"reference\"}]\n```"
-        with patch.object(extractor_mod, "call_model", return_value=fenced), \
-             patch.object(extractor_mod, "load_prompt", return_value="prompt"), \
-             patch.object(extractor_mod, "read_vault_claude_md", return_value=None):
+        fenced = '```json\n[{"title": "T", "type": "reference"}]\n```'
+        with (
+            patch.object(extractor_mod, "call_model", return_value=fenced),
+            patch.object(extractor_mod, "load_prompt", return_value="prompt"),
+            patch.object(extractor_mod, "read_vault_claude_md", return_value=None),
+        ):
             result = extractor_mod.extract_beats("text", config, "manual", "/cwd")
         assert len(result) == 1
 
@@ -831,9 +906,11 @@ class TestExtractBeats:
             return "[]"
 
         long_transcript = "x" * (extractor_mod.MAX_TRANSCRIPT_CHARS + 1000)
-        with patch.object(extractor_mod, "call_model", side_effect=capture_call), \
-             patch.object(extractor_mod, "load_prompt", return_value="{transcript}"), \
-             patch.object(extractor_mod, "read_vault_claude_md", return_value=None):
+        with (
+            patch.object(extractor_mod, "call_model", side_effect=capture_call),
+            patch.object(extractor_mod, "load_prompt", return_value="{transcript}"),
+            patch.object(extractor_mod, "read_vault_claude_md", return_value=None),
+        ):
             extractor_mod.extract_beats(long_transcript, config, "manual", "/cwd")
 
         assert "[earlier content truncated]" in calls[0]
@@ -846,9 +923,15 @@ class TestExtractBeats:
             calls.append(user)
             return "[]"
 
-        with patch.object(extractor_mod, "call_model", side_effect=capture_call), \
-             patch.object(extractor_mod, "load_prompt", return_value="{vault_claude_md_section}"), \
-             patch.object(extractor_mod, "read_vault_claude_md", return_value="## Types\n"):
+        with (
+            patch.object(extractor_mod, "call_model", side_effect=capture_call),
+            patch.object(
+                extractor_mod, "load_prompt", return_value="{vault_claude_md_section}"
+            ),
+            patch.object(
+                extractor_mod, "read_vault_claude_md", return_value="## Types\n"
+            ),
+        ):
             extractor_mod.extract_beats("text", config, "manual", "/cwd")
 
         assert "vault_claude_md" in calls[0]
@@ -861,9 +944,13 @@ class TestExtractBeats:
             calls.append(user)
             return "[]"
 
-        with patch.object(extractor_mod, "call_model", side_effect=capture_call), \
-             patch.object(extractor_mod, "load_prompt", return_value="{vault_claude_md_section}"), \
-             patch.object(extractor_mod, "read_vault_claude_md", return_value=None):
+        with (
+            patch.object(extractor_mod, "call_model", side_effect=capture_call),
+            patch.object(
+                extractor_mod, "load_prompt", return_value="{vault_claude_md_section}"
+            ),
+            patch.object(extractor_mod, "read_vault_claude_md", return_value=None),
+        ):
             extractor_mod.extract_beats("text", config, "manual", "/cwd")
 
         assert "default four-type vocabulary" in calls[0]
@@ -885,7 +972,10 @@ class TestParseJsonlTranscript:
     def test_extracts_user_and_assistant_turns(self, tmp_path):
         entries = [
             {"type": "user", "message": {"role": "user", "content": "Hello"}},
-            {"type": "assistant", "message": {"role": "assistant", "content": "Hi there"}},
+            {
+                "type": "assistant",
+                "message": {"role": "assistant", "content": "Hi there"},
+            },
         ]
         path = self._write_jsonl(tmp_path, entries)
         result = transcript_mod.parse_jsonl_transcript(path)
@@ -906,13 +996,17 @@ class TestParseJsonlTranscript:
 
     def test_skips_bad_json_lines(self, tmp_path):
         p = tmp_path / "transcript.jsonl"
-        p.write_text('{"type": "user", "message": {"role": "user", "content": "ok"}}\nnot json\n')
+        p.write_text(
+            '{"type": "user", "message": {"role": "user", "content": "ok"}}\nnot json\n'
+        )
         result = transcript_mod.parse_jsonl_transcript(str(p))
         assert "ok" in result
 
     def test_skips_empty_lines(self, tmp_path):
         p = tmp_path / "transcript.jsonl"
-        p.write_text('\n\n{"type": "user", "message": {"role": "user", "content": "hi"}}\n\n')
+        p.write_text(
+            '\n\n{"type": "user", "message": {"role": "user", "content": "hi"}}\n\n'
+        )
         result = transcript_mod.parse_jsonl_transcript(str(p))
         assert "hi" in result
 
@@ -950,13 +1044,19 @@ class TestExtractTextBlocks:
         assert "second" in result
 
     def test_skips_tool_use_blocks(self):
-        blocks = [{"type": "tool_use", "input": {"cmd": "rm -rf"}}, {"type": "text", "text": "ok"}]
+        blocks = [
+            {"type": "tool_use", "input": {"cmd": "rm -rf"}},
+            {"type": "text", "text": "ok"},
+        ]
         result = transcript_mod._extract_text_blocks(blocks)
         assert "rm" not in result
         assert "ok" in result
 
     def test_skips_thinking_blocks(self):
-        blocks = [{"type": "thinking", "thinking": "internal"}, {"type": "text", "text": "visible"}]
+        blocks = [
+            {"type": "thinking", "thinking": "internal"},
+            {"type": "text", "text": "visible"},
+        ]
         result = transcript_mod._extract_text_blocks(blocks)
         assert "internal" not in result
         assert "visible" in result

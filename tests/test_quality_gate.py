@@ -1,22 +1,23 @@
 """Tests for src/cyberbrain/extractors/quality_gate.py — LLM-as-judge quality gate."""
 
 import json
-import sys
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-
-import pytest
-
-from cyberbrain.extractors.quality_gate import GateVerdict, Verdict, _parse_verdict
-from cyberbrain.extractors.backends import BackendError
+from unittest.mock import patch
 
 # Import the module itself for patching references
 import cyberbrain.extractors.quality_gate as _qg_module
+from cyberbrain.extractors.backends import BackendError
+from cyberbrain.extractors.quality_gate import GateVerdict, Verdict, _parse_verdict
 
 
 class TestGateVerdict:
     def test_basic_construction(self):
-        v = GateVerdict(verdict=Verdict.PASS, passed=True, confidence=0.95, rationale="Looks good", issues=[])
+        v = GateVerdict(
+            verdict=Verdict.PASS,
+            passed=True,
+            confidence=0.95,
+            rationale="Looks good",
+            issues=[],
+        )
         assert v.verdict == Verdict.PASS
         assert v.passed is True
         assert v.confidence == 0.95
@@ -27,9 +28,13 @@ class TestGateVerdict:
 
     def test_with_retry(self):
         v = GateVerdict(
-            verdict=Verdict.FAIL, passed=False, confidence=0.3,
-            rationale="Bad merge", issues=["unrelated topics"],
-            suggest_retry=True, suggested_model="claude-sonnet-4-5-20250514"
+            verdict=Verdict.FAIL,
+            passed=False,
+            confidence=0.3,
+            rationale="Bad merge",
+            issues=["unrelated topics"],
+            suggest_retry=True,
+            suggested_model="claude-sonnet-4-5-20250514",
         )
         assert v.verdict == Verdict.FAIL
         assert v.passed is False
@@ -38,8 +43,12 @@ class TestGateVerdict:
 
     def test_uncertain_verdict(self):
         v = GateVerdict(
-            verdict=Verdict.UNCERTAIN, passed=False, confidence=0.55,
-            rationale="Ambiguous", issues=[], suggest_retry=True
+            verdict=Verdict.UNCERTAIN,
+            passed=False,
+            confidence=0.55,
+            rationale="Ambiguous",
+            issues=[],
+            suggest_retry=True,
         )
         assert v.verdict == Verdict.UNCERTAIN
         assert v.passed is False
@@ -54,11 +63,14 @@ class TestVerdict:
 
 class TestParseVerdict:
     def test_high_confidence_pass(self):
-        raw = json.dumps({
-            "passed": True, "confidence": 0.92,
-            "rationale": "Merge is thematically coherent",
-            "issues": []
-        })
+        raw = json.dumps(
+            {
+                "passed": True,
+                "confidence": 0.92,
+                "rationale": "Merge is thematically coherent",
+                "issues": [],
+            }
+        )
         v = _parse_verdict(raw, {"model": "claude-haiku-4-5"})
         assert v.verdict == Verdict.PASS
         assert v.passed is True
@@ -66,11 +78,15 @@ class TestParseVerdict:
         assert v.suggest_retry is False
 
     def test_fail_verdict_suggests_model_upgrade(self):
-        raw = json.dumps({
-            "passed": False, "confidence": 0.3,
-            "rationale": "Notes are unrelated",
-            "suggest_retry": True, "issues": ["no thematic link"]
-        })
+        raw = json.dumps(
+            {
+                "passed": False,
+                "confidence": 0.3,
+                "rationale": "Notes are unrelated",
+                "suggest_retry": True,
+                "issues": ["no thematic link"],
+            }
+        )
         v = _parse_verdict(raw, {"model": "claude-haiku-4-5"})
         assert v.verdict == Verdict.FAIL
         assert v.passed is False
@@ -79,19 +95,27 @@ class TestParseVerdict:
         assert v.issues == ["no thematic link"]
 
     def test_fail_no_upgrade_for_strong_model(self):
-        raw = json.dumps({
-            "passed": False, "confidence": 0.4,
-            "rationale": "Poor quality", "issues": []
-        })
+        raw = json.dumps(
+            {
+                "passed": False,
+                "confidence": 0.4,
+                "rationale": "Poor quality",
+                "issues": [],
+            }
+        )
         v = _parse_verdict(raw, {"model": "claude-sonnet-4-5-20250514"})
         assert v.verdict == Verdict.FAIL
         assert v.suggested_model == ""
 
     def test_low_confidence_pass_is_uncertain(self):
-        raw = json.dumps({
-            "passed": True, "confidence": 0.55,
-            "rationale": "Ambiguous grouping", "issues": []
-        })
+        raw = json.dumps(
+            {
+                "passed": True,
+                "confidence": 0.55,
+                "rationale": "Ambiguous grouping",
+                "issues": [],
+            }
+        )
         v = _parse_verdict(raw, {"model": "claude-haiku-4-5"})
         assert v.verdict == Verdict.UNCERTAIN
         assert v.passed is False  # uncertain is not passed
@@ -99,27 +123,34 @@ class TestParseVerdict:
 
     def test_borderline_confidence_pass(self):
         """Confidence exactly at 0.7 threshold should pass."""
-        raw = json.dumps({
-            "passed": True, "confidence": 0.7,
-            "rationale": "Acceptable", "issues": []
-        })
+        raw = json.dumps(
+            {"passed": True, "confidence": 0.7, "rationale": "Acceptable", "issues": []}
+        )
         v = _parse_verdict(raw, {})
         assert v.verdict == Verdict.PASS
         assert v.passed is True
 
     def test_confidence_clamped(self):
-        raw = json.dumps({"passed": True, "confidence": 1.5, "rationale": "ok", "issues": []})
+        raw = json.dumps(
+            {"passed": True, "confidence": 1.5, "rationale": "ok", "issues": []}
+        )
         v = _parse_verdict(raw, {})
         assert v.confidence == 1.0
 
-        raw = json.dumps({"passed": True, "confidence": -0.5, "rationale": "ok", "issues": []})
+        raw = json.dumps(
+            {"passed": True, "confidence": -0.5, "rationale": "ok", "issues": []}
+        )
         v = _parse_verdict(raw, {})
         assert v.confidence == 0.0
 
     def test_markdown_code_fences_stripped(self):
-        raw = "```json\n" + json.dumps({
-            "passed": True, "confidence": 0.85, "rationale": "Good", "issues": []
-        }) + "\n```"
+        raw = (
+            "```json\n"
+            + json.dumps(
+                {"passed": True, "confidence": 0.85, "rationale": "Good", "issues": []}
+            )
+            + "\n```"
+        )
         v = _parse_verdict(raw, {})
         assert v.verdict == Verdict.PASS
         assert v.confidence == 0.85
@@ -140,10 +171,14 @@ class TestParseVerdict:
         assert v.issues == []
 
     def test_issues_preserved(self):
-        raw = json.dumps({
-            "passed": False, "confidence": 0.3,
-            "rationale": "Bad", "issues": ["issue 1", "issue 2"]
-        })
+        raw = json.dumps(
+            {
+                "passed": False,
+                "confidence": 0.3,
+                "rationale": "Bad",
+                "issues": ["issue 1", "issue 2"],
+            }
+        )
         v = _parse_verdict(raw, {})
         assert v.issues == ["issue 1", "issue 2"]
 
@@ -153,13 +188,19 @@ class TestQualityGate:
     @patch.object(_qg_module, "load_prompt")
     def test_pass_verdict(self, mock_prompt, mock_model):
         mock_prompt.return_value = "Judge prompt for {operation}"
-        mock_model.return_value = json.dumps({
-            "passed": True, "confidence": 0.9,
-            "rationale": "Well-formed merge", "issues": []
-        })
+        mock_model.return_value = json.dumps(
+            {
+                "passed": True,
+                "confidence": 0.9,
+                "rationale": "Well-formed merge",
+                "issues": [],
+            }
+        )
 
         config = {"model": "claude-haiku-4-5"}
-        v = _qg_module.quality_gate("restructure_merge", "input context", "merged output", config)
+        v = _qg_module.quality_gate(
+            "restructure_merge", "input context", "merged output", config
+        )
 
         assert v.verdict == Verdict.PASS
         assert v.passed is True
@@ -172,11 +213,14 @@ class TestQualityGate:
     @patch.object(_qg_module, "load_prompt")
     def test_fail_verdict(self, mock_prompt, mock_model):
         mock_prompt.return_value = "Judge prompt for {operation}"
-        mock_model.return_value = json.dumps({
-            "passed": False, "confidence": 0.2,
-            "rationale": "Unrelated notes merged",
-            "issues": ["topics diverge"]
-        })
+        mock_model.return_value = json.dumps(
+            {
+                "passed": False,
+                "confidence": 0.2,
+                "rationale": "Unrelated notes merged",
+                "issues": ["topics diverge"],
+            }
+        )
 
         config = {"model": "claude-haiku-4-5"}
         v = _qg_module.quality_gate("restructure_merge", "input", "output", config)
@@ -190,10 +234,14 @@ class TestQualityGate:
     @patch.object(_qg_module, "load_prompt")
     def test_uncertain_verdict(self, mock_prompt, mock_model):
         mock_prompt.return_value = "Judge prompt for {operation}"
-        mock_model.return_value = json.dumps({
-            "passed": True, "confidence": 0.6,
-            "rationale": "Borderline grouping", "issues": ["weak connection"]
-        })
+        mock_model.return_value = json.dumps(
+            {
+                "passed": True,
+                "confidence": 0.6,
+                "rationale": "Borderline grouping",
+                "issues": ["weak connection"],
+            }
+        )
 
         config = {"model": "claude-haiku-4-5"}
         v = _qg_module.quality_gate("restructure_merge", "input", "output", config)
@@ -206,11 +254,14 @@ class TestQualityGate:
     @patch.object(_qg_module, "load_prompt")
     def test_uses_judge_model(self, mock_prompt, mock_model):
         mock_prompt.return_value = "Judge prompt for {operation}"
-        mock_model.return_value = json.dumps({
-            "passed": True, "confidence": 0.95, "rationale": "ok", "issues": []
-        })
+        mock_model.return_value = json.dumps(
+            {"passed": True, "confidence": 0.95, "rationale": "ok", "issues": []}
+        )
 
-        config = {"model": "claude-haiku-4-5", "judge_model": "claude-sonnet-4-5-20250514"}
+        config = {
+            "model": "claude-haiku-4-5",
+            "judge_model": "claude-sonnet-4-5-20250514",
+        }
         _qg_module.quality_gate("enrich", "input", "output", config)
 
         call_args = mock_model.call_args

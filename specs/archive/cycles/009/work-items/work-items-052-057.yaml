@@ -1,0 +1,120 @@
+items:
+  '052':
+    title: Fix duplicate frontmatter fields in cb_enrich
+    complexity: small
+    scope:
+    - path: src/cyberbrain/mcp/tools/enrich.py
+      op: modify
+    - path: tests/test_setup_enrich_tools.py
+      op: modify
+    depends: []
+    blocks: []
+    criteria:
+    - "`_apply_frontmatter_update()` replaces existing `type`, `summary`, `tags`,\
+      \ and `cb_modified` fields atomically \u2014 calling it with `overwrite=True`\
+      \ on a note that already has those fields produces exactly one instance of each"
+    - Fields not managed by enrich (`id`, `date`, `session_id`, `cwd`, `project`,
+      `scope`, `related`, `cb_source`, `cb_created`, etc.) are preserved unchanged
+    - "Regression test: enrich a note with `overwrite=True`, then enrich it again\
+      \ \u2014 frontmatter contains no duplicate keys"
+    - "Regression test: enrich a note that already has a broken frontmatter with accumulated\
+      \ duplicates \u2014 the function correctly replaces the duplicated fields"
+    - All existing `test_setup_enrich_tools.py` tests continue to pass
+    - '`python scripts/test.py` passes with 0 failures'
+    notes: plan/notes/052.md
+  '053':
+    title: Standalone vault frontmatter repair script
+    complexity: small
+    scope:
+    - path: scripts/repair_frontmatter.py
+      op: create
+    depends: []
+    blocks: []
+    criteria:
+    - Script at `scripts/repair_frontmatter.py` reads vault path from `~/.claude/cyberbrain/config.json`
+      (or `--vault` flag override)
+    - Walks all `.md` files in the vault and detects notes with duplicate YAML frontmatter
+      keys (any key appearing more than once between opening and closing `---`)
+    - For duplicate keys, keeps the last occurrence (consistent with YAML spec / pyyaml
+      behavior)
+    - "Dry-run mode (default): prints a summary of affected files and which fields\
+      \ would be deduplicated \u2014 no writes"
+    - '`--apply` flag: writes deduplicated frontmatter to disk'
+    - 'Prints final report: notes scanned, notes with duplicates found, notes repaired'
+    - 'Script is runnable standalone: `python scripts/repair_frontmatter.py [--apply]
+      [--vault PATH]`'
+    - "No MCP server required \u2014 reads config.json directly"
+    - Non-frontmatter content (body after closing `---`) is preserved exactly
+    notes: plan/notes/053.md
+  '054':
+    title: Add automated tests for repair_frontmatter.py
+    complexity: small
+    scope:
+    - path: tests/test_repair_frontmatter.py
+      op: create
+    depends:
+    - '053'
+    blocks: []
+    criteria:
+    - Test file at `tests/test_repair_frontmatter.py` exists and is collected by pytest
+    - '`parse_frontmatter()` tested: no frontmatter (plain markdown), valid frontmatter
+      with body, frontmatter with no closing `---` (malformed), frontmatter whose
+      body contains `--- heading` lines (closing-delimiter edge case)'
+    - '`find_duplicate_keys()` tested: no duplicates, single duplicate key, multiple
+      distinct duplicate keys, block-sequence continuation lines (not misidentified
+      as keys)'
+    - '`deduplicate_frontmatter()` tested: last-occurrence wins, all keys deduplicated,
+      continuation lines for block-sequence values preserved under last occurrence,
+      body content preserved exactly'
+    - '`repair_file()` or equivalent: idempotent (calling twice produces the same
+      result), body after closing `---` preserved exactly, notes with no duplicates
+      returned as-is (no write)'
+    - "No LLM calls, no MCP server, no vault required \u2014 all tests use in-memory\
+      \ strings or tmp_path fixtures"
+    - '`python scripts/test.py` passes with 0 failures'
+    notes: plan/notes/054.md
+  '055':
+    title: Register scripts/ tree in _dependency_map.py
+    complexity: small
+    scope:
+    - path: tests/_dependency_map.py
+      op: modify
+    depends:
+    - '054'
+    blocks: []
+    criteria:
+    - '`get_tests_for(Path("scripts/repair_frontmatter.py"))` returns `{"tests/test_repair_frontmatter.py"}`
+      or equivalent non-empty set'
+    - '`get_tests_for(Path("src/cyberbrain/mcp/tools/enrich.py"))` still returns the
+      correct test set (existing behaviour unchanged)'
+    - '`python3 -m pytest tests/test_repair_frontmatter.py` passes with 0 failures'
+    notes: plan/notes/055.md
+  '056':
+    title: Anchor _dependency_map.py paths to repo root
+    complexity: small
+    scope:
+    - path: tests/_dependency_map.py
+      op: modify
+    depends:
+    - '055'
+    blocks: []
+    criteria:
+    - '`get_tests_for(Path("scripts/repair_frontmatter.py"))` returns `{"tests/test_repair_frontmatter.py"}`
+      from any working directory'
+    - '`get_tests_for(absolute_path_to_enrich_py)` returns the correct test set'
+    - All 1297 tests pass
+    notes: plan/notes/056.md
+  '057':
+    title: Add cwd-independence test for _dependency_map.py
+    complexity: small
+    scope:
+    - path: tests/test_dependency_map.py
+      op: create
+    depends:
+    - '056'
+    blocks: []
+    criteria:
+    - '`python3 -m pytest tests/test_dependency_map.py` passes (6 tests)'
+    - '`test_mapper_is_cwd_independent` changes cwd to a temp dir and verifies scripts/
+      and src/ mappings still work'
+    notes: plan/notes/057.md

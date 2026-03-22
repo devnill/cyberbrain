@@ -25,16 +25,27 @@ import pytest
 
 REPO_ROOT = Path(__file__).parent.parent
 
-# Clear stale cache entries so we get a fresh import bound to our FakeMCP.
-for _mod in ["cyberbrain.mcp.shared", "cyberbrain.mcp.tools.manage"]:
-    sys.modules.pop(_mod, None)
+# ---------------------------------------------------------------------------
+# sys.modules cleanup — why this file needs it
+#
+# Modules cleared: cyberbrain.mcp.shared, cyberbrain.mcp.tools.manage
+#
+# test_mcp_server.py registers cb_configure against its own FakeMCP instance.
+# If shared.py or manage.py are already cached in sys.modules when this file
+# runs, our FakeMCP would never receive the tool registrations and all tests
+# would fail with KeyError.  Evicting both modules forces a fresh import that
+# runs register() against this file's FakeMCP.
+# ---------------------------------------------------------------------------
+from tests.conftest import _clear_module_cache
 
-import cyberbrain.mcp.shared as _shared
+_clear_module_cache(["cyberbrain.mcp.shared", "cyberbrain.mcp.tools.manage"])
+
 import cyberbrain.mcp.tools.manage as manage_mod
 
 try:
     from fastmcp.exceptions import ToolError
 except ImportError:
+
     class ToolError(Exception):  # type: ignore[no-redef]
         pass
 
@@ -57,6 +68,7 @@ class FakeMCP:
         def decorator(fn):
             self._tools[fn.__name__] = {"fn": fn, "annotations": annotations}
             return fn
+
         return decorator
 
 
@@ -76,6 +88,7 @@ def _cb_status():
 # Helper: write a CLAUDE.md to a vault dir
 # ---------------------------------------------------------------------------
 
+
 def _write_claude_md(vault: Path, content: str) -> None:
     (vault / "CLAUDE.md").write_text(content, encoding="utf-8")
 
@@ -83,6 +96,7 @@ def _write_claude_md(vault: Path, content: str) -> None:
 # ===========================================================================
 # _read_prefs_section
 # ===========================================================================
+
 
 class TestReadPrefsSection:
     def test_no_claude_md_returns_none(self, tmp_path):
@@ -130,6 +144,7 @@ class TestReadPrefsSection:
 # _write_prefs_section
 # ===========================================================================
 
+
 class TestWritePrefsSection:
     def test_no_claude_md_creates_file(self, tmp_path):
         manage_mod._write_prefs_section(str(tmp_path), "- My preference\n")
@@ -148,11 +163,7 @@ class TestWritePrefsSection:
         assert "New pref" in text
 
     def test_existing_prefs_section_replaced(self, tmp_path):
-        content = (
-            "# My Vault\n\n"
-            "## Cyberbrain Preferences\n\n"
-            "- Old preference\n"
-        )
+        content = "# My Vault\n\n## Cyberbrain Preferences\n\n- Old preference\n"
         _write_claude_md(tmp_path, content)
         manage_mod._write_prefs_section(str(tmp_path), "- New preference\n")
         text = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
@@ -229,8 +240,7 @@ class TestCbConfigurePrefs:
 
     def test_show_prefs_returns_prefs_text(self, tmp_path):
         _write_claude_md(
-            tmp_path,
-            "# My Vault\n\n## Cyberbrain Preferences\n\n- Extract insights\n"
+            tmp_path, "# My Vault\n\n## Cyberbrain Preferences\n\n- Extract insights\n"
         )
         cfg = {**BASE_CONFIG, "vault_path": str(tmp_path)}
         with patch.object(manage_mod, "_load_config", return_value=cfg):
@@ -272,6 +282,7 @@ class TestCbConfigurePrefs:
 # cb_configure — working_memory_ttl
 # ===========================================================================
 
+
 class TestCbConfigureWorkingMemoryTTL:
     def test_valid_ttl_dict_writes_config(self, tmp_path, monkeypatch):
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
@@ -308,6 +319,7 @@ class TestCbConfigureWorkingMemoryTTL:
 # cb_configure — tool_models
 # ===========================================================================
 
+
 class TestCbConfigureToolModels:
     def test_valid_tool_models_writes_config(self, tmp_path, monkeypatch):
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
@@ -317,7 +329,12 @@ class TestCbConfigureToolModels:
         cfg_file.write_text(json.dumps({"vault_path": str(tmp_path)}), encoding="utf-8")
 
         with patch.object(manage_mod, "_load_config", return_value={}):
-            result = _cb_configure()(tool_models={"restructure": "claude-sonnet-4-5-20250514", "judge": "claude-opus-4-5"})
+            result = _cb_configure()(
+                tool_models={
+                    "restructure": "claude-sonnet-4-5-20250514",
+                    "judge": "claude-opus-4-5",
+                }
+            )
         assert "restructure_model" in result
         assert "judge_model" in result
         saved = json.loads(cfg_file.read_text())
@@ -341,6 +358,7 @@ class TestCbConfigureToolModels:
 # cb_configure — quality_gate_enabled
 # ===========================================================================
 
+
 class TestCbConfigureQualityGate:
     def test_set_quality_gate_enabled_false(self, tmp_path, monkeypatch):
         home = tmp_path / "home"
@@ -356,6 +374,7 @@ class TestCbConfigureQualityGate:
         assert "False" in result
 
         import json
+
         saved = json.loads(cfg_file.read_text())
         assert saved["quality_gate_enabled"] is False
 
@@ -373,6 +392,7 @@ class TestCbConfigureQualityGate:
         assert "True" in result
 
         import json
+
         saved = json.loads(cfg_file.read_text())
         assert saved["quality_gate_enabled"] is True
 
@@ -393,6 +413,7 @@ class TestCbConfigureQualityGate:
 # cb_configure — proactive_recall
 # ===========================================================================
 
+
 class TestCbConfigureProactiveRecall:
     def test_set_proactive_recall_false(self, tmp_path, monkeypatch):
         home = tmp_path / "home"
@@ -408,6 +429,7 @@ class TestCbConfigureProactiveRecall:
         assert "False" in result
 
         import json
+
         saved = json.loads(cfg_file.read_text())
         assert saved["proactive_recall"] is False
 
@@ -425,6 +447,7 @@ class TestCbConfigureProactiveRecall:
         assert "True" in result
 
         import json
+
         saved = json.loads(cfg_file.read_text())
         assert saved["proactive_recall"] is True
 
@@ -453,6 +476,7 @@ class TestCbConfigureProactiveRecall:
 # ===========================================================================
 # cb_configure — uncertain_filing_behavior and uncertain_filing_threshold
 # ===========================================================================
+
 
 class TestCbConfigureUncertainFiling:
     def _setup_cfg(self, tmp_path, monkeypatch):
@@ -538,6 +562,7 @@ class TestCbConfigureUncertainFiling:
 # cb_configure — vault_path write path (background index rebuild)
 # ===========================================================================
 
+
 class TestCbConfigureVaultPath:
     def test_vault_path_write_updates_config(self, tmp_path, monkeypatch):
         home = tmp_path / "home"
@@ -552,7 +577,9 @@ class TestCbConfigureVaultPath:
 
         with patch.object(manage_mod, "_load_config", return_value={}):
             # Patch search_backends to avoid import error in background thread
-            with patch.dict(sys.modules, {"cyberbrain.extractors.search_backends": MagicMock()}):
+            with patch.dict(
+                sys.modules, {"cyberbrain.extractors.search_backends": MagicMock()}
+            ):
                 result = _cb_configure()(vault_path=str(vault))
 
         assert vault.exists()
@@ -586,11 +613,14 @@ class TestCbConfigureVaultPath:
 
         vault = home / "vault2"
         with patch.object(manage_mod, "_load_config", return_value={}):
-            with patch.dict(sys.modules, {"cyberbrain.extractors.search_backends": mock_sb}):
+            with patch.dict(
+                sys.modules, {"cyberbrain.extractors.search_backends": mock_sb}
+            ):
                 _cb_configure()(vault_path=str(vault))
 
         # Give the background thread a moment to run
         import time
+
         time.sleep(0.1)
         # No assertion on thread count — just verify no exception was raised
 
@@ -598,6 +628,7 @@ class TestCbConfigureVaultPath:
 # ===========================================================================
 # cb_configure — no-args (status display with runs log)
 # ===========================================================================
+
 
 class TestCbConfigureNoArgs:
     def test_no_args_shows_config(self, tmp_path):
@@ -611,8 +642,14 @@ class TestCbConfigureNoArgs:
             "model": "llama3",
         }
         with patch.object(manage_mod, "_load_config", return_value=cfg):
-            with patch.object(manage_mod, "_read_index_stats", return_value={"total": 5, "by_type": {}}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-runs.log")):
+            with patch.object(
+                manage_mod,
+                "_read_index_stats",
+                return_value={"total": 5, "by_type": {}},
+            ):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-runs.log")
+                ):
                     result = _cb_configure()()
         assert "Cyberbrain Configuration" in result
         assert "ollama" in result
@@ -628,8 +665,14 @@ class TestCbConfigureNoArgs:
             "judge_model": "claude-opus-4-5",
         }
         with patch.object(manage_mod, "_load_config", return_value=cfg):
-            with patch.object(manage_mod, "_read_index_stats", return_value={"total": 0, "by_type": {}}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-runs.log")):
+            with patch.object(
+                manage_mod,
+                "_read_index_stats",
+                return_value={"total": 0, "by_type": {}},
+            ):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-runs.log")
+                ):
                     result = _cb_configure()()
         assert "Tool models:" in result
         assert "restructure: claude-sonnet-4-5-20250514" in result
@@ -640,22 +683,32 @@ class TestCbConfigureNoArgs:
         vault.mkdir()
         cfg = {**BASE_CONFIG, "vault_path": str(vault)}
         with patch.object(manage_mod, "_load_config", return_value=cfg):
-            with patch.object(manage_mod, "_read_index_stats", return_value={"total": 0, "by_type": {}}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-runs.log")):
+            with patch.object(
+                manage_mod,
+                "_read_index_stats",
+                return_value={"total": 0, "by_type": {}},
+            ):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-runs.log")
+                ):
                     result = _cb_configure()()
         assert "Tool models:" not in result
 
     def test_no_args_vault_not_set(self, tmp_path):
         cfg = {**BASE_CONFIG, "vault_path": ""}
         with patch.object(manage_mod, "_load_config", return_value=cfg):
-            with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-runs.log")):
+            with patch.object(
+                manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-runs.log")
+            ):
                 result = _cb_configure()()
         assert "not configured" in result.lower()
 
     def test_no_args_vault_does_not_exist(self, tmp_path):
         cfg = {**BASE_CONFIG, "vault_path": str(tmp_path / "missing")}
         with patch.object(manage_mod, "_load_config", return_value=cfg):
-            with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-runs.log")):
+            with patch.object(
+                manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-runs.log")
+            ):
                 result = _cb_configure()()
         assert "does not exist" in result
 
@@ -673,7 +726,11 @@ class TestCbConfigureNoArgs:
         log_file.write_text(json.dumps(run_entry) + "\n", encoding="utf-8")
 
         with patch.object(manage_mod, "_load_config", return_value=cfg):
-            with patch.object(manage_mod, "_read_index_stats", return_value={"total": 10, "by_type": {}}):
+            with patch.object(
+                manage_mod,
+                "_read_index_stats",
+                return_value={"total": 10, "by_type": {}},
+            ):
                 with patch.object(manage_mod, "RUNS_LOG_PATH", str(log_file)):
                     result = _cb_configure()()
         assert "2026-03-07" in result
@@ -689,7 +746,11 @@ class TestCbConfigureNoArgs:
         log_file.write_text("", encoding="utf-8")
 
         with patch.object(manage_mod, "_load_config", return_value=cfg):
-            with patch.object(manage_mod, "_read_index_stats", return_value={"total": 0, "by_type": {}}):
+            with patch.object(
+                manage_mod,
+                "_read_index_stats",
+                return_value={"total": 0, "by_type": {}},
+            ):
                 with patch.object(manage_mod, "RUNS_LOG_PATH", str(log_file)):
                     result = _cb_configure()()
         # Should still return without error
@@ -714,12 +775,15 @@ class TestCbConfigureNoArgs:
 # cb_status
 # ===========================================================================
 
+
 class TestCbStatus:
     def test_basic_call_no_runs_log(self, tmp_path):
         cfg = {**BASE_CONFIG, "vault_path": ""}
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                ):
                     result = _cb_status()()
         assert "Cyberbrain Status" in result
         assert "No runs recorded" in result
@@ -737,7 +801,12 @@ class TestCbStatus:
             "beats_extracted": 3,
             "duration_seconds": 5,
             "beats": [
-                {"title": "Beat A", "type": "insight", "scope": "project", "path": "/vault/beat-a.md"},
+                {
+                    "title": "Beat A",
+                    "type": "insight",
+                    "scope": "project",
+                    "path": "/vault/beat-a.md",
+                },
             ],
             "errors": [],
         }
@@ -761,7 +830,9 @@ class TestCbStatus:
         }
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value=stats):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                ):
                     result = _cb_status()()
         assert "42" in result
         assert "insight: 20" in result
@@ -777,7 +848,9 @@ class TestCbStatus:
         }
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                ):
                     result = _cb_status()()
         assert "Per-tool models" in result
         assert "restructure: claude-sonnet-4-5-20250514" in result
@@ -787,7 +860,9 @@ class TestCbStatus:
         cfg = {**BASE_CONFIG, "vault_path": ""}
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                ):
                     result = _cb_status()()
         assert "Per-tool models" not in result
 
@@ -795,7 +870,9 @@ class TestCbStatus:
         cfg = {**BASE_CONFIG, "vault_path": "", "quality_gate_enabled": False}
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                ):
                     result = _cb_status()()
         assert "Quality gate: DISABLED" in result
 
@@ -803,7 +880,9 @@ class TestCbStatus:
         cfg = {**BASE_CONFIG, "vault_path": ""}
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                ):
                     result = _cb_status()()
         assert "Quality gate" not in result
 
@@ -811,7 +890,9 @@ class TestCbStatus:
         cfg = {**BASE_CONFIG, "vault_path": "", "proactive_recall": False}
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                ):
                     result = _cb_status()()
         assert "Proactive recall: DISABLED" in result
 
@@ -819,7 +900,9 @@ class TestCbStatus:
         cfg = {**BASE_CONFIG, "vault_path": ""}
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                ):
                     result = _cb_status()()
         assert "Proactive recall" not in result
 
@@ -833,7 +916,9 @@ class TestCbStatus:
         }
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value=stats):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                ):
                     result = _cb_status()()
         assert "2 path(s) not found" in result
 
@@ -845,7 +930,9 @@ class TestCbStatus:
 
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                ):
                     result = _cb_status()()
         assert "Preferences: set" in result
 
@@ -857,7 +944,9 @@ class TestCbStatus:
 
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                ):
                     result = _cb_status()()
         assert "Preferences: not set" in result
 
@@ -875,12 +964,18 @@ class TestCbStatus:
         manifest = {"model_name": "all-minilm", "id_map": ["a", "b", "c"]}
         manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
-        with patch.object(manage_mod, "_load_config", return_value={
-            **cfg,
-            "search_manifest_path": str(manifest_path),
-        }):
+        with patch.object(
+            manage_mod,
+            "_load_config",
+            return_value={
+                **cfg,
+                "search_manifest_path": str(manifest_path),
+            },
+        ):
             with patch.object(manage_mod, "_read_index_stats", return_value=stats):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                ):
                     result = _cb_status()()
         assert "all-minilm" in result
         assert "3" in result
@@ -891,15 +986,19 @@ class TestCbStatus:
         # Write 5 run entries
         entries = []
         for i in range(5):
-            entries.append(json.dumps({
-                "timestamp": f"2026-03-0{i+1}T10:00:00",
-                "session_id": f"sess000{i}",
-                "project": "proj",
-                "trigger": "compact",
-                "beats_written": i,
-                "beats_extracted": i,
-                "duration_seconds": 1,
-            }))
+            entries.append(
+                json.dumps(
+                    {
+                        "timestamp": f"2026-03-0{i + 1}T10:00:00",
+                        "session_id": f"sess000{i}",
+                        "project": "proj",
+                        "trigger": "compact",
+                        "beats_written": i,
+                        "beats_extracted": i,
+                        "duration_seconds": 1,
+                    }
+                )
+            )
         log_file.write_text("\n".join(entries) + "\n", encoding="utf-8")
 
         with patch.object(manage_mod, "_load_config", return_value=cfg):
@@ -968,7 +1067,9 @@ class TestCbStatus:
         cfg = {**BASE_CONFIG, "vault_path": str(vault)}
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                ):
                     result = _cb_status()()
         assert "Working memory" in result
         assert "due for review" in result
@@ -988,7 +1089,9 @@ class TestCbStatus:
         cfg = {**BASE_CONFIG, "vault_path": str(vault)}
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                ):
                     result = _cb_status()()
         assert "Working memory" in result
         # Should not show "due for review" when nothing is due
@@ -1011,6 +1114,7 @@ class TestCbStatus:
 # ===========================================================================
 # cb_configure — discover mode
 # ===========================================================================
+
 
 class TestCbConfigureDiscover:
     def test_discover_no_vaults_found(self, tmp_path, monkeypatch):
@@ -1042,6 +1146,7 @@ class TestCbConfigureDiscover:
 # ===========================================================================
 # cb_configure — inbox and capture_mode write paths
 # ===========================================================================
+
 
 class TestCbConfigureInboxAndCaptureMode:
     def test_inbox_write(self, tmp_path, monkeypatch):
@@ -1101,6 +1206,7 @@ class TestCbConfigureInboxAndCaptureMode:
 # _read_index_stats (direct unit tests)
 # ===========================================================================
 
+
 class TestReadIndexStats:
     def test_returns_empty_dict_on_missing_db(self, tmp_path):
         cfg = {"search_db_path": str(tmp_path / "nonexistent.db")}
@@ -1109,14 +1215,11 @@ class TestReadIndexStats:
 
     def test_returns_stats_from_real_db(self, tmp_path):
         import sqlite3
+
         db_path = str(tmp_path / "test.db")
         conn = sqlite3.connect(db_path)
-        conn.execute(
-            "CREATE TABLE notes (path TEXT, type TEXT)"
-        )
-        conn.execute(
-            "CREATE TABLE relations (id INTEGER PRIMARY KEY)"
-        )
+        conn.execute("CREATE TABLE notes (path TEXT, type TEXT)")
+        conn.execute("CREATE TABLE relations (id INTEGER PRIMARY KEY)")
         conn.execute("INSERT INTO notes VALUES ('/vault/a.md', 'insight')")
         conn.execute("INSERT INTO notes VALUES ('/vault/b.md', 'decision')")
         conn.execute("INSERT INTO notes VALUES ('/vault/c.md', 'insight')")
@@ -1134,6 +1237,7 @@ class TestReadIndexStats:
 
     def test_stale_count_for_existing_paths(self, tmp_path):
         import sqlite3
+
         db_path = str(tmp_path / "test2.db")
         real_file = tmp_path / "real.md"
         real_file.write_text("content", encoding="utf-8")
@@ -1156,10 +1260,12 @@ class TestReadIndexStats:
 # cb_status — sqlite provenance block
 # ===========================================================================
 
+
 class TestCbStatusProvenanceCoverage:
     def test_vault_with_sqlite_db(self, tmp_path):
         """Covers the sqlite provenance block in cb_status when vault exists and db is queryable."""
         import sqlite3
+
         vault = tmp_path / "vault"
         vault.mkdir()
         _write_claude_md(vault, "# Vault\n")
@@ -1177,13 +1283,16 @@ class TestCbStatusProvenanceCoverage:
         }
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                ):
                     result = _cb_status()()
         assert "Cyberbrain Status" in result
 
     def test_vault_with_no_notes_table_db(self, tmp_path):
         """Covers provenance exception branch when db exists but has no 'notes' table."""
         import sqlite3
+
         vault = tmp_path / "vault"
         vault.mkdir()
         _write_claude_md(vault, "# Vault\n")
@@ -1200,7 +1309,9 @@ class TestCbStatusProvenanceCoverage:
         }
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                ):
                     # Should not raise — exception is caught silently
                     result = _cb_status()()
         assert "Cyberbrain Status" in result
@@ -1235,12 +1346,18 @@ class TestCbStatusProvenanceCoverage:
         manifest_path = tmp_path / "bad_manifest.json"
         manifest_path.write_text("not-json!", encoding="utf-8")
 
-        with patch.object(manage_mod, "_load_config", return_value={
-            **cfg,
-            "search_manifest_path": str(manifest_path),
-        }):
+        with patch.object(
+            manage_mod,
+            "_load_config",
+            return_value={
+                **cfg,
+                "search_manifest_path": str(manifest_path),
+            },
+        ):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                ):
                     result = _cb_status()()
         assert "Cyberbrain Status" in result
 
@@ -1258,7 +1375,9 @@ class TestCbStatusProvenanceCoverage:
         cfg = {**BASE_CONFIG, "vault_path": str(vault)}
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                ):
                     result = _cb_status()()
         assert "Working memory" in result
 
@@ -1271,18 +1390,24 @@ class TestCbStatusProvenanceCoverage:
 
         # Note with opening --- but no closing ---
         note = wm_folder / "unclosed.md"
-        note.write_text("---\ncb_review_after: '2026-01-01'\n## No closing delimiter\n", encoding="utf-8")
+        note.write_text(
+            "---\ncb_review_after: '2026-01-01'\n## No closing delimiter\n",
+            encoding="utf-8",
+        )
 
         cfg = {**BASE_CONFIG, "vault_path": str(vault)}
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                ):
                     result = _cb_status()()
         assert "Working memory" in result
 
     def test_working_memory_yaml_parse_exception_handled(self, tmp_path):
         """Covers the except Exception branch when yaml.safe_load raises."""
         import yaml
+
         vault = tmp_path / "vault"
         vault.mkdir()
         wm_folder = vault / "AI" / "Working Memory"
@@ -1290,13 +1415,19 @@ class TestCbStatusProvenanceCoverage:
 
         # Valid-looking frontmatter to pass the startswith/end checks
         note = wm_folder / "valid-looking.md"
-        note.write_text("---\ncb_review_after: '2026-01-01'\n---\n\n## Note\n", encoding="utf-8")
+        note.write_text(
+            "---\ncb_review_after: '2026-01-01'\n---\n\n## Note\n", encoding="utf-8"
+        )
 
         cfg = {**BASE_CONFIG, "vault_path": str(vault)}
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")):
-                    with patch("yaml.safe_load", side_effect=yaml.YAMLError("bad yaml")):
+                with patch.object(
+                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                ):
+                    with patch(
+                        "yaml.safe_load", side_effect=yaml.YAMLError("bad yaml")
+                    ):
                         result = _cb_status()()
         # Should not crash — exception is caught
         assert "Working memory" in result
@@ -1305,6 +1436,7 @@ class TestCbStatusProvenanceCoverage:
 # ===========================================================================
 # cb_configure — additional edge cases
 # ===========================================================================
+
 
 class TestCbConfigureEdgeCases:
     def test_load_raw_bad_json_returns_empty(self, tmp_path, monkeypatch):
@@ -1352,7 +1484,11 @@ class TestCbConfigureEdgeCases:
         cfg = {**BASE_CONFIG, "vault_path": str(vault)}
 
         with patch.object(manage_mod, "_load_config", return_value=cfg):
-            with patch.object(manage_mod, "_read_index_stats", return_value={"total": 0, "by_type": {}}):
+            with patch.object(
+                manage_mod,
+                "_read_index_stats",
+                return_value={"total": 0, "by_type": {}},
+            ):
                 # Use a non-existent path that will pass Path.exists() check but fail read
                 # We achieve this by creating a directory at the log path (IsADirectoryError)
                 log_dir = tmp_path / "log_as_dir"

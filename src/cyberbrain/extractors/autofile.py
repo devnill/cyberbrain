@@ -46,14 +46,17 @@ def _update_cb_modified(note_path: Path, now) -> None:
         return
 
     fm_text = text[3:end]
-    body_text = text[end + 4:]
+    body_text = text[end + 4 :]
 
     yaml = YAML()
     yaml.preserve_quotes = True
     try:
         import io
+
         fm = yaml.load(fm_text)
-    except Exception:
+    except (
+        Exception
+    ):  # intentional: ruamel.yaml can raise scanner/parser/constructor errors
         return
 
     if not isinstance(fm, dict):
@@ -62,6 +65,7 @@ def _update_cb_modified(note_path: Path, now) -> None:
     fm["cb_modified"] = now.strftime("%Y-%m-%dT%H:%M:%S")
 
     import io
+
     out = io.StringIO()
     yaml.dump(fm, out)
     new_fm = out.getvalue().rstrip("\n")
@@ -89,7 +93,10 @@ def _merge_relations_into_note(note_path: Path, new_relations: list) -> None:
     try:
         text = note_path.read_text(encoding="utf-8")
     except OSError as e:
-        print(f"[extract_beats] Could not read note for relation merge: {e}", file=sys.stderr)
+        print(
+            f"[extract_beats] Could not read note for relation merge: {e}",
+            file=sys.stderr,
+        )
         return
 
     if not text.startswith("---"):
@@ -99,14 +106,17 @@ def _merge_relations_into_note(note_path: Path, new_relations: list) -> None:
         return
 
     fm_text = text[3:end]
-    body_text = text[end + 4:]
+    body_text = text[end + 4 :]
 
     yaml = YAML()
     yaml.preserve_quotes = True
     try:
         import io
+
         fm = yaml.load(fm_text)
-    except Exception as e:
+    except (
+        Exception
+    ) as e:  # intentional: ruamel.yaml can raise scanner/parser/constructor errors
         print(f"[extract_beats] ruamel.yaml parse error: {e}", file=sys.stderr)
         return
 
@@ -118,10 +128,7 @@ def _merge_relations_into_note(note_path: Path, new_relations: list) -> None:
         existing_related = []
 
     # Deduplicate by target title (strip [[ ]] for comparison)
-    existing_targets = {
-        str(link).strip("[]").lower()
-        for link in existing_related
-    }
+    existing_targets = {str(link).strip("[]").lower() for link in existing_related}
 
     added = False
     for rel in new_relations:
@@ -137,6 +144,7 @@ def _merge_relations_into_note(note_path: Path, new_relations: list) -> None:
     fm["related"] = existing_related
 
     import io
+
     out = io.StringIO()
     yaml.dump(fm, out)
     new_fm = out.getvalue().rstrip("\n")
@@ -144,13 +152,20 @@ def _merge_relations_into_note(note_path: Path, new_relations: list) -> None:
     new_text = f"---\n{new_fm}\n---{body_text}"
     try:
         note_path.write_text(new_text, encoding="utf-8")
-        print(f"[extract_beats] Merged {len([r for r in new_relations])} relation(s) into {note_path.name}", file=sys.stderr)
+        print(
+            f"[extract_beats] Merged {len([r for r in new_relations])} relation(s) into {note_path.name}",
+            file=sys.stderr,
+        )
     except OSError as e:
         print(f"[extract_beats] Could not write relation merge: {e}", file=sys.stderr)
 
 
-def _build_folder_examples(vault_path: str, search_results: list,
-                            max_folders: int = 8, notes_per_folder: int = 2) -> str:
+def _build_folder_examples(
+    vault_path: str,
+    search_results: list,
+    max_folders: int = 8,
+    notes_per_folder: int = 2,
+) -> str:
     """Build a formatted block of sample notes from candidate vault folders.
 
     For each candidate folder (top-level directories prioritised by search hit coverage),
@@ -202,7 +217,9 @@ def _build_folder_examples(vault_path: str, search_results: list,
         lines.append(f"### {folder_rel}/ ({len(samples)} sample notes)\n")
         for sample in samples:
             try:
-                fm = parse_frontmatter(sample.read_text(encoding="utf-8", errors="replace"))
+                fm = parse_frontmatter(
+                    sample.read_text(encoding="utf-8", errors="replace")
+                )
             except OSError:
                 continue
             title = fm.get("title") or sample.stem
@@ -210,7 +227,9 @@ def _build_folder_examples(vault_path: str, search_results: list,
             tags = fm.get("tags", [])
             summary = str(fm.get("summary", ""))[:200]
             try:
-                mtime = datetime.fromtimestamp(sample.stat().st_mtime).strftime("%Y-%m-%d")
+                mtime = datetime.fromtimestamp(sample.stat().st_mtime).strftime(
+                    "%Y-%m-%d"
+                )
             except OSError:
                 mtime = "unknown"
             lines.append(f"**{title}** ({mtime})")
@@ -220,9 +239,16 @@ def _build_folder_examples(vault_path: str, search_results: list,
     return "\n".join(lines) if lines else "(no folder examples available)"
 
 
-def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
-                  vault_context: str | None = None, source: str = "hook-extraction",
-                  can_ask: bool = False) -> Path | None:
+def autofile_beat(
+    beat: dict,
+    config: dict,
+    session_id: str,
+    cwd: str,
+    now,
+    vault_context: str | None = None,
+    source: str = "hook-extraction",
+    can_ask: bool = False,
+) -> Path | None:
     """File a beat intelligently into the vault using LLM judgment.
 
     can_ask: if True, "ask" uncertainty behavior returns None (caller surfaces the question).
@@ -234,8 +260,11 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
     # Load vault filing context from CLAUDE.md if not pre-cached by caller
     if vault_context is None:
         vault_context_text = read_vault_claude_md(vault_path)
-        vault_context = vault_context_text if vault_context_text is not None else \
-            "File notes using human-readable names with spaces. Use types: decision, insight, problem, reference."
+        vault_context = (
+            vault_context_text
+            if vault_context_text is not None
+            else "File notes using human-readable names with spaces. Use types: decision, insight, problem, reference."
+        )
 
     # Working-memory beats search within the WM folder; durable beats search the whole vault
     durability = beat.get("durability", "durable")
@@ -265,7 +294,9 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
 
     # Folder listing: WM beats see the WM folder tree; durable beats see the vault root
     try:
-        folder_root = Path(search_root) if durability == "working-memory" else Path(vault_path)
+        folder_root = (
+            Path(search_root) if durability == "working-memory" else Path(vault_path)
+        )
         vault_folders = "\n".join(
             str(p.relative_to(vault_path))
             for p in sorted(folder_root.iterdir())
@@ -276,24 +307,32 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
 
     # Build folder examples for context injection
     notes_per_folder = int(config.get("autofile_history_samples", 2))
-    folder_examples = _build_folder_examples(vault_path, related_paths,
-                                             notes_per_folder=notes_per_folder)
+    folder_examples = _build_folder_examples(
+        vault_path, related_paths, notes_per_folder=notes_per_folder
+    )
 
     system_prompt = load_prompt("autofile-system.md")
-    user_message = load_prompt("autofile-user.md").format_map({
-        "beat_json": json.dumps(beat, indent=2),
-        "related_docs": "\n\n---\n\n".join(related_docs) if related_docs else "(none found)",
-        "vault_context": vault_context,
-        "vault_folders": vault_folders or "(empty)",
-        "folder_examples": folder_examples,
-    })
+    user_message = load_prompt("autofile-user.md").format_map(
+        {
+            "beat_json": json.dumps(beat, indent=2),
+            "related_docs": "\n\n---\n\n".join(related_docs)
+            if related_docs
+            else "(none found)",
+            "vault_context": vault_context,
+            "vault_folders": vault_folders or "(empty)",
+            "folder_examples": folder_examples,
+        }
+    )
 
-    print(f"[extract_beats] autofile: using model for filing decision", file=sys.stderr)
+    print("[extract_beats] autofile: using model for filing decision", file=sys.stderr)
 
     try:
         raw = call_model(system_prompt, user_message, config)
     except BackendError as e:
-        print(f"[extract_beats] autofile: backend error, falling back to inbox: {e}", file=sys.stderr)
+        print(
+            f"[extract_beats] autofile: backend error, falling back to inbox: {e}",
+            file=sys.stderr,
+        )
         return write_beat(beat, config, session_id, cwd, now, source=source)
     if not raw:
         return write_beat(beat, config, session_id, cwd, now, source=source)
@@ -345,7 +384,10 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
         target_rel = decision.get("target_path", "")
         target = vault / target_rel
         if not _is_within_vault(vault, target):
-            print(f"[extract_beats] autofile: path traversal rejected: {target_rel}", file=sys.stderr)
+            print(
+                f"[extract_beats] autofile: path traversal rejected: {target_rel}",
+                file=sys.stderr,
+            )
             return write_beat(beat, config, session_id, cwd, now, source=source)
         insertion = decision.get("insertion", "")
         if not target.exists() or not insertion:
@@ -370,7 +412,10 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
             return write_beat(beat, config, session_id, cwd, now, source=source)
         output_path = vault / rel_path
         if not _is_within_vault(vault, output_path):
-            print(f"[extract_beats] autofile: path traversal rejected: {rel_path}", file=sys.stderr)
+            print(
+                f"[extract_beats] autofile: path traversal rejected: {rel_path}",
+                file=sys.stderr,
+            )
             return write_beat(beat, config, session_id, cwd, now, source=source)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -378,7 +423,9 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
         extra_fields = None
         if beat.get("durability") == "working-memory":
             extra_fields = _wm_frontmatter_fields(beat, config, now)
-        content = inject_provenance(content, source, session_id, now, extra_fields=extra_fields)
+        content = inject_provenance(
+            content, source, session_id, now, extra_fields=extra_fields
+        )
 
         # Collision handling: check if target already exists
         if output_path.exists():
@@ -390,20 +437,27 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
                 with open(output_path, "a", encoding="utf-8") as f:
                     f.write(f"\n\n{content.strip()}\n")
                 _update_cb_modified(output_path, now)
-                print(f"[extract_beats] autofile: collision resolved as extend (tag overlap={overlap}): {output_path}", file=sys.stderr)
+                print(
+                    f"[extract_beats] autofile: collision resolved as extend (tag overlap={overlap}): {output_path}",
+                    file=sys.stderr,
+                )
                 return output_path
             else:
                 beat_tags_list = [str(t).lower() for t in beat.get("tags", []) if t]
                 distinguishing_tag = beat_tags_list[0] if beat_tags_list else "new"
                 base_stem = output_path.stem
-                specific_path = output_path.parent / f"{base_stem} — {distinguishing_tag}.md"
+                specific_path = (
+                    output_path.parent / f"{base_stem} — {distinguishing_tag}.md"
+                )
 
                 if specific_path.exists():
                     counter = 2
                     specific_path = output_path.parent / f"{counter} {output_path.name}"
                     while specific_path.exists():
                         counter += 1
-                        specific_path = output_path.parent / f"{counter} {output_path.name}"
+                        specific_path = (
+                            output_path.parent / f"{counter} {output_path.name}"
+                        )
 
                 output_path = specific_path
 
@@ -412,14 +466,18 @@ def autofile_beat(beat: dict, config: dict, session_id: str, cwd: str, now,
 
         # Update search index post-create
         try:
-            from search_index import update_search_index
+            from search_index import update_search_index  # noqa: I001  # type: ignore[import-not-found]  # optional runtime dependency
+
             fm = parse_frontmatter(output_path.read_text(encoding="utf-8"))
             update_search_index(str(output_path), fm, config)
-        except (ImportError, Exception):
+        except Exception:  # intentional: search index update is non-fatal for autofile; ImportError if not installed
             pass
 
         return output_path
 
     else:
-        print(f"[extract_beats] autofile: unknown action '{action}', falling back", file=sys.stderr)
+        print(
+            f"[extract_beats] autofile: unknown action '{action}', falling back",
+            file=sys.stderr,
+        )
         return write_beat(beat, config, session_id, cwd, now, source=source)

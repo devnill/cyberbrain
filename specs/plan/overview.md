@@ -1,57 +1,27 @@
-# Refinement Cycle 8 — Token-Efficient Testing
+# Refinement Cycle 13 — Minor Review Findings Cleanup
 
 ## What is Changing
 
-Optimize the ideate cycle for lower token spend by implementing targeted testing. Instead of running all 1285 tests with verbose output on every change, run only tests affected by changed code with minimal output (pass/fail only), then escalate to detailed output only on failure.
+Addressing the 7 minor findings from cycle 012 review plus dismissing the FastMCP pattern migration.
 
 ## Triggering Context
 
-User feedback during execution of prior cycles: running 1200+ tests with verbose output consumes excessive tokens. Need to preserve quality while minimizing token spend during development.
+Cycle 012 review passed with 0 critical, 0 significant, 7 minor findings. User requested all minor items be handled. FastMCP migration explicitly dismissed as a non-issue.
 
 ## Scope Boundary
 
 **In scope:**
-- Add pytest markers for test categorization (core, extended, slow)
-- Implement `--affected-only` pytest plugin with import-based test mapping
-- Configure default pytest for minimal output (quiet mode)
-- Create test wrapper script for two-pass execution
+- Migrate remaining hardcoded paths to state.py imports (config.py, recall.py)
+- Update CLAUDE.md to reflect restructure.py decomposition
+- Fix test_dependency_map.py collection error
+- Remove extract_beats.py re-export hub (migrate callers to direct imports)
 
 **Not in scope:**
-- Changes to actual test logic or assertions
-- Changes to production code
-- Changes to CI/CD configuration
+- FastMCP pattern migration (dismissed)
+- CI/CD pipeline (deferred — requires infrastructure decisions beyond code)
+- ruff ignore list narrowing (documented, acceptable)
+- New features
 
-## New Work Items
+## Principles / Architecture
 
-048–051 (4 items). See `plan/work-items/` for details.
-
-## Execution Strategy
-
-**Mode:** Sequential
-**Review cadence:** Single comprehensive review after all items complete
-**Agent configuration:** Default models acceptable (testing infrastructure is straightforward)
-
-**Ordering:**
-1. WI-048 (markers) — Foundation for categorization
-2. WI-049 (affected-only plugin) — Core functionality
-3. WI-050 (quiet defaults) — Output configuration
-4. WI-051 (wrapper script) — Convenience wrapper
-
-Dependencies: WI-048 → WI-049 → WI-050/051 (parallel after 049)
-
-## Expected Impact
-
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| Tests run per change | 1285 | 50-100 | 92-96% |
-| Lines of test output | 500+ | 1-3 | 99% |
-| Context window usage | Heavy | Minimal | ~95% |
-| Quality preservation | Full | Full | No loss |
-
-## Principles
-
-No changes. All existing guiding principles hold.
-
-## Architecture
-
-No changes to system architecture. Testing configuration only.
+No changes.

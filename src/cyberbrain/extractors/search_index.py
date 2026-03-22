@@ -28,15 +28,16 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from cyberbrain.extractors.search_backends import SearchBackend
 
-_SCAN_MARKER_PATH = Path.home() / ".claude" / "cyberbrain" / ".index-scan-ts"
+from cyberbrain.extractors.state import INDEX_SCAN_MARKER_PATH as _SCAN_MARKER_PATH
+
 _DEFAULT_REFRESH_INTERVAL = 3600  # seconds
 
 # Module-level backend cache: one backend instance per (vault_path, backend_key) pair.
 # Avoids re-loading the usearch index on every note write.
-_backend_cache: dict[str, "SearchBackend"] = {}
+_backend_cache: dict[str, SearchBackend] = {}
 
 
-def _get_backend(config: dict) -> "SearchBackend | None":
+def _get_backend(config: dict) -> SearchBackend | None:
     """
     Return a cached backend instance.
     Returns None if search indexing is disabled or the backend fails to initialise.
@@ -50,11 +51,14 @@ def _get_backend(config: dict) -> "SearchBackend | None":
 
     try:
         from cyberbrain.extractors.search_backends import get_search_backend
+
         backend = get_search_backend(config)
         _backend_cache[cache_key] = backend
         return backend
-    except Exception as e:
-        print(f"[search_index] Could not initialise search backend: {e}", file=sys.stderr)
+    except Exception as e:  # intentional: backend init failure (missing deps, bad config) is non-fatal; search degrades to grep
+        print(
+            f"[search_index] Could not initialise search backend: {e}", file=sys.stderr
+        )
         return None
 
 
@@ -72,7 +76,7 @@ def update_search_index(note_path: str, metadata: dict, config: dict) -> None:
 
     try:
         backend.index_note(note_path, metadata)
-    except Exception as e:
+    except Exception as e:  # intentional: index update failure is non-fatal per docstring; search index staleness is acceptable
         print(
             f"[search_index] Index update failed for {Path(note_path).name}: {e}",
             file=sys.stderr,
@@ -89,7 +93,10 @@ def build_full_index(config: dict) -> None:
     """
     backend = _get_backend(config)
     if backend is None:
-        print("[search_index] No backend available — skipping index build.", file=sys.stderr)
+        print(
+            "[search_index] No backend available — skipping index build.",
+            file=sys.stderr,
+        )
         return
 
     print(
@@ -98,7 +105,9 @@ def build_full_index(config: dict) -> None:
     )
     try:
         backend.build_index()
-    except Exception as e:
+    except (
+        Exception
+    ) as e:  # intentional: index build failure is non-fatal; search degrades to grep
         print(f"[search_index] Index build failed: {e}", file=sys.stderr)
 
 
@@ -109,7 +118,9 @@ def active_backend_name(config: dict) -> str:
         return "none"
     try:
         return backend.backend_name()
-    except Exception:
+    except (
+        Exception
+    ):  # intentional: backend may be in a broken state; return safe fallback string
         return "unknown"
 
 
@@ -141,7 +152,7 @@ def incremental_refresh(config: dict, max_age_seconds: int | None = None) -> int
             last_scan_ts = float(_SCAN_MARKER_PATH.read_text().strip())
         else:
             last_scan_ts = 0.0
-    except Exception as e:
+    except (OSError, ValueError) as e:
         print(f"[search_index] Could not read scan marker: {e}", file=sys.stderr)
         last_scan_ts = 0.0
 
@@ -163,7 +174,7 @@ def incremental_refresh(config: dict, max_age_seconds: int | None = None) -> int
                 if md_file.stat().st_mtime > last_scan_ts:
                     backend.index_note(str(md_file), {})
                     count += 1
-            except Exception as e:
+            except Exception as e:  # intentional: per-file indexing failure is non-fatal; continue scan
                 print(
                     f"[search_index] Could not index {md_file.name}: {e}",
                     file=sys.stderr,
@@ -172,15 +183,15 @@ def incremental_refresh(config: dict, max_age_seconds: int | None = None) -> int
         # Prune entries for deleted notes
         if hasattr(backend, "prune_stale_notes"):
             try:
-                backend.prune_stale_notes()
-            except Exception as e:
+                backend.prune_stale_notes()  # type: ignore[reportAttributeAccessIssue]  # runtime duck-typed: hasattr guard above
+            except Exception as e:  # intentional: prune failure is non-fatal; stale entries are harmless
                 print(f"[search_index] Prune failed: {e}", file=sys.stderr)
 
         # Update marker
         _SCAN_MARKER_PATH.parent.mkdir(parents=True, exist_ok=True)
         _SCAN_MARKER_PATH.write_text(str(now))
 
-    except Exception as e:
+    except Exception as e:  # intentional: any vault walk failure (permissions, etc.) is non-fatal; caller gets -1
         print(f"[search_index] incremental_refresh failed: {e}", file=sys.stderr)
         return -1
 
@@ -191,7 +202,9 @@ def main() -> None:
     """Entry point for cyberbrain-reindex CLI and __main__ invocation."""
     import json
 
-    config_path = Path.home() / ".claude" / "cyberbrain" / "config.json"
+    from cyberbrain.extractors.state import CONFIG_PATH
+
+    config_path = CONFIG_PATH
     if not config_path.exists():
         print("No config found at ~/.claude/cyberbrain/config.json", file=sys.stderr)
         sys.exit(1)
@@ -199,9 +212,15 @@ def main() -> None:
     # Force refresh regardless of age by passing max_age_seconds=0
     count = incremental_refresh(config, max_age_seconds=0)
     if count >= 0:
-        print(f"[search_index] Incremental refresh complete: {count} note(s) updated.", file=sys.stderr)
+        print(
+            f"[search_index] Incremental refresh complete: {count} note(s) updated.",
+            file=sys.stderr,
+        )
     else:
-        print("[search_index] Refresh skipped (no backend or vault unavailable).", file=sys.stderr)
+        print(
+            "[search_index] Refresh skipped (no backend or vault unavailable).",
+            file=sys.stderr,
+        )
 
 
 if __name__ == "__main__":

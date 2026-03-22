@@ -14,11 +14,8 @@ Tests cover:
 
 import json
 import sys
-import textwrap
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 # ---------------------------------------------------------------------------
 # sys.path setup
@@ -29,8 +26,26 @@ EXTRACTORS_DIR = REPO_ROOT / "src" / "cyberbrain" / "extractors"
 
 
 # ---------------------------------------------------------------------------
-# Mock extract_beats before importing evaluate (it pulls from backends/config)
+# sys.modules setup — why this file needs it
+#
+# Modules temporarily mocked: cyberbrain.extractors.extract_beats,
+#                              cyberbrain.extractors.frontmatter,
+#                              cyberbrain.extractors.backends,
+#                              cyberbrain.extractors.config
+# Module cleared:              cyberbrain.extractors.evaluate
+#
+# evaluate.py calls backends.call_model and config.load_prompt at runtime.
+# Installing stubs for both before the import ensures evaluate.py captures the
+# mock objects, not real ones that would trigger LLM calls.  After the import,
+# originals are restored to avoid contaminating other test files.
+#
+# extract_beats and frontmatter are guarded with the if-not-in-sys.modules
+# check so we only stub them when they haven't already been imported by a
+# previous test file; if the real module is already cached we leave it alone
+# (the evaluate import chain doesn't need these to be mocked — only backends
+# and config are critical here).
 # ---------------------------------------------------------------------------
+
 
 class _BackendError(Exception):
     pass
@@ -76,15 +91,14 @@ sys.modules.pop("cyberbrain.extractors.evaluate", None)
 
 # Now import the module under test
 from cyberbrain.extractors.evaluate import (
+    EvalResult,
     Variant,
     VariantOutput,
-    Score,
-    EvalResult,
     _build_config_with_overrides,
     _compute_diff,
     evaluate,
-    save_result,
     format_summary,
+    save_result,
 )
 
 # Restore original modules so other test files get the real ones
@@ -116,10 +130,10 @@ class TestVariant:
         assert v.overrides == {}
 
     def test_with_params(self):
-        v = Variant(name="custom", overrides={
-            "model": "claude-sonnet-4-5",
-            "params": {"threshold": 0.3}
-        })
+        v = Variant(
+            name="custom",
+            overrides={"model": "claude-sonnet-4-5", "params": {"threshold": 0.3}},
+        )
         assert v.overrides["params"]["threshold"] == 0.3
 
 
@@ -192,7 +206,9 @@ class TestEvaluate:
     @patch("cyberbrain.extractors.evaluate.call_model")
     @patch("cyberbrain.extractors.evaluate.load_prompt")
     def test_enrich_two_variants(self, mock_load_prompt, mock_call_model):
-        mock_load_prompt.return_value = "prompt {vault_type_context} {count} {notes_block}"
+        mock_load_prompt.return_value = (
+            "prompt {vault_type_context} {count} {notes_block}"
+        )
         mock_call_model.side_effect = [
             '[{"type": "insight", "tags": ["python"]}]',
             '[{"type": "decision", "tags": ["architecture"]}]',
@@ -219,7 +235,9 @@ class TestEvaluate:
     @patch("cyberbrain.extractors.evaluate.call_model")
     @patch("cyberbrain.extractors.evaluate.load_prompt")
     def test_variant_error_captured(self, mock_load_prompt, mock_call_model):
-        mock_load_prompt.return_value = "prompt {vault_type_context} {count} {notes_block}"
+        mock_load_prompt.return_value = (
+            "prompt {vault_type_context} {count} {notes_block}"
+        )
         mock_call_model.side_effect = [
             Exception("API timeout"),
             '[{"type": "insight"}]',
@@ -242,7 +260,9 @@ class TestEvaluate:
     @patch("cyberbrain.extractors.evaluate.load_prompt")
     def test_judge_scoring(self, mock_load_prompt, mock_call_model):
         # First two calls: variant operations; third call: judge
-        mock_load_prompt.return_value = "prompt {vault_type_context} {count} {notes_block}"
+        mock_load_prompt.return_value = (
+            "prompt {vault_type_context} {count} {notes_block}"
+        )
         mock_call_model.side_effect = [
             '{"result": "a"}',
             '{"result": "b"}',
@@ -273,12 +293,14 @@ class TestSaveResult:
             operation="enrich",
             timestamp="2026-03-09T12:00:00Z",
             input_notes=[{"path": "test.md", "content": "hello"}],
-            outputs=[{
-                "variant": {"name": "v0", "overrides": {}},
-                "raw_output": "result text",
-                "duration_ms": 100,
-                "error": None,
-            }],
+            outputs=[
+                {
+                    "variant": {"name": "v0", "overrides": {}},
+                    "raw_output": "result text",
+                    "duration_ms": 100,
+                    "error": None,
+                }
+            ],
         )
 
         json_path, md_path = save_result(result, str(tmp_path))
@@ -349,12 +371,14 @@ class TestFormatSummary:
         result = EvalResult(
             operation="enrich",
             timestamp="2026-03-09T12:00:00Z",
-            outputs=[{
-                "variant": {"name": "v0"},
-                "raw_output": "x",
-                "duration_ms": 100,
-                "error": None,
-            }],
+            outputs=[
+                {
+                    "variant": {"name": "v0"},
+                    "raw_output": "x",
+                    "duration_ms": 100,
+                    "error": None,
+                }
+            ],
             scores=[{"variant_index": 0, "overall": 5}],
         )
 

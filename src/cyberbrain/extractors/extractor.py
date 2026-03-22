@@ -9,7 +9,7 @@ import re
 import sys
 from pathlib import Path
 
-from cyberbrain.extractors.backends import call_model, MAX_TRANSCRIPT_CHARS
+from cyberbrain.extractors.backends import MAX_TRANSCRIPT_CHARS, call_model
 from cyberbrain.extractors.config import load_prompt
 from cyberbrain.extractors.vault import read_vault_claude_md
 
@@ -19,7 +19,10 @@ def extract_beats(transcript_text: str, config: dict, trigger: str, cwd: str) ->
 
     # Truncate transcript if too long (keep tail — most recent content is most valuable)
     if len(transcript_text) > MAX_TRANSCRIPT_CHARS:
-        transcript_text = "...[earlier content truncated]...\n\n" + transcript_text[-MAX_TRANSCRIPT_CHARS:]
+        transcript_text = (
+            "...[earlier content truncated]...\n\n"
+            + transcript_text[-MAX_TRANSCRIPT_CHARS:]
+        )
 
     # Read vault CLAUDE.md for type vocabulary context
     vault_claude_md = read_vault_claude_md(config["vault_path"])
@@ -40,13 +43,15 @@ def extract_beats(transcript_text: str, config: dict, trigger: str, cwd: str) ->
         )
 
     system_prompt = load_prompt("extract-beats-system.md")
-    user_message = load_prompt("extract-beats-user.md").format_map({
-        "project_name": project_name,
-        "cwd": cwd,
-        "trigger": trigger,
-        "transcript": transcript_text,
-        "vault_claude_md_section": vault_claude_md_section,
-    })
+    user_message = load_prompt("extract-beats-user.md").format_map(
+        {
+            "project_name": project_name,
+            "cwd": cwd,
+            "trigger": trigger,
+            "transcript": transcript_text,
+            "vault_claude_md_section": vault_claude_md_section,
+        }
+    )
 
     raw = call_model(system_prompt, user_message, config)
     if not raw:
@@ -60,12 +65,18 @@ def extract_beats(transcript_text: str, config: dict, trigger: str, cwd: str) ->
         # Use raw_decode so trailing explanatory text after the JSON is ignored
         beats, _ = json.JSONDecoder().raw_decode(raw.lstrip())
     except json.JSONDecodeError as e:
-        print(f"[extract_beats] Failed to parse model response as JSON: {e}", file=sys.stderr)
+        print(
+            f"[extract_beats] Failed to parse model response as JSON: {e}",
+            file=sys.stderr,
+        )
         print(f"[extract_beats] Raw response: {raw[:500]}", file=sys.stderr)
         return []
 
     if not isinstance(beats, list):
-        print(f"[extract_beats] Model returned non-list JSON: {type(beats)}", file=sys.stderr)
+        print(
+            f"[extract_beats] Model returned non-list JSON: {type(beats)}",
+            file=sys.stderr,
+        )
         return []
 
     return beats

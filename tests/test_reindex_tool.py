@@ -10,31 +10,37 @@ Covers:
 - prune=False + rebuild=False → returns "No action taken"
 """
 
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 # ---------------------------------------------------------------------------
-# sys.path setup
+# sys.modules cleanup — why this file needs it
+#
+# Modules cleared: cyberbrain.mcp.shared, cyberbrain.mcp.tools.reindex
+#
+# conftest.py installs a MagicMock for extract_beats before any test module
+# loads.  If shared.py or reindex.py are already cached from an earlier test
+# file, re-importing them here would return the stale objects and our FakeMCP
+# would never receive the tool registration.  Evicting both ensures a fresh
+# import that runs register() against this file's FakeMCP instance.
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
 
-# conftest.py installs the shared extract_beats mock before this module is imported.
-# Clear any stale module cache so we get a fresh import.
-for _mod in ["cyberbrain.mcp.shared", "cyberbrain.mcp.tools.reindex"]:
-    sys.modules.pop(_mod, None)
+from tests.conftest import _clear_module_cache
 
-import cyberbrain.mcp.shared as _shared
-import cyberbrain.mcp.tools.reindex as reindex_mod
+_clear_module_cache(["cyberbrain.mcp.shared", "cyberbrain.mcp.tools.reindex"])
+
 from fastmcp.exceptions import ToolError  # noqa: E402
 
+import cyberbrain.mcp.tools.reindex as reindex_mod
 
 # ---------------------------------------------------------------------------
 # FakeMCP — captures the registered cb_reindex function
 # ---------------------------------------------------------------------------
+
 
 class FakeMCP:
     def __init__(self):
@@ -44,6 +50,7 @@ class FakeMCP:
         def decorator(fn):
             self._tools[fn.__name__] = {"fn": fn}
             return fn
+
         return decorator
 
 
@@ -60,6 +67,7 @@ def _cb_reindex():
 # Tests: vault not configured
 # ---------------------------------------------------------------------------
 
+
 class TestCbReindexNoVault:
     def test_raises_when_vault_path_empty(self):
         with patch.object(reindex_mod, "_load_config", return_value={"vault_path": ""}):
@@ -73,7 +81,9 @@ class TestCbReindexNoVault:
 
     def test_raises_when_vault_path_does_not_exist(self, tmp_path):
         nonexistent = str(tmp_path / "no_such_vault")
-        with patch.object(reindex_mod, "_load_config", return_value={"vault_path": nonexistent}):
+        with patch.object(
+            reindex_mod, "_load_config", return_value={"vault_path": nonexistent}
+        ):
             with pytest.raises(ToolError, match="No vault configured"):
                 _cb_reindex()()
 
@@ -82,11 +92,14 @@ class TestCbReindexNoVault:
 # Tests: no search index (grep backend)
 # ---------------------------------------------------------------------------
 
+
 class TestCbReindexNoBackend:
     def test_returns_info_when_backend_is_none(self, tmp_path):
         config = {"vault_path": str(tmp_path)}
-        with patch.object(reindex_mod, "_load_config", return_value=config), \
-             patch.object(reindex_mod, "_get_search_backend", return_value=None):
+        with (
+            patch.object(reindex_mod, "_load_config", return_value=config),
+            patch.object(reindex_mod, "_get_search_backend", return_value=None),
+        ):
             result = _cb_reindex()()
         assert "grep backend" in result
         assert "Nothing to maintain" in result
@@ -96,13 +109,16 @@ class TestCbReindexNoBackend:
 # Tests: rebuild=True
 # ---------------------------------------------------------------------------
 
+
 class TestCbReindexRebuild:
     def test_rebuild_calls_build_full_index(self, tmp_path):
         config = {"vault_path": str(tmp_path)}
         backend = MagicMock()
-        with patch.object(reindex_mod, "_load_config", return_value=config), \
-             patch.object(reindex_mod, "_get_search_backend", return_value=backend), \
-             patch.object(reindex_mod.search_index, "build_full_index") as mock_build:
+        with (
+            patch.object(reindex_mod, "_load_config", return_value=config),
+            patch.object(reindex_mod, "_get_search_backend", return_value=backend),
+            patch.object(reindex_mod.search_index, "build_full_index") as mock_build,
+        ):
             result = _cb_reindex()(rebuild=True)
         mock_build.assert_called_once_with(config)
         assert "fully rebuilt" in result
@@ -113,13 +129,16 @@ class TestCbReindexRebuild:
 # Tests: prune (default)
 # ---------------------------------------------------------------------------
 
+
 class TestCbReindexPrune:
     def test_prune_calls_prune_index_and_returns_count(self, tmp_path):
         config = {"vault_path": str(tmp_path)}
         backend = MagicMock()
-        with patch.object(reindex_mod, "_load_config", return_value=config), \
-             patch.object(reindex_mod, "_get_search_backend", return_value=backend), \
-             patch.object(reindex_mod, "_prune_index", return_value=5) as mock_prune:
+        with (
+            patch.object(reindex_mod, "_load_config", return_value=config),
+            patch.object(reindex_mod, "_get_search_backend", return_value=backend),
+            patch.object(reindex_mod, "_prune_index", return_value=5) as mock_prune,
+        ):
             result = _cb_reindex()(prune=True)
         mock_prune.assert_called_once_with(config)
         assert "5" in result
@@ -128,9 +147,11 @@ class TestCbReindexPrune:
     def test_prune_zero_returns_zero_count(self, tmp_path):
         config = {"vault_path": str(tmp_path)}
         backend = MagicMock()
-        with patch.object(reindex_mod, "_load_config", return_value=config), \
-             patch.object(reindex_mod, "_get_search_backend", return_value=backend), \
-             patch.object(reindex_mod, "_prune_index", return_value=0):
+        with (
+            patch.object(reindex_mod, "_load_config", return_value=config),
+            patch.object(reindex_mod, "_get_search_backend", return_value=backend),
+            patch.object(reindex_mod, "_prune_index", return_value=0),
+        ):
             result = _cb_reindex()(prune=True)
         assert "0" in result
 
@@ -139,11 +160,14 @@ class TestCbReindexPrune:
 # Tests: no-op
 # ---------------------------------------------------------------------------
 
+
 class TestCbReindexNoOp:
     def test_returns_no_action_when_both_false(self, tmp_path):
         config = {"vault_path": str(tmp_path)}
         backend = MagicMock()
-        with patch.object(reindex_mod, "_load_config", return_value=config), \
-             patch.object(reindex_mod, "_get_search_backend", return_value=backend):
+        with (
+            patch.object(reindex_mod, "_load_config", return_value=config),
+            patch.object(reindex_mod, "_get_search_backend", return_value=backend),
+        ):
             result = _cb_reindex()(prune=False, rebuild=False)
         assert "No action taken" in result

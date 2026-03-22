@@ -1,6 +1,6 @@
 """cb_extract tool — extract beats from a transcript file."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -10,8 +10,14 @@ from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from cyberbrain.mcp.shared import (
-    _extract_beats, parse_jsonl_transcript, write_beat, autofile_beat,
-    write_journal_entry, BackendError, _load_config, _relpath,
+    BackendError,
+    _extract_beats,
+    _load_config,
+    _relpath,
+    autofile_beat,
+    parse_jsonl_transcript,
+    write_beat,
+    write_journal_entry,
 )
 
 
@@ -20,9 +26,12 @@ def register(mcp: FastMCP) -> None:
     def cb_extract(
         transcript_path: str,
         session_id: str | None = None,
-        cwd: Annotated[str | None, Field(
-            description="Absolute path to the project directory. Enables project-scoped routing to the project's dedicated vault folder (requires .claude/cyberbrain.local.json in that directory). Omit to route to the global inbox."
-        )] = None,
+        cwd: Annotated[
+            str | None,
+            Field(
+                description="Absolute path to the project directory. Enables project-scoped routing to the project's dedicated vault folder (requires .claude/cyberbrain.local.json in that directory). Omit to route to the global inbox."
+            ),
+        ] = None,
     ) -> str:
         """
         Extract knowledge beats from a conversation transcript file and file them to the vault.
@@ -55,14 +64,14 @@ def register(mcp: FastMCP) -> None:
         config = _load_config(effective_cwd)
 
         effective_session_id = session_id or transcript_file.stem
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Parse transcript (JSONL or plain text)
         suffix = transcript_file.suffix.lower()
         if suffix == ".jsonl":
             try:
                 transcript_text = parse_jsonl_transcript(str(transcript_file))
-            except Exception as e:
+            except Exception as e:  # intentional: JSONL parsing can raise various errors (malformed lines, encoding, etc.)
                 raise ToolError(f"Failed to parse transcript: {e}")
         else:
             try:
@@ -76,7 +85,9 @@ def register(mcp: FastMCP) -> None:
         # Truncate to stay within model context limits (keep tail — most recent is most valuable)
         MAX_CHARS = 150_000
         if len(transcript_text) > MAX_CHARS:
-            transcript_text = "...[earlier content truncated]...\n\n" + transcript_text[-MAX_CHARS:]
+            transcript_text = (
+                "...[earlier content truncated]...\n\n" + transcript_text[-MAX_CHARS:]
+            )
 
         try:
             beats = _extract_beats(transcript_text, config, "manual", effective_cwd)
@@ -107,14 +118,23 @@ def register(mcp: FastMCP) -> None:
         for beat in beats:
             try:
                 if autofile_enabled:
-                    path = autofile_beat(beat, config, effective_session_id, effective_cwd, now, vault_context=vault_context)
+                    path = autofile_beat(
+                        beat,
+                        config,
+                        effective_session_id,
+                        effective_cwd,
+                        now,
+                        vault_context=vault_context,
+                    )
                 else:
-                    path = write_beat(beat, config, effective_session_id, effective_cwd, now)
+                    path = write_beat(
+                        beat, config, effective_session_id, effective_cwd, now
+                    )
                 if path:
                     written.append(path)
                     rel = _relpath(path, config["vault_path"])
                     lines.append(f"  Created: {rel}  ({beat.get('type', 'note')})")
-            except Exception as e:
+            except Exception as e:  # intentional: per-beat write failure is non-fatal; log and continue to next beat
                 lines.append(f"  Error on '{beat.get('title', '?')}': {e}")
 
         if config.get("daily_journal", False) and written:

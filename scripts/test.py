@@ -16,12 +16,20 @@ def main():
     result = subprocess.run(cmd, capture_output=True, text=True)
 
     if result.returncode == 0:
-        summary = result.stdout.strip().split("\n")[-1] if result.stdout.strip() else "All tests passed"
+        summary = (
+            result.stdout.strip().split("\n")[-1]
+            if result.stdout.strip()
+            else "All tests passed"
+        )
         print(f"✓ {summary}")
         return 0
 
     # Pass 2: Detailed on failure (only failed tests)
-    summary = result.stdout.strip().split("\n")[-1] if result.stdout.strip() else "Tests failed"
+    summary = (
+        result.stdout.strip().split("\n")[-1]
+        if result.stdout.strip()
+        else "Tests failed"
+    )
     print(f"✗ {summary}")
     print("\nRe-running failed tests with detail...")
 

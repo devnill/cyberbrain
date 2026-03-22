@@ -1,0 +1,30 @@
+# Decision Log — Cycle 007
+
+## Decisions
+
+### D13: Reviewer C1 dismissed as false positive
+
+- **When**: Review — cycle 007 spec-adherence
+- **Decision**: The spec-gap reviewer's critical finding C1 ("get_tests_for(enrich_py) returns set()") is incorrect. `tests/test_setup_enrich_tools.py` has 24+ `from cyberbrain.mcp.tools.enrich import ...` statements inside test methods, which the AST walker correctly finds. `dependents["cyberbrain.mcp.tools.enrich"]` is populated. Verified by running the mapper and inspecting dependents dict.
+
+---
+
+## Open Questions
+
+### OQ8 [SIGNIFICANT]: WI-056 AC1 "from any working directory" has no automated test
+
+Addressed by WI-057.
+
+---
+
+## Work Item Completion
+
+| WI | Title | Status | Verdict | Findings (C/S/M) |
+|---|---|---|---|---|
+| 056 | Anchor _dependency_map.py paths to repo root | Complete with minor fix | Pass | 0/0/1 → fixed |
+
+---
+
+## Most Important Finding
+
+OQ8: AC1 for WI-056 is unverified. WI-057 adds a cwd-independence test.

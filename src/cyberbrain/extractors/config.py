@@ -8,8 +8,8 @@ import json
 import sys
 from pathlib import Path
 
+from cyberbrain.extractors.state import CONFIG_PATH as GLOBAL_CONFIG_PATH
 
-GLOBAL_CONFIG_PATH = Path.home() / ".claude" / "cyberbrain" / "config.json"
 PROJECT_CONFIG_NAME = "cyberbrain.local.json"
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
@@ -40,7 +40,10 @@ def load_global_config() -> dict:
     vault_path = Path(config["vault_path"]).expanduser().resolve()
 
     # Reject placeholder or non-existent paths
-    if str(config["vault_path"]) == "/path/to/your/ObsidianVault" or not vault_path.exists():
+    if (
+        str(config["vault_path"]) == "/path/to/your/ObsidianVault"
+        or not vault_path.exists()
+    ):
         print(
             f"[extract_beats] vault_path '{config['vault_path']}' is a placeholder or does not exist. "
             f"Edit {GLOBAL_CONFIG_PATH} with your real vault path.",

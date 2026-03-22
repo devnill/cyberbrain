@@ -8,24 +8,23 @@ Coverage:
 - cb_reindex(rebuild=True): calls search_index.build_full_index directly (bug fix)
 """
 
+import importlib
 import sys
 import time
-from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-import importlib
-
 # Force a fresh import so any prior cached version (without new attributes) is dropped.
 import cyberbrain.extractors.search_index
+
 importlib.reload(cyberbrain.extractors.search_index)
 import cyberbrain.extractors.search_index as si
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def clear_backend_cache():
@@ -60,6 +59,7 @@ def mock_backend():
 # incremental_refresh
 # ===========================================================================
 
+
 class TestIncrementalRefresh:
     """Tests for search_index.incremental_refresh()."""
 
@@ -67,8 +67,10 @@ class TestIncrementalRefresh:
         """When no marker file exists, all vault .md files are indexed."""
         marker = tmp_path / "marker"
 
-        with patch.object(si, "_SCAN_MARKER_PATH", marker), \
-             patch.object(si, "_get_backend", return_value=mock_backend):
+        with (
+            patch.object(si, "_SCAN_MARKER_PATH", marker),
+            patch.object(si, "_get_backend", return_value=mock_backend),
+        ):
             count = si.incremental_refresh(config, max_age_seconds=3600)
 
         # Two files in vault → both indexed
@@ -79,8 +81,10 @@ class TestIncrementalRefresh:
         """After first run, the marker file is created."""
         marker = tmp_path / "marker"
 
-        with patch.object(si, "_SCAN_MARKER_PATH", marker), \
-             patch.object(si, "_get_backend", return_value=mock_backend):
+        with (
+            patch.object(si, "_SCAN_MARKER_PATH", marker),
+            patch.object(si, "_get_backend", return_value=mock_backend),
+        ):
             si.incremental_refresh(config, max_age_seconds=3600)
 
         assert marker.exists()
@@ -93,21 +97,27 @@ class TestIncrementalRefresh:
         # Write a very recent timestamp
         marker.write_text(str(time.time()))
 
-        with patch.object(si, "_SCAN_MARKER_PATH", marker), \
-             patch.object(si, "_get_backend", return_value=mock_backend):
+        with (
+            patch.object(si, "_SCAN_MARKER_PATH", marker),
+            patch.object(si, "_get_backend", return_value=mock_backend),
+        ):
             count = si.incremental_refresh(config, max_age_seconds=3600)
 
         assert count == -1
         mock_backend.index_note.assert_not_called()
 
-    def test_runs_when_marker_older_than_threshold(self, vault, config, mock_backend, tmp_path):
+    def test_runs_when_marker_older_than_threshold(
+        self, vault, config, mock_backend, tmp_path
+    ):
         """When marker is older than threshold, refresh runs."""
         marker = tmp_path / "marker"
         # Write a timestamp 2 hours ago
         marker.write_text(str(time.time() - 7200))
 
-        with patch.object(si, "_SCAN_MARKER_PATH", marker), \
-             patch.object(si, "_get_backend", return_value=mock_backend):
+        with (
+            patch.object(si, "_SCAN_MARKER_PATH", marker),
+            patch.object(si, "_get_backend", return_value=mock_backend),
+        ):
             count = si.incremental_refresh(config, max_age_seconds=3600)
 
         # Both files have mtime newer than 2 hours ago → both indexed
@@ -124,10 +134,13 @@ class TestIncrementalRefresh:
         new_file.write_text("---\ntitle: New\n---\nbody")
         # Touch it to ensure mtime is after marker
         import os
+
         os.utime(str(new_file), (time.time() + 1, time.time() + 1))
 
-        with patch.object(si, "_SCAN_MARKER_PATH", marker), \
-             patch.object(si, "_get_backend", return_value=mock_backend):
+        with (
+            patch.object(si, "_SCAN_MARKER_PATH", marker),
+            patch.object(si, "_get_backend", return_value=mock_backend),
+        ):
             # Use max_age_seconds=0 to force the scan to run
             count = si.incremental_refresh(config, max_age_seconds=0)
 
@@ -140,8 +153,10 @@ class TestIncrementalRefresh:
         """prune_stale_notes is called once after indexing to remove deleted entries."""
         marker = tmp_path / "marker"
 
-        with patch.object(si, "_SCAN_MARKER_PATH", marker), \
-             patch.object(si, "_get_backend", return_value=mock_backend):
+        with (
+            patch.object(si, "_SCAN_MARKER_PATH", marker),
+            patch.object(si, "_get_backend", return_value=mock_backend),
+        ):
             si.incremental_refresh(config, max_age_seconds=3600)
 
         mock_backend.prune_stale_notes.assert_called_once()
@@ -150,8 +165,10 @@ class TestIncrementalRefresh:
         """Returns -1 when no search backend is available."""
         marker = tmp_path / "marker"
 
-        with patch.object(si, "_SCAN_MARKER_PATH", marker), \
-             patch.object(si, "_get_backend", return_value=None):
+        with (
+            patch.object(si, "_SCAN_MARKER_PATH", marker),
+            patch.object(si, "_get_backend", return_value=None),
+        ):
             count = si.incremental_refresh(config, max_age_seconds=3600)
 
         assert count == -1
@@ -172,21 +189,27 @@ class TestIncrementalRefresh:
         marker = tmp_path / "marker"
         mock_backend.index_note.side_effect = RuntimeError("index failure")
 
-        with patch.object(si, "_SCAN_MARKER_PATH", marker), \
-             patch.object(si, "_get_backend", return_value=mock_backend):
+        with (
+            patch.object(si, "_SCAN_MARKER_PATH", marker),
+            patch.object(si, "_get_backend", return_value=mock_backend),
+        ):
             # Should not raise
             count = si.incremental_refresh(config, max_age_seconds=3600)
 
         # Errors on individual files are swallowed; marker should still be written
         assert marker.exists()
 
-    def test_swallows_prune_exception(self, vault, config, mock_backend, tmp_path, capsys):
+    def test_swallows_prune_exception(
+        self, vault, config, mock_backend, tmp_path, capsys
+    ):
         """If prune_stale_notes raises, the error is logged and not propagated."""
         marker = tmp_path / "marker"
         mock_backend.prune_stale_notes.side_effect = RuntimeError("prune failure")
 
-        with patch.object(si, "_SCAN_MARKER_PATH", marker), \
-             patch.object(si, "_get_backend", return_value=mock_backend):
+        with (
+            patch.object(si, "_SCAN_MARKER_PATH", marker),
+            patch.object(si, "_get_backend", return_value=mock_backend),
+        ):
             count = si.incremental_refresh(config, max_age_seconds=3600)
 
         captured = capsys.readouterr()
@@ -199,19 +222,25 @@ class TestIncrementalRefresh:
         # Marker is 50 seconds old → should be skipped with 100s interval
         marker.write_text(str(time.time() - 50))
 
-        with patch.object(si, "_SCAN_MARKER_PATH", marker), \
-             patch.object(si, "_get_backend", return_value=mock_backend):
+        with (
+            patch.object(si, "_SCAN_MARKER_PATH", marker),
+            patch.object(si, "_get_backend", return_value=mock_backend),
+        ):
             count = si.incremental_refresh(config)
 
         assert count == -1
 
-    def test_marker_updated_after_successful_refresh(self, vault, config, mock_backend, tmp_path):
+    def test_marker_updated_after_successful_refresh(
+        self, vault, config, mock_backend, tmp_path
+    ):
         """Marker file timestamp is updated to approximately now after a successful run."""
         marker = tmp_path / "marker"
         before = time.time()
 
-        with patch.object(si, "_SCAN_MARKER_PATH", marker), \
-             patch.object(si, "_get_backend", return_value=mock_backend):
+        with (
+            patch.object(si, "_SCAN_MARKER_PATH", marker),
+            patch.object(si, "_get_backend", return_value=mock_backend),
+        ):
             si.incremental_refresh(config, max_age_seconds=3600)
 
         after = time.time()
@@ -223,11 +252,13 @@ class TestIncrementalRefresh:
 # cb_recall calls incremental_refresh
 # ===========================================================================
 
+
 class TestCbRecallCallsRefresh:
     """cb_recall calls incremental_refresh before the search."""
 
     def _make_mcp(self):
         from unittest.mock import MagicMock
+
         mcp = MagicMock()
         tools = {}
 
@@ -235,6 +266,7 @@ class TestCbRecallCallsRefresh:
             def inner(fn):
                 tools[fn.__name__] = fn
                 return fn
+
             return inner
 
         mcp.tool = tool_decorator
@@ -250,7 +282,12 @@ class TestCbRecallCallsRefresh:
 
         # Clear cached imports so our patched shared module is used
         # Only pop specific modules to avoid breaking other tests
-        for mod in ["cyberbrain.mcp.shared", "cyberbrain.mcp.tools.recall", "cyberbrain.mcp.tools.reindex", "cyberbrain.mcp.tools.enrich"]:
+        for mod in [
+            "cyberbrain.mcp.shared",
+            "cyberbrain.mcp.tools.recall",
+            "cyberbrain.mcp.tools.reindex",
+            "cyberbrain.mcp.tools.enrich",
+        ]:
             sys.modules.pop(mod, None)
 
         mock_config = {"vault_path": str(vault), "search_backend": "grep"}
@@ -261,11 +298,16 @@ class TestCbRecallCallsRefresh:
             refresh_called_with.append(config)
             return -1
 
-        with patch("cyberbrain.mcp.shared._load_config", return_value=mock_config), \
-             patch("cyberbrain.mcp.shared._get_search_backend", return_value=None), \
-             patch("cyberbrain.extractors.search_index.incremental_refresh", side_effect=fake_refresh):
-
+        with (
+            patch("cyberbrain.mcp.shared._load_config", return_value=mock_config),
+            patch("cyberbrain.mcp.shared._get_search_backend", return_value=None),
+            patch(
+                "cyberbrain.extractors.search_index.incremental_refresh",
+                side_effect=fake_refresh,
+            ),
+        ):
             import cyberbrain.mcp.tools.recall as recall_module
+
             recall_module.register(mcp)
             cb_recall = tools["cb_recall"]
 
@@ -287,17 +329,26 @@ class TestCbRecallCallsRefresh:
 
         mcp, tools = self._make_mcp()
 
-        for mod in ["cyberbrain.mcp.shared", "cyberbrain.mcp.tools.recall", "cyberbrain.mcp.tools.reindex", "cyberbrain.mcp.tools.enrich"]:
+        for mod in [
+            "cyberbrain.mcp.shared",
+            "cyberbrain.mcp.tools.recall",
+            "cyberbrain.mcp.tools.reindex",
+            "cyberbrain.mcp.tools.enrich",
+        ]:
             sys.modules.pop(mod, None)
 
         mock_config = {"vault_path": str(vault), "search_backend": "grep"}
 
-        with patch("cyberbrain.mcp.shared._load_config", return_value=mock_config), \
-             patch("cyberbrain.mcp.shared._get_search_backend", return_value=None), \
-             patch("cyberbrain.extractors.search_index.incremental_refresh",
-                   side_effect=RuntimeError("refresh exploded")):
-
+        with (
+            patch("cyberbrain.mcp.shared._load_config", return_value=mock_config),
+            patch("cyberbrain.mcp.shared._get_search_backend", return_value=None),
+            patch(
+                "cyberbrain.extractors.search_index.incremental_refresh",
+                side_effect=RuntimeError("refresh exploded"),
+            ),
+        ):
             import cyberbrain.mcp.tools.recall as recall_module
+
             recall_module.register(mcp)
             cb_recall = tools["cb_recall"]
 
@@ -310,6 +361,7 @@ class TestCbRecallCallsRefresh:
 # cb_reindex rebuild bug fix
 # ===========================================================================
 
+
 class TestCbReindexRebuildFix:
     """cb_reindex(rebuild=True) calls search_index.build_full_index, not backend method."""
 
@@ -321,6 +373,7 @@ class TestCbReindexRebuildFix:
             def inner(fn):
                 tools[fn.__name__] = fn
                 return fn
+
             return inner
 
         mcp.tool = tool_decorator
@@ -330,6 +383,7 @@ class TestCbReindexRebuildFix:
                 sys.modules.pop(mod, None)
 
         import cyberbrain.mcp.tools.reindex as reindex_module
+
         reindex_module.register(mcp)
         return tools["cb_reindex"]
 
@@ -345,11 +399,16 @@ class TestCbReindexRebuildFix:
         def fake_build(cfg):
             build_called.append(cfg)
 
-        with patch("cyberbrain.mcp.shared._load_config", return_value=config), \
-             patch("cyberbrain.mcp.shared._get_search_backend", return_value=mock_backend), \
-             patch("cyberbrain.extractors.search_index.build_full_index",
-                   side_effect=fake_build):
-
+        with (
+            patch("cyberbrain.mcp.shared._load_config", return_value=config),
+            patch(
+                "cyberbrain.mcp.shared._get_search_backend", return_value=mock_backend
+            ),
+            patch(
+                "cyberbrain.extractors.search_index.build_full_index",
+                side_effect=fake_build,
+            ),
+        ):
             cb_reindex = self._register_reindex()
             result = cb_reindex(rebuild=True, prune=False)
 
@@ -366,10 +425,13 @@ class TestCbReindexRebuildFix:
 
         config = {"vault_path": str(tmp_path)}
 
-        with patch("cyberbrain.mcp.shared._load_config", return_value=config), \
-             patch("cyberbrain.mcp.shared._get_search_backend", return_value=mock_backend), \
-             patch("cyberbrain.extractors.search_index.build_full_index"):
-
+        with (
+            patch("cyberbrain.mcp.shared._load_config", return_value=config),
+            patch(
+                "cyberbrain.mcp.shared._get_search_backend", return_value=mock_backend
+            ),
+            patch("cyberbrain.extractors.search_index.build_full_index"),
+        ):
             cb_reindex = self._register_reindex()
             result = cb_reindex(rebuild=True, prune=False)
 

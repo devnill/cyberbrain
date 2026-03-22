@@ -8,27 +8,35 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from cyberbrain.mcp.shared import _load_config, RUNS_LOG_PATH
+from cyberbrain.mcp.shared import RUNS_LOG_PATH, _load_config
 from cyberbrain.mcp.tools.recall import _DEFAULT_DB_PATH, _DEFAULT_MANIFEST_PATH
 
 
 def _read_index_stats(config: dict) -> dict:
     """Query SQLite index for note counts, relation count, and stale path count."""
     import sqlite3
+
     db_path = config.get("search_db_path", _DEFAULT_DB_PATH)
     try:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         by_type = {}
-        for row in conn.execute("SELECT type, COUNT(*) AS cnt FROM notes GROUP BY type ORDER BY cnt DESC"):
+        for row in conn.execute(
+            "SELECT type, COUNT(*) AS cnt FROM notes GROUP BY type ORDER BY cnt DESC"
+        ):
             by_type[row["type"] or "(none)"] = row["cnt"]
         total = sum(by_type.values())
         relations_count = conn.execute("SELECT COUNT(*) FROM relations").fetchone()[0]
         all_paths = [r[0] for r in conn.execute("SELECT path FROM notes").fetchall()]
         stale_count = sum(1 for p in all_paths if not Path(p).exists())
         conn.close()
-        return {"total": total, "by_type": by_type, "relations_count": relations_count, "stale_count": stale_count}
-    except Exception:
+        return {
+            "total": total,
+            "by_type": by_type,
+            "relations_count": relations_count,
+            "stale_count": stale_count,
+        }
+    except Exception:  # intentional: SQLite not found or schema mismatch returns empty stats rather than crashing
         return {}
 
 
@@ -88,6 +96,7 @@ def _write_prefs_section(vault_path: str, prefs_text: str) -> None:
     else:
         # Replace existing section
         import re as _re
+
         rest = text[idx:]
         end_match = None
         for m in _re.finditer(r"^## ", rest, _re.MULTILINE):
@@ -105,62 +114,101 @@ def _write_prefs_section(vault_path: str, prefs_text: str) -> None:
 def register(mcp: FastMCP) -> None:
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, idempotentHint=True))
     def cb_configure(
-        vault_path: Annotated[str | None, Field(
-            description="Absolute path to your notes folder. Creates the directory if it doesn't exist. Must be within your home directory."
-        )] = None,
-        inbox: Annotated[str | None, Field(
-            description="Vault-relative subfolder for general notes, e.g. 'AI/Claude-Sessions'. Default: 'AI/Claude-Sessions'."
-        )] = None,
-        capture_mode: Annotated[str | None, Field(
-            description="How to file insights in Claude Desktop: 'suggest' (offer first), 'auto' (file immediately), 'manual' (only when asked)."
-        )] = None,
-        discover: Annotated[bool, Field(
-            description="Search this Mac for existing Obsidian vaults and return candidates."
-        )] = False,
-        show_prefs: Annotated[bool, Field(
-            description="Display the current Cyberbrain Preferences section from the vault CLAUDE.md."
-        )] = False,
-        set_prefs: Annotated[str | None, Field(
-            description="Replace the Cyberbrain Preferences section in vault CLAUDE.md with this text. Use natural language to describe extraction and consolidation preferences."
-        )] = None,
-        reset_prefs: Annotated[bool, Field(
-            description="Restore the Cyberbrain Preferences section in vault CLAUDE.md to the built-in defaults."
-        )] = False,
-        working_memory_ttl: Annotated[dict | None, Field(
-            description=(
-                "Set per-type working memory TTL (days before review). Pass a dict with type names as keys "
-                "and day counts as values, plus an optional 'default' key. "
-                "Example: {\"default\": 28, \"decision\": 56, \"problem\": 14}. "
-                "Only affects newly written working-memory notes."
-            )
-        )] = None,
-        tool_models: Annotated[dict | None, Field(
-            description=(
-                "Set per-tool model overrides. Pass a dict with tool names as keys and model names as values. "
-                "Valid keys: restructure, recall, enrich, review, judge. "
-                "Example: {\"restructure\": \"claude-sonnet-4-5-20250514\", \"judge\": \"claude-sonnet-4-5-20250514\"}. "
-                "Omitted keys fall back to the global model."
-            )
-        )] = None,
-        quality_gate_enabled: Annotated[bool | None, Field(
-            description="Enable or disable quality gates for curation tools (restructure, enrich, review, recall). Default: True."
-        )] = None,
-        proactive_recall: Annotated[bool | None, Field(
-            description="Enable or disable proactive recall (automatic context injection). Default: True."
-        )] = None,
-        uncertain_filing_behavior: Annotated[str | None, Field(
-            description=(
-                "What to do when autofile confidence is below threshold. "
-                "'inbox' routes the beat to the inbox folder (default). "
-                "'ask' returns a clarification prompt to the user before writing."
-            )
-        )] = None,
-        uncertain_filing_threshold: Annotated[float | None, Field(
-            description=(
-                "Confidence threshold (0.0-1.0) below which uncertain_filing_behavior applies. "
-                "Default: 0.5. Beats with confidence >= threshold are filed normally."
-            )
-        )] = None,
+        vault_path: Annotated[
+            str | None,
+            Field(
+                description="Absolute path to your notes folder. Creates the directory if it doesn't exist. Must be within your home directory."
+            ),
+        ] = None,
+        inbox: Annotated[
+            str | None,
+            Field(
+                description="Vault-relative subfolder for general notes, e.g. 'AI/Claude-Sessions'. Default: 'AI/Claude-Sessions'."
+            ),
+        ] = None,
+        capture_mode: Annotated[
+            str | None,
+            Field(
+                description="How to file insights in Claude Desktop: 'suggest' (offer first), 'auto' (file immediately), 'manual' (only when asked)."
+            ),
+        ] = None,
+        discover: Annotated[
+            bool,
+            Field(
+                description="Search this Mac for existing Obsidian vaults and return candidates."
+            ),
+        ] = False,
+        show_prefs: Annotated[
+            bool,
+            Field(
+                description="Display the current Cyberbrain Preferences section from the vault CLAUDE.md."
+            ),
+        ] = False,
+        set_prefs: Annotated[
+            str | None,
+            Field(
+                description="Replace the Cyberbrain Preferences section in vault CLAUDE.md with this text. Use natural language to describe extraction and consolidation preferences."
+            ),
+        ] = None,
+        reset_prefs: Annotated[
+            bool,
+            Field(
+                description="Restore the Cyberbrain Preferences section in vault CLAUDE.md to the built-in defaults."
+            ),
+        ] = False,
+        working_memory_ttl: Annotated[
+            dict | None,
+            Field(
+                description=(
+                    "Set per-type working memory TTL (days before review). Pass a dict with type names as keys "
+                    "and day counts as values, plus an optional 'default' key. "
+                    'Example: {"default": 28, "decision": 56, "problem": 14}. '
+                    "Only affects newly written working-memory notes."
+                )
+            ),
+        ] = None,
+        tool_models: Annotated[
+            dict | None,
+            Field(
+                description=(
+                    "Set per-tool model overrides. Pass a dict with tool names as keys and model names as values. "
+                    "Valid keys: restructure, recall, enrich, review, judge. "
+                    'Example: {"restructure": "claude-sonnet-4-5-20250514", "judge": "claude-sonnet-4-5-20250514"}. '
+                    "Omitted keys fall back to the global model."
+                )
+            ),
+        ] = None,
+        quality_gate_enabled: Annotated[
+            bool | None,
+            Field(
+                description="Enable or disable quality gates for curation tools (restructure, enrich, review, recall). Default: True."
+            ),
+        ] = None,
+        proactive_recall: Annotated[
+            bool | None,
+            Field(
+                description="Enable or disable proactive recall (automatic context injection). Default: True."
+            ),
+        ] = None,
+        uncertain_filing_behavior: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "What to do when autofile confidence is below threshold. "
+                    "'inbox' routes the beat to the inbox folder (default). "
+                    "'ask' returns a clarification prompt to the user before writing."
+                )
+            ),
+        ] = None,
+        uncertain_filing_threshold: Annotated[
+            float | None,
+            Field(
+                description=(
+                    "Confidence threshold (0.0-1.0) below which uncertain_filing_behavior applies. "
+                    "Default: 0.5. Beats with confidence >= threshold are filed normally."
+                )
+            ),
+        ] = None,
     ) -> str:
         """
         Configure cyberbrain or show current configuration.
@@ -184,7 +232,9 @@ def register(mcp: FastMCP) -> None:
         import json as _json
         import threading
 
-        cfg_path = Path.home() / ".claude" / "cyberbrain" / "config.json"
+        cfg_path = (
+            Path.home() / ".claude" / "cyberbrain" / "config.json"
+        )  # dynamic: tests monkeypatch Path.home()
 
         # --- preferences operations ---
         if show_prefs or set_prefs is not None or reset_prefs:
@@ -216,7 +266,7 @@ def register(mcp: FastMCP) -> None:
             if cfg_path.exists():
                 try:
                     return _json.loads(cfg_path.read_text())
-                except Exception:
+                except (OSError, _json.JSONDecodeError):
                     return {}
             return {}
 
@@ -227,7 +277,11 @@ def register(mcp: FastMCP) -> None:
         if discover:
             search_roots = [
                 Path.home() / "Documents",
-                Path.home() / "Library" / "Mobile Documents" / "iCloud~md~obsidian" / "Documents",
+                Path.home()
+                / "Library"
+                / "Mobile Documents"
+                / "iCloud~md~obsidian"
+                / "Documents",
                 Path.home() / "Obsidian",
                 Path.home() / "Desktop",
             ]
@@ -264,7 +318,17 @@ def register(mcp: FastMCP) -> None:
 
         # --- writes ---
         changed = []
-        if vault_path is not None or inbox is not None or capture_mode is not None or working_memory_ttl is not None or tool_models is not None or quality_gate_enabled is not None or proactive_recall is not None or uncertain_filing_behavior is not None or uncertain_filing_threshold is not None:
+        if (
+            vault_path is not None
+            or inbox is not None
+            or capture_mode is not None
+            or working_memory_ttl is not None
+            or tool_models is not None
+            or quality_gate_enabled is not None
+            or proactive_recall is not None
+            or uncertain_filing_behavior is not None
+            or uncertain_filing_threshold is not None
+        ):
             cfg = _load_raw()
 
             if vault_path is not None:
@@ -282,12 +346,16 @@ def register(mcp: FastMCP) -> None:
                 # Rebuild index in background
                 def _rebuild():
                     try:
-                        from cyberbrain.extractors.search_backends import get_search_backend
+                        from cyberbrain.extractors.search_backends import (
+                            get_search_backend,
+                        )
+
                         backend = get_search_backend(cfg)
                         if hasattr(backend, "build_full_index"):
-                            backend.build_full_index(cfg)
-                    except Exception:
+                            backend.build_full_index(cfg)  # type: ignore[reportAttributeAccessIssue]  # runtime duck-typed: hasattr guard above
+                    except Exception:  # intentional: background index rebuild failure is non-fatal; daemon thread
                         pass
+
                 threading.Thread(target=_rebuild, daemon=True).start()
 
             if inbox is not None:
@@ -305,10 +373,14 @@ def register(mcp: FastMCP) -> None:
 
             if working_memory_ttl is not None:
                 if not isinstance(working_memory_ttl, dict):
-                    raise ToolError("working_memory_ttl must be a dict, e.g. {\"default\": 28, \"decision\": 56}.")
+                    raise ToolError(
+                        'working_memory_ttl must be a dict, e.g. {"default": 28, "decision": 56}.'
+                    )
                 for k, v in working_memory_ttl.items():
                     if not isinstance(v, int) or v < 1:
-                        raise ToolError(f"working_memory_ttl values must be positive integers. Got {k!r}: {v!r}")
+                        raise ToolError(
+                            f"working_memory_ttl values must be positive integers. Got {k!r}: {v!r}"
+                        )
                 existing = cfg.get("working_memory_ttl", {})
                 existing.update(working_memory_ttl)
                 cfg["working_memory_ttl"] = existing
@@ -316,8 +388,16 @@ def register(mcp: FastMCP) -> None:
 
             if tool_models is not None:
                 if not isinstance(tool_models, dict):
-                    raise ToolError("tool_models must be a dict, e.g. {\"restructure\": \"claude-sonnet-4-5-20250514\"}.")
-                _valid_tool_keys = {"restructure", "recall", "enrich", "review", "judge"}
+                    raise ToolError(
+                        'tool_models must be a dict, e.g. {"restructure": "claude-sonnet-4-5-20250514"}.'
+                    )
+                _valid_tool_keys = {
+                    "restructure",
+                    "recall",
+                    "enrich",
+                    "review",
+                    "judge",
+                }
                 for k, v in tool_models.items():
                     if k not in _valid_tool_keys:
                         raise ToolError(
@@ -325,7 +405,9 @@ def register(mcp: FastMCP) -> None:
                             f"Valid keys: {', '.join(sorted(_valid_tool_keys))}."
                         )
                     if not isinstance(v, str) or not v.strip():
-                        raise ToolError(f"tool_models values must be non-empty strings. Got {k!r}: {v!r}")
+                        raise ToolError(
+                            f"tool_models values must be non-empty strings. Got {k!r}: {v!r}"
+                        )
                     cfg[f"{k}_model"] = v
                     changed.append(f"{k}_model → {v}")
 
@@ -344,15 +426,21 @@ def register(mcp: FastMCP) -> None:
                         f"uncertain_filing_behavior must be 'inbox' or 'ask'. Got: {uncertain_filing_behavior}"
                     )
                 cfg["uncertain_filing_behavior"] = uncertain_filing_behavior
-                changed.append(f"uncertain_filing_behavior → {uncertain_filing_behavior}")
+                changed.append(
+                    f"uncertain_filing_behavior → {uncertain_filing_behavior}"
+                )
 
             if uncertain_filing_threshold is not None:
-                if not isinstance(uncertain_filing_threshold, (int, float)) or not (0.0 <= uncertain_filing_threshold <= 1.0):
+                if not isinstance(uncertain_filing_threshold, (int, float)) or not (
+                    0.0 <= uncertain_filing_threshold <= 1.0
+                ):
                     raise ToolError(
                         f"uncertain_filing_threshold must be a float between 0.0 and 1.0. Got: {uncertain_filing_threshold}"
                     )
                 cfg["uncertain_filing_threshold"] = float(uncertain_filing_threshold)
-                changed.append(f"uncertain_filing_threshold → {uncertain_filing_threshold}")
+                changed.append(
+                    f"uncertain_filing_threshold → {uncertain_filing_threshold}"
+                )
 
             _save_raw(cfg)
             result = "Configuration updated:\n" + "\n".join(f"  - {c}" for c in changed)
@@ -373,20 +461,32 @@ def register(mcp: FastMCP) -> None:
             lines.append(f"              ✓ exists ({note_count} notes indexed)")
         elif vault_path_obj:
             lines.append(f"Vault:        {vault}")
-            lines.append(f"              ⚠ directory does not exist")
+            lines.append("              ⚠ directory does not exist")
         else:
-            lines.append(f"Vault:        (not configured)")
-            lines.append(f"              Run cb_configure(discover=True) to find Obsidian vaults,")
-            lines.append(f"              or cb_configure(vault_path='/path/to/folder') to set one.")
+            lines.append("Vault:        (not configured)")
+            lines.append(
+                "              Run cb_configure(discover=True) to find Obsidian vaults,"
+            )
+            lines.append(
+                "              or cb_configure(vault_path='/path/to/folder') to set one."
+            )
 
         lines.append(f"Inbox:        {cfg.get('inbox', 'AI/Claude-Sessions')}")
         backend = cfg.get("backend", "claude-code")
         model = cfg.get("model", "claude-haiku-4-5")
         lines.append(f"Backend:      {backend} ({model})")
-        _tool_model_keys = ["restructure_model", "recall_model", "enrich_model", "review_model", "judge_model"]
+        _tool_model_keys = [
+            "restructure_model",
+            "recall_model",
+            "enrich_model",
+            "review_model",
+            "judge_model",
+        ]
         overrides = {k: cfg[k] for k in _tool_model_keys if k in cfg}
         if overrides:
-            override_parts = [f"{k.replace('_model', '')}: {v}" for k, v in overrides.items()]
+            override_parts = [
+                f"{k.replace('_model', '')}: {v}" for k, v in overrides.items()
+            ]
             lines.append(f"Tool models:  {', '.join(override_parts)}")
         if cfg.get("quality_gate_enabled") is False:
             lines.append("Quality gate: disabled")
@@ -396,13 +496,16 @@ def register(mcp: FastMCP) -> None:
         lines.append(f"Capture mode: {capture}")
         filing_behavior = cfg.get("uncertain_filing_behavior", "inbox")
         filing_threshold = cfg.get("uncertain_filing_threshold", 0.5)
-        lines.append(f"Uncertain filing: behavior={filing_behavior}, threshold={filing_threshold}")
+        lines.append(
+            f"Uncertain filing: behavior={filing_behavior}, threshold={filing_threshold}"
+        )
 
         # Last extraction run
         runs_log = Path(RUNS_LOG_PATH)
         if runs_log.exists():
             try:
                 import json as _json2
+
                 lines_raw = runs_log.read_text(encoding="utf-8").splitlines()
                 last_run = None
                 for line in reversed(lines_raw):
@@ -411,30 +514,39 @@ def register(mcp: FastMCP) -> None:
                         try:
                             last_run = _json2.loads(line)
                             break
-                        except Exception:
+                        except _json2.JSONDecodeError:
                             pass
                 if last_run:
                     ts = last_run.get("timestamp", "")[:16].replace("T", " ")
                     beats = last_run.get("beats_written", 0)
                     sid = last_run.get("session_id", "")[:8]
-                    lines.append(f"Last capture: {ts} ({beats} beats from session {sid})")
-            except Exception:
+                    lines.append(
+                        f"Last capture: {ts} ({beats} beats from session {sid})"
+                    )
+            except (
+                OSError
+            ):  # intentional: runs log unreadable is non-fatal for status display
                 pass
 
         lines.append("")
-        lines.append("To change settings: cb_configure(vault_path=..., inbox=..., capture_mode=...)")
+        lines.append(
+            "To change settings: cb_configure(vault_path=..., inbox=..., capture_mode=...)"
+        )
         lines.append("To find Obsidian vaults: cb_configure(discover=True)")
         return "\n".join(lines)
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
     def cb_status(
-        last_n_runs: Annotated[int, Field(ge=1, le=50, description="How many recent runs to show")] = 10,
+        last_n_runs: Annotated[
+            int, Field(ge=1, le=50, description="How many recent runs to show")
+        ] = 10,
     ) -> str:
         """
         Show cyberbrain system status: recent extraction runs, index health, and config summary.
         Call this to understand what cyberbrain has captured and whether the index is healthy.
         """
         import json as _json
+
         config = _load_config()
 
         # --- Recent runs ---
@@ -459,10 +571,15 @@ def register(mcp: FastMCP) -> None:
         # --- Manifest ---
         manifest = {}
         try:
-            manifest_path = Path(config.get("search_manifest_path", _DEFAULT_MANIFEST_PATH))
+            manifest_path = Path(
+                config.get("search_manifest_path", _DEFAULT_MANIFEST_PATH)
+            )
             if manifest_path.exists():
                 manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
-        except Exception:
+        except (
+            OSError,
+            _json.JSONDecodeError,
+        ):  # intentional: missing/malformed manifest returns empty dict for status display
             pass
 
         # --- Format output ---
@@ -490,7 +607,9 @@ def register(mcp: FastMCP) -> None:
             lines.append("")
             lines.append("### Last Run — Beats Extracted")
             for b in last.get("beats", []):
-                lines.append(f"- **{b.get('title', '')}** ({b.get('type', '')} · {b.get('scope', '')}) → {b.get('path', '')}")
+                lines.append(
+                    f"- **{b.get('title', '')}** ({b.get('type', '')} · {b.get('scope', '')}) → {b.get('path', '')}"
+                )
             for err in last.get("errors", []):
                 lines.append(f"- ⚠ {err}")
             if not last.get("beats") and not last.get("errors"):
@@ -506,11 +625,17 @@ def register(mcp: FastMCP) -> None:
                 lines.append(f"  - {type_str}")
             lines.append(f"- Relations: {stats['relations_count']}")
             stale = stats["stale_count"]
-            stale_note = "✓ all indexed notes exist on disk" if stale == 0 else f"⚠ {stale} path(s) not found on disk"
+            stale_note = (
+                "✓ all indexed notes exist on disk"
+                if stale == 0
+                else f"⚠ {stale} path(s) not found on disk"
+            )
             lines.append(f"- Stale paths: {stale} ({stale_note})")
             if manifest.get("model_name"):
                 vec_count = len(manifest.get("id_map", []))
-                lines.append(f"- Semantic vectors: {vec_count} (model: {manifest['model_name']})")
+                lines.append(
+                    f"- Semantic vectors: {vec_count} (model: {manifest['model_name']})"
+                )
         else:
             lines.append("Index not found or empty.")
 
@@ -524,10 +649,18 @@ def register(mcp: FastMCP) -> None:
         lines.append(f"- Backend: {backend} ({model})")
 
         # Per-tool model overrides
-        _tool_model_keys = ["restructure_model", "recall_model", "enrich_model", "review_model", "judge_model"]
+        _tool_model_keys = [
+            "restructure_model",
+            "recall_model",
+            "enrich_model",
+            "review_model",
+            "judge_model",
+        ]
         overrides = {k: config[k] for k in _tool_model_keys if k in config}
         if overrides:
-            override_parts = [f"{k.replace('_model', '')}: {v}" for k, v in overrides.items()]
+            override_parts = [
+                f"{k.replace('_model', '')}: {v}" for k, v in overrides.items()
+            ]
             lines.append(f"- Per-tool models: {', '.join(override_parts)}")
 
         if not config.get("quality_gate_enabled", True):
@@ -541,20 +674,28 @@ def register(mcp: FastMCP) -> None:
             prefs = _read_prefs_section(vp)
             if prefs:
                 prefs_lines = len(prefs.strip().splitlines())
-                lines.append(f"- Preferences: set ({prefs_lines} lines) — cb_configure(show_prefs=True) to view")
+                lines.append(
+                    f"- Preferences: set ({prefs_lines} lines) — cb_configure(show_prefs=True) to view"
+                )
             else:
-                lines.append("- Preferences: not set — cb_configure(reset_prefs=True) to add defaults")
+                lines.append(
+                    "- Preferences: not set — cb_configure(reset_prefs=True) to add defaults"
+                )
 
             # Provenance coverage
             try:
                 import sqlite3 as _sqlite3
+
                 from cyberbrain.mcp.tools.recall import _DEFAULT_DB_PATH
+
                 db_path = config.get("search_db_path", _DEFAULT_DB_PATH)
                 conn = _sqlite3.connect(db_path)
                 total_notes = conn.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
                 conn.close()
-                lines.append(f"- Provenance coverage: {total_notes} notes indexed — run cb_enrich to backfill missing cb_source fields")
-            except Exception:
+                lines.append(
+                    f"- Provenance coverage: {total_notes} notes indexed — run cb_enrich to backfill missing cb_source fields"
+                )
+            except Exception:  # intentional: SQLite unavailable or schema mismatch is non-fatal for status display
                 pass
 
             # Working memory stats
@@ -563,11 +704,13 @@ def register(mcp: FastMCP) -> None:
             if wm_path.exists():
                 wm_notes = list(wm_path.rglob("*.md"))
                 from datetime import date as _date
+
                 today = _date.today()
                 due_count = 0
                 for p in wm_notes:
                     try:
                         import yaml as _yaml
+
                         text = p.read_text(encoding="utf-8", errors="replace")
                         if not text.startswith("---"):
                             continue
@@ -578,10 +721,12 @@ def register(mcp: FastMCP) -> None:
                         raw = fm.get("cb_review_after", "")
                         if raw and _date.fromisoformat(str(raw)) <= today:
                             due_count += 1
-                    except Exception:
+                    except Exception:  # intentional: per-note read/parse/date failure is non-fatal for review count
                         pass
                 lines.append(f"- Working memory: {len(wm_notes)} notes in {wm_folder}")
                 if due_count:
-                    lines.append(f"  ⚠ {due_count} note(s) due for review — run cb_review()")
+                    lines.append(
+                        f"  ⚠ {due_count} note(s) due for review — run cb_review()"
+                    )
 
         return "\n".join(lines)

@@ -24,7 +24,6 @@ Coverage:
 All LLM calls and vault I/O are mocked. No real API calls.
 """
 
-import json
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -37,11 +36,33 @@ import pytest
 
 REPO_ROOT = Path(__file__).parent.parent
 
+# ---------------------------------------------------------------------------
+# sys.modules setup — why this file needs it
+#
+# Module temporarily mocked: cyberbrain.extractors.extract_beats
+# Modules cleared:           cyberbrain.mcp.shared, cyberbrain.mcp.tools.*,
+#                            cyberbrain.mcp.resources
+#
+# shared.py imports `from cyberbrain.extractors.extract_beats import BackendError`
+# at module level.  If the real extract_beats module is loaded first, subsequent
+# patch() calls can target it normally — but if a *different* mock is installed,
+# BackendError becomes a foreign class and except-clause matching silently fails.
+#
+# Strategy: install a stub mock with the *real* BackendError attached so that
+# shared.py captures the correct exception class.  After the tool modules are
+# imported we restore the real extract_beats so string-based patch() targets
+# (e.g. patch("cyberbrain.extractors.extract_beats.write_beat")) continue to
+# work in tests that run after this file.
+#
+# The tool modules (extract, file, recall, manage, resources) are evicted so
+# they re-import against the stub mock rather than any stale cached version.
+# Package-level attribute caches on cyberbrain.mcp and cyberbrain.mcp.tools
+# are also cleared because Python keeps submodule references as package attrs
+# in addition to sys.modules entries.
+# ---------------------------------------------------------------------------
 
-class _BackendError(Exception):
-    """Real exception class so try/except BackendError in tool code works."""
-    pass
-
+from cyberbrain.extractors.backends import BackendError as _BackendError
+from tests.conftest import _clear_module_cache
 
 # Mock extract_beats before shared.py imports it at module level
 _mock_eb = MagicMock()
@@ -65,8 +86,10 @@ sys.modules["cyberbrain.extractors.extract_beats"] = _mock_eb
 # FakeMCP: captures tool/resource/prompt registrations without requiring FastMCP
 # ---------------------------------------------------------------------------
 
+
 class _Annotations:
     """Minimal stand-in for ToolAnnotations."""
+
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
@@ -74,7 +97,7 @@ class _Annotations:
 
 class FakeMCP:
     def __init__(self):
-        self._tools = {}   # name -> {"fn": fn, "annotations": annotations}
+        self._tools = {}  # name -> {"fn": fn, "annotations": annotations}
         self._resources = {}
         self._prompts = {}
 
@@ -82,18 +105,21 @@ class FakeMCP:
         def decorator(fn):
             self._tools[fn.__name__] = {"fn": fn, "annotations": annotations}
             return fn
+
         return decorator
 
     def resource(self, uri, **kwargs):
         def decorator(fn):
             self._resources[fn.__name__] = {"fn": fn, "uri": uri}
             return fn
+
         return decorator
 
     def prompt(self, **kwargs):
         def decorator(fn):
             self._prompts[fn.__name__] = {"fn": fn}
             return fn
+
         return decorator
 
 
@@ -101,13 +127,20 @@ class FakeMCP:
 # Import tool modules and register with FakeMCP
 # ---------------------------------------------------------------------------
 
-# Clear any stale module cache entries from previous test runs in same process.
+# Evict stale tool module cache entries so fresh imports bind to the stub mock.
 # Also clear package-level attribute caches — Python caches submodule imports as
 # attributes on the parent package, so popping sys.modules isn't enough; we must
 # also remove the stale attribute so the next import gets a fresh module.
-for _mod in ["cyberbrain.mcp.shared", "cyberbrain.mcp.tools.extract", "cyberbrain.mcp.tools.file",
-             "cyberbrain.mcp.tools.recall", "cyberbrain.mcp.tools.manage", "cyberbrain.mcp.resources"]:
-    sys.modules.pop(_mod, None)
+_clear_module_cache(
+    [
+        "cyberbrain.mcp.shared",
+        "cyberbrain.mcp.tools.extract",
+        "cyberbrain.mcp.tools.file",
+        "cyberbrain.mcp.tools.recall",
+        "cyberbrain.mcp.tools.manage",
+        "cyberbrain.mcp.resources",
+    ]
+)
 
 # Remove stale submodule attributes from the tools package object
 if "cyberbrain.mcp.tools" in sys.modules:
@@ -119,12 +152,12 @@ if "cyberbrain.mcp" in sys.modules:
     _mcp_pkg.__dict__.pop("shared", None)
     _mcp_pkg.__dict__.pop("resources", None)
 
+import cyberbrain.mcp.resources as _resources_mod
 import cyberbrain.mcp.shared as _shared
 from cyberbrain.mcp.tools import extract as _extract_mod
 from cyberbrain.mcp.tools import file as _file_mod
-from cyberbrain.mcp.tools import recall as _recall_mod
 from cyberbrain.mcp.tools import manage as _manage_mod
-import cyberbrain.mcp.resources as _resources_mod
+from cyberbrain.mcp.tools import recall as _recall_mod
 
 # Restore the original extract_beats module so patch() targets work in other test files
 if _orig_extract_beats is not None:
@@ -154,6 +187,7 @@ except ImportError:
     try:
         from mcp.server.fastmcp.exceptions import ToolError  # type: ignore[no-redef]
     except ImportError:
+
         class ToolError(Exception):  # type: ignore[no-redef]
             pass
 
@@ -209,6 +243,7 @@ def transcript_file(fake_home):
 # cb_extract — path restriction
 # ===========================================================================
 
+
 class TestCbExtractPathRestriction:
     """transcript_path must be within ~/.claude/projects/ or a ToolError is raised."""
 
@@ -244,6 +279,7 @@ class TestCbExtractPathRestriction:
 # cb_extract — ToolError on genuine failures
 # ===========================================================================
 
+
 class TestCbExtractErrors:
     """cb_extract raises ToolError for every genuine failure."""
 
@@ -261,23 +297,41 @@ class TestCbExtractErrors:
                 with pytest.raises(ToolError, match="empty"):
                     cb_extract(transcript_path=str(empty))
 
-    def test_raises_tool_error_when_jsonl_parse_fails(self, fake_home, mock_config, transcript_file):
+    def test_raises_tool_error_when_jsonl_parse_fails(
+        self, fake_home, mock_config, transcript_file
+    ):
         with patch.object(_extract_mod, "_load_config", return_value=mock_config):
-            with patch.object(_extract_mod, "parse_jsonl_transcript", side_effect=ValueError("bad jsonl")):
+            with patch.object(
+                _extract_mod,
+                "parse_jsonl_transcript",
+                side_effect=ValueError("bad jsonl"),
+            ):
                 with pytest.raises(ToolError, match="Failed to parse"):
                     cb_extract(transcript_path=str(transcript_file))
 
-    def test_raises_tool_error_on_backend_error(self, fake_home, mock_config, transcript_file):
+    def test_raises_tool_error_on_backend_error(
+        self, fake_home, mock_config, transcript_file
+    ):
         with patch.object(_extract_mod, "_load_config", return_value=mock_config):
-            with patch.object(_extract_mod, "parse_jsonl_transcript", return_value="content"):
-                with patch.object(_extract_mod, "_extract_beats", side_effect=_BackendError("timed out")):
+            with patch.object(
+                _extract_mod, "parse_jsonl_transcript", return_value="content"
+            ):
+                with patch.object(
+                    _extract_mod,
+                    "_extract_beats",
+                    side_effect=_BackendError("timed out"),
+                ):
                     with pytest.raises(ToolError) as exc_info:
                         cb_extract(transcript_path=str(transcript_file))
         assert "claude-code" in str(exc_info.value)
 
-    def test_returns_string_when_no_beats_extracted(self, fake_home, mock_config, transcript_file):
+    def test_returns_string_when_no_beats_extracted(
+        self, fake_home, mock_config, transcript_file
+    ):
         with patch.object(_extract_mod, "_load_config", return_value=mock_config):
-            with patch.object(_extract_mod, "parse_jsonl_transcript", return_value="content"):
+            with patch.object(
+                _extract_mod, "parse_jsonl_transcript", return_value="content"
+            ):
                 with patch.object(_extract_mod, "_extract_beats", return_value=[]):
                     result = cb_extract(transcript_path=str(transcript_file))
         assert result == "No beats extracted."
@@ -288,22 +342,31 @@ class TestCbExtractErrors:
 # cb_extract — cwd parameter
 # ===========================================================================
 
+
 class TestCbExtractCwdParam:
     """cwd parameter is forwarded to config loading for project-scoped routing."""
 
-    def test_cwd_is_forwarded_to_load_config(self, fake_home, mock_config, transcript_file):
+    def test_cwd_is_forwarded_to_load_config(
+        self, fake_home, mock_config, transcript_file
+    ):
         project_cwd = "/Users/dan/code/myproject"
         mock_load = MagicMock(return_value=mock_config)
         with patch.object(_extract_mod, "_load_config", mock_load):
-            with patch.object(_extract_mod, "parse_jsonl_transcript", return_value="content"):
+            with patch.object(
+                _extract_mod, "parse_jsonl_transcript", return_value="content"
+            ):
                 with patch.object(_extract_mod, "_extract_beats", return_value=[]):
                     cb_extract(transcript_path=str(transcript_file), cwd=project_cwd)
         mock_load.assert_called_with(project_cwd)
 
-    def test_cwd_defaults_to_home_when_omitted(self, fake_home, mock_config, transcript_file):
+    def test_cwd_defaults_to_home_when_omitted(
+        self, fake_home, mock_config, transcript_file
+    ):
         mock_load = MagicMock(return_value=mock_config)
         with patch.object(_extract_mod, "_load_config", mock_load):
-            with patch.object(_extract_mod, "parse_jsonl_transcript", return_value="content"):
+            with patch.object(
+                _extract_mod, "parse_jsonl_transcript", return_value="content"
+            ):
                 with patch.object(_extract_mod, "_extract_beats", return_value=[]):
                     cb_extract(transcript_path=str(transcript_file))
         called_with = mock_load.call_args[0][0]
@@ -314,23 +377,36 @@ class TestCbExtractCwdParam:
 # cb_extract — success path
 # ===========================================================================
 
+
 class TestCbExtractSuccess:
     """cb_extract returns a summary string listing created beats on success."""
 
-    def test_success_returns_summary_string(self, fake_home, mock_config, tmp_path, transcript_file):
+    def test_success_returns_summary_string(
+        self, fake_home, mock_config, tmp_path, transcript_file
+    ):
         vault = tmp_path / "vault"
         vault.mkdir(exist_ok=True)
         config = {**mock_config, "vault_path": str(vault)}
-        beat = {"title": "My Insight", "type": "insight", "scope": "general",
-                "summary": "Test", "tags": [], "body": "## Body\n\nContent."}
+        beat = {
+            "title": "My Insight",
+            "type": "insight",
+            "scope": "general",
+            "summary": "Test",
+            "tags": [],
+            "body": "## Body\n\nContent.",
+        }
         fake_path = vault / "AI" / "Claude-Sessions" / "My Insight.md"
         (vault / "AI" / "Claude-Sessions").mkdir(parents=True)
         fake_path.write_text("content")
 
         with patch.object(_extract_mod, "_load_config", return_value=config):
-            with patch.object(_extract_mod, "parse_jsonl_transcript", return_value="content"):
+            with patch.object(
+                _extract_mod, "parse_jsonl_transcript", return_value="content"
+            ):
                 with patch.object(_extract_mod, "_extract_beats", return_value=[beat]):
-                    with patch.object(_extract_mod, "write_beat", return_value=fake_path):
+                    with patch.object(
+                        _extract_mod, "write_beat", return_value=fake_path
+                    ):
                         result = cb_extract(transcript_path=str(transcript_file))
 
         assert "1/1" in result
@@ -341,6 +417,7 @@ class TestCbExtractSuccess:
 # cb_file — typed parameters
 # ===========================================================================
 
+
 class TestCbFileTypedParams:
     """cb_file takes explicit type, folder, and cwd parameters."""
 
@@ -349,8 +426,14 @@ class TestCbFileTypedParams:
         vault.mkdir(exist_ok=True)
         (vault / "AI" / "Claude-Sessions").mkdir(parents=True, exist_ok=True)
         config = {**mock_config, "vault_path": str(vault)}
-        original_beat = {"title": "A Note", "type": "insight", "scope": "general",
-                         "summary": "Test", "tags": [], "body": "body"}
+        original_beat = {
+            "title": "A Note",
+            "type": "insight",
+            "scope": "general",
+            "summary": "Test",
+            "tags": [],
+            "body": "body",
+        }
         captured_beats = []
 
         def fake_write(beat, cfg, session_id, cwd, now, **kwargs):
@@ -360,7 +443,9 @@ class TestCbFileTypedParams:
             return path
 
         with patch.object(_file_mod, "_load_config", return_value=config):
-            with patch.object(_file_mod, "_extract_beats", return_value=[original_beat]):
+            with patch.object(
+                _file_mod, "_extract_beats", return_value=[original_beat]
+            ):
                 with patch.object(_file_mod, "write_beat", side_effect=fake_write):
                     cb_file(content="Some insight content", type="decision")
 
@@ -373,8 +458,14 @@ class TestCbFileTypedParams:
         target_folder = "Personal/Recipes"
         (vault / target_folder).mkdir(parents=True, exist_ok=True)
         config = {**mock_config, "vault_path": str(vault)}
-        beat = {"title": "A Beat", "type": "reference", "scope": "general",
-                "summary": "Test", "tags": [], "body": "body"}
+        beat = {
+            "title": "A Beat",
+            "type": "reference",
+            "scope": "general",
+            "summary": "Test",
+            "tags": [],
+            "body": "body",
+        }
         captured_configs = []
 
         def fake_write(beat, cfg, session_id, cwd, now, **kwargs):
@@ -409,6 +500,7 @@ class TestCbFileTypedParams:
     def test_instructions_param_no_longer_exists(self):
         """cb_file no longer accepts an 'instructions' or 'type_override' parameter."""
         import inspect
+
         sig = inspect.signature(cb_file)
         assert "instructions" not in sig.parameters
         assert "type_override" not in sig.parameters
@@ -424,12 +516,15 @@ class TestCbFileTypedParams:
 # cb_file — ToolError on failures
 # ===========================================================================
 
+
 class TestCbFileErrors:
     """cb_file raises ToolError for genuine failures."""
 
     def test_raises_tool_error_on_backend_error(self, mock_config):
         with patch.object(_file_mod, "_load_config", return_value=mock_config):
-            with patch.object(_file_mod, "_extract_beats", side_effect=_BackendError("timed out")):
+            with patch.object(
+                _file_mod, "_extract_beats", side_effect=_BackendError("timed out")
+            ):
                 with pytest.raises(ToolError) as exc_info:
                     cb_file(content="Some content")
         assert "claude-code" in str(exc_info.value)
@@ -438,30 +533,57 @@ class TestCbFileErrors:
         vault = tmp_path / "vault"
         vault.mkdir(exist_ok=True)
         config = {**mock_config, "vault_path": str(vault)}
-        beat = {"title": "A Note", "type": "insight", "scope": "general",
-                "summary": "Test", "tags": [], "body": "body"}
+        beat = {
+            "title": "A Note",
+            "type": "insight",
+            "scope": "general",
+            "summary": "Test",
+            "tags": [],
+            "body": "body",
+        }
 
         with patch.object(_file_mod, "_load_config", return_value=config):
             with patch.object(_file_mod, "_extract_beats", return_value=[beat]):
-                with patch.object(_file_mod, "write_beat", side_effect=OSError("disk full")):
+                with patch.object(
+                    _file_mod, "write_beat", side_effect=OSError("disk full")
+                ):
                     with pytest.raises(ToolError) as exc_info:
                         cb_file(content="Some content")
 
-        assert "write error" in str(exc_info.value).lower() or "vault_path" in str(exc_info.value)
+        assert "write error" in str(exc_info.value).lower() or "vault_path" in str(
+            exc_info.value
+        )
 
-    def test_partial_write_failures_return_success_for_written_beats(self, mock_config, tmp_path):
+    def test_partial_write_failures_return_success_for_written_beats(
+        self, mock_config, tmp_path
+    ):
         vault = tmp_path / "vault"
         vault.mkdir(exist_ok=True)
         (vault / "AI" / "Claude-Sessions").mkdir(parents=True, exist_ok=True)
         config = {**mock_config, "vault_path": str(vault)}
         beats = [
-            {"title": "Beat One", "type": "insight", "scope": "general", "summary": "", "tags": [], "body": ""},
-            {"title": "Beat Two", "type": "reference", "scope": "general", "summary": "", "tags": [], "body": ""},
+            {
+                "title": "Beat One",
+                "type": "insight",
+                "scope": "general",
+                "summary": "",
+                "tags": [],
+                "body": "",
+            },
+            {
+                "title": "Beat Two",
+                "type": "reference",
+                "scope": "general",
+                "summary": "",
+                "tags": [],
+                "body": "",
+            },
         ]
         good_path = vault / "AI" / "Claude-Sessions" / "Beat One.md"
         good_path.write_text("content")
 
         call_count = {"n": 0}
+
         def fake_write(beat, cfg, session_id, cwd, now, **kwargs):
             call_count["n"] += 1
             if call_count["n"] == 1:
@@ -480,6 +602,7 @@ class TestCbFileErrors:
 # ===========================================================================
 # cb_recall — ToolError on short queries
 # ===========================================================================
+
 
 class TestCbRecallErrors:
     """cb_recall raises ToolError when the query is too short."""
@@ -502,7 +625,9 @@ class TestCbRecallErrors:
         config = {**BASE_CONFIG, "vault_path": str(vault)}
         with patch.object(_recall_mod, "_load_config", return_value=config):
             with patch.object(_recall_mod, "_get_search_backend", return_value=None):
-                with patch("subprocess.run", return_value=MagicMock(stdout="", returncode=0)):
+                with patch(
+                    "subprocess.run", return_value=MagicMock(stdout="", returncode=0)
+                ):
                     result = cb_recall(query="python")
         assert isinstance(result, str)
 
@@ -510,6 +635,7 @@ class TestCbRecallErrors:
 # ===========================================================================
 # cb_recall — empty results return a string, not ToolError
 # ===========================================================================
+
 
 class TestCbRecallEmptyResults:
     """Empty search results are a valid, non-error outcome."""
@@ -520,7 +646,9 @@ class TestCbRecallEmptyResults:
         config = {**BASE_CONFIG, "vault_path": str(vault)}
         with patch.object(_recall_mod, "_load_config", return_value=config):
             with patch.object(_recall_mod, "_get_search_backend", return_value=None):
-                with patch("subprocess.run", return_value=MagicMock(stdout="", returncode=0)):
+                with patch(
+                    "subprocess.run", return_value=MagicMock(stdout="", returncode=0)
+                ):
                     result = cb_recall(query="redis")
         assert isinstance(result, str)
         assert "No notes found" in result
@@ -531,17 +659,21 @@ class TestCbRecallEmptyResults:
 # cb_recall — max_results parameter schema
 # ===========================================================================
 
+
 class TestCbRecallMaxResults:
     """max_results default and schema bounds."""
 
     def test_max_results_default_is_five(self):
         import inspect
+
         sig = inspect.signature(cb_recall)
         assert sig.parameters["max_results"].default == 5
 
     def test_max_results_field_has_constraints(self):
         import inspect
+
         from pydantic.fields import FieldInfo
+
         sig = inspect.signature(cb_recall)
         param = sig.parameters["max_results"]
         annotation = param.annotation
@@ -551,13 +683,16 @@ class TestCbRecallMaxResults:
                 if isinstance(meta, FieldInfo):
                     field_info = meta
                     break
-        assert field_info is not None, "max_results should have a Pydantic FieldInfo annotation"
+        assert field_info is not None, (
+            "max_results should have a Pydantic FieldInfo annotation"
+        )
         assert field_info.metadata  # should have ge/le constraints
 
 
 # ===========================================================================
 # Tool annotations
 # ===========================================================================
+
 
 class TestToolAnnotations:
     """Tool annotations are correctly registered via register()."""
@@ -586,6 +721,7 @@ class TestToolAnnotations:
 # _parse_frontmatter (shared module helper)
 # ===========================================================================
 
+
 class TestParseFrontmatter:
     """_parse_frontmatter() is available via shared module."""
 
@@ -613,6 +749,7 @@ class TestParseFrontmatter:
 # cb_recall — search backend path
 # ===========================================================================
 
+
 class TestCbRecallSearchBackend:
     """cb_recall uses the pluggable search backend when available."""
 
@@ -630,19 +767,29 @@ class TestCbRecallSearchBackend:
     def test_uses_backend_search_when_backend_available(self, tmp_path):
         vault = self._make_vault(tmp_path)
         note = self._make_note(
-            vault, "JWT Auth.md",
+            vault,
+            "JWT Auth.md",
             '---\ntitle: "JWT Auth"\ntype: decision\ntags: []\nrelated: []\nsummary: "JWT auth summary"\ndate: 2026-01-01\n---\n\n## Body\n\nContent.',
         )
         from cyberbrain.extractors.search_backends import SearchResult
-        mock_result = SearchResult(path=str(note), title="JWT Auth", summary="JWT auth summary",
-                                   score=1.5, backend="fts5", note_type="decision")
+
+        mock_result = SearchResult(
+            path=str(note),
+            title="JWT Auth",
+            summary="JWT auth summary",
+            score=1.5,
+            backend="fts5",
+            note_type="decision",
+        )
         mock_backend = MagicMock()
         mock_backend.search.return_value = [mock_result]
         mock_backend.backend_name.return_value = "fts5"
 
         config = {**BASE_CONFIG, "vault_path": str(vault)}
         with patch.object(_recall_mod, "_load_config", return_value=config):
-            with patch.object(_recall_mod, "_get_search_backend", return_value=mock_backend):
+            with patch.object(
+                _recall_mod, "_get_search_backend", return_value=mock_backend
+            ):
                 result = cb_recall(query="jwt authentication")
 
         mock_backend.search.assert_called_once()
@@ -656,8 +803,12 @@ class TestCbRecallSearchBackend:
         mock_backend.backend_name.return_value = "fts5"
 
         with patch.object(_recall_mod, "_load_config", return_value=config):
-            with patch.object(_recall_mod, "_get_search_backend", return_value=mock_backend):
-                with patch("subprocess.run", return_value=MagicMock(stdout="", returncode=0)):
+            with patch.object(
+                _recall_mod, "_get_search_backend", return_value=mock_backend
+            ):
+                with patch(
+                    "subprocess.run", return_value=MagicMock(stdout="", returncode=0)
+                ):
                     result = cb_recall(query="jwt authentication")
 
         assert "No notes found" in result
@@ -670,8 +821,12 @@ class TestCbRecallSearchBackend:
         mock_backend.backend_name.return_value = "fts5"
 
         with patch.object(_recall_mod, "_load_config", return_value=config):
-            with patch.object(_recall_mod, "_get_search_backend", return_value=mock_backend):
-                with patch("subprocess.run", return_value=MagicMock(stdout="", returncode=0)):
+            with patch.object(
+                _recall_mod, "_get_search_backend", return_value=mock_backend
+            ):
+                with patch(
+                    "subprocess.run", return_value=MagicMock(stdout="", returncode=0)
+                ):
                     result = cb_recall(query="jwt authentication")
 
         assert isinstance(result, str)
@@ -679,19 +834,29 @@ class TestCbRecallSearchBackend:
     def test_result_card_includes_backend_name_in_header(self, tmp_path):
         vault = self._make_vault(tmp_path)
         note = self._make_note(
-            vault, "JWT Auth.md",
+            vault,
+            "JWT Auth.md",
             '---\ntitle: "JWT Auth"\ntype: decision\ntags: []\nrelated: []\nsummary: "Summary"\ndate: 2026-01-01\n---\n\n## Body\n\nContent.',
         )
         from cyberbrain.extractors.search_backends import SearchResult
-        mock_result = SearchResult(path=str(note), title="JWT Auth", summary="Summary",
-                                   score=1.5, backend="fts5", note_type="decision")
+
+        mock_result = SearchResult(
+            path=str(note),
+            title="JWT Auth",
+            summary="Summary",
+            score=1.5,
+            backend="fts5",
+            note_type="decision",
+        )
         mock_backend = MagicMock()
         mock_backend.search.return_value = [mock_result]
         mock_backend.backend_name.return_value = "fts5"
 
         config = {**BASE_CONFIG, "vault_path": str(vault)}
         with patch.object(_recall_mod, "_load_config", return_value=config):
-            with patch.object(_recall_mod, "_get_search_backend", return_value=mock_backend):
+            with patch.object(
+                _recall_mod, "_get_search_backend", return_value=mock_backend
+            ):
                 result = cb_recall(query="jwt")
 
         assert "fts5" in result
@@ -699,19 +864,30 @@ class TestCbRecallSearchBackend:
     def test_result_card_omits_related_when_empty(self, tmp_path):
         vault = self._make_vault(tmp_path)
         note = self._make_note(
-            vault, "JWT Auth.md",
+            vault,
+            "JWT Auth.md",
             '---\ntitle: "JWT Auth"\ntype: decision\ntags: []\nrelated: []\nsummary: "Summary"\ndate: 2026-01-01\n---\n\n## Body\n\nContent.',
         )
         from cyberbrain.extractors.search_backends import SearchResult
-        mock_result = SearchResult(path=str(note), title="JWT Auth", summary="Summary",
-                                   score=1.5, backend="fts5", note_type="decision", related=[])
+
+        mock_result = SearchResult(
+            path=str(note),
+            title="JWT Auth",
+            summary="Summary",
+            score=1.5,
+            backend="fts5",
+            note_type="decision",
+            related=[],
+        )
         mock_backend = MagicMock()
         mock_backend.search.return_value = [mock_result]
         mock_backend.backend_name.return_value = "fts5"
 
         config = {**BASE_CONFIG, "vault_path": str(vault)}
         with patch.object(_recall_mod, "_load_config", return_value=config):
-            with patch.object(_recall_mod, "_get_search_backend", return_value=mock_backend):
+            with patch.object(
+                _recall_mod, "_get_search_backend", return_value=mock_backend
+            ):
                 result = cb_recall(query="jwt")
 
         assert "Related:" not in result
@@ -720,6 +896,7 @@ class TestCbRecallSearchBackend:
 # ===========================================================================
 # cb_recall — synthesize
 # ===========================================================================
+
 
 class TestCbRecallSynthesize:
     """cb_recall with synthesize=True calls _synthesize_recall."""
@@ -734,8 +911,15 @@ class TestCbRecallSynthesize:
             encoding="utf-8",
         )
         from cyberbrain.extractors.search_backends import SearchResult
-        mock_result = SearchResult(path=str(note), title="JWT Auth", summary="Summary",
-                                   score=1.5, backend="fts5", note_type="decision")
+
+        mock_result = SearchResult(
+            path=str(note),
+            title="JWT Auth",
+            summary="Summary",
+            score=1.5,
+            backend="fts5",
+            note_type="decision",
+        )
         mock_backend = MagicMock()
         mock_backend.search.return_value = [mock_result]
         mock_backend.backend_name.return_value = "fts5"
@@ -745,36 +929,80 @@ class TestCbRecallSynthesize:
     def test_synthesize_true_calls_synthesize_recall(self, tmp_path):
         config, mock_backend = self._setup(tmp_path)
         with patch.object(_recall_mod, "_load_config", return_value=config):
-            with patch.object(_recall_mod, "_get_search_backend", return_value=mock_backend):
-                with patch.object(_recall_mod, "_synthesize_recall", return_value="synthesis result") as mock_synth:
+            with patch.object(
+                _recall_mod, "_get_search_backend", return_value=mock_backend
+            ):
+                with patch.object(
+                    _recall_mod, "_synthesize_recall", return_value="synthesis result"
+                ) as mock_synth:
                     cb_recall(query="jwt authentication", synthesize=True)
         mock_synth.assert_called_once()
 
     def test_synthesize_false_does_not_call_synthesize_recall(self, tmp_path):
         config, mock_backend = self._setup(tmp_path)
         with patch.object(_recall_mod, "_load_config", return_value=config):
-            with patch.object(_recall_mod, "_get_search_backend", return_value=mock_backend):
+            with patch.object(
+                _recall_mod, "_get_search_backend", return_value=mock_backend
+            ):
                 with patch.object(_recall_mod, "_synthesize_recall") as mock_synth:
                     cb_recall(query="jwt authentication", synthesize=False)
         mock_synth.assert_not_called()
 
-    def test_synthesize_recall_prepends_synthesis_before_retrieved_content(self, tmp_path):
+    def test_synthesize_recall_prepends_synthesis_before_retrieved_content(
+        self, tmp_path
+    ):
         config = {**BASE_CONFIG, "vault_path": str(tmp_path)}
         retrieved = "## Retrieved from knowledge vault\n\nsome vault content\n## End of retrieved content"
-        note_summaries = [{"title": "Note 1", "type": "insight", "tags": [], "date": "2026-01-01", "source": "Note1.md", "summary": "s", "body_excerpt": "body"}]
-        with patch.object(_recall_mod, "_call_claude_code_backend", return_value="Here is the synthesis."), \
-             patch.object(_recall_mod, "_load_prompt", return_value="prompt"):
-            result = _recall_mod._synthesize_recall("test query", retrieved, note_summaries, config)
+        note_summaries = [
+            {
+                "title": "Note 1",
+                "type": "insight",
+                "tags": [],
+                "date": "2026-01-01",
+                "source": "Note1.md",
+                "summary": "s",
+                "body_excerpt": "body",
+            }
+        ]
+        with (
+            patch.object(
+                _recall_mod,
+                "_call_claude_code_backend",
+                return_value="Here is the synthesis.",
+            ),
+            patch.object(_recall_mod, "_load_prompt", return_value="prompt"),
+        ):
+            result = _recall_mod._synthesize_recall(
+                "test query", retrieved, note_summaries, config
+            )
         assert "## Relevant Knowledge" in result
         assert "Here is the synthesis" in result
 
     def test_synthesize_recall_falls_back_gracefully_on_error(self, tmp_path):
         config = {**BASE_CONFIG, "vault_path": str(tmp_path)}
         retrieved = "## Retrieved from knowledge vault\n\nsome content\n## End of retrieved content"
-        note_summaries = [{"title": "Note 1", "type": "insight", "tags": [], "date": "2026-01-01", "source": "Note1.md", "summary": "s", "body_excerpt": "body"}]
-        with patch.object(_recall_mod, "_call_claude_code_backend", side_effect=RuntimeError("backend error")), \
-             patch.object(_recall_mod, "_load_prompt", return_value="prompt"):
-            result = _recall_mod._synthesize_recall("test query", retrieved, note_summaries, config)
+        note_summaries = [
+            {
+                "title": "Note 1",
+                "type": "insight",
+                "tags": [],
+                "date": "2026-01-01",
+                "source": "Note1.md",
+                "summary": "s",
+                "body_excerpt": "body",
+            }
+        ]
+        with (
+            patch.object(
+                _recall_mod,
+                "_call_claude_code_backend",
+                side_effect=RuntimeError("backend error"),
+            ),
+            patch.object(_recall_mod, "_load_prompt", return_value="prompt"),
+        ):
+            result = _recall_mod._synthesize_recall(
+                "test query", retrieved, note_summaries, config
+            )
         assert "some content" in result
         assert "Synthesis failed" in result or "synthesis failed" in result.lower()
 
@@ -782,6 +1010,7 @@ class TestCbRecallSynthesize:
 # ===========================================================================
 # cb_configure — discover, writes, validation, no-args status
 # ===========================================================================
+
 
 class TestCbConfigure:
     """cb_configure: vault discovery, config writes, and no-args status display."""
@@ -812,7 +1041,9 @@ class TestCbConfigure:
         with pytest.raises(ToolError, match="home directory"):
             cb_configure(vault_path="/etc/vault")
 
-    def test_set_vault_path_creates_directory_and_saves_config(self, tmp_path, monkeypatch):
+    def test_set_vault_path_creates_directory_and_saves_config(
+        self, tmp_path, monkeypatch
+    ):
         """vault_path within home creates directory and writes config file."""
         home = tmp_path / "home"
         home.mkdir()
@@ -829,6 +1060,7 @@ class TestCbConfigure:
         cfg_file = cfg_dir / "config.json"
         assert cfg_file.exists()
         import json as _json
+
         cfg = _json.loads(cfg_file.read_text())
         assert str(new_vault) in cfg["vault_path"]
         assert "vault_path" in result
@@ -844,6 +1076,7 @@ class TestCbConfigure:
         result = cb_configure(inbox="Personal/Notes")
 
         import json as _json
+
         cfg = _json.loads((cfg_dir / "config.json").read_text())
         assert cfg["inbox"] == "Personal/Notes"
         assert "inbox" in result
@@ -865,6 +1098,7 @@ class TestCbConfigure:
         result = cb_configure(capture_mode="auto")
 
         import json as _json
+
         cfg = _json.loads((cfg_dir / "config.json").read_text())
         assert cfg["desktop_capture_mode"] == "auto"
         assert "auto" in result
@@ -875,7 +1109,16 @@ class TestCbConfigure:
         vault.mkdir()
         config = {**BASE_CONFIG, "vault_path": str(vault)}
         with patch.object(_manage_mod, "_load_config", return_value=config):
-            with patch.object(_manage_mod, "_read_index_stats", return_value={"total": 42, "by_type": {}, "relations_count": 0, "stale_count": 0}):
+            with patch.object(
+                _manage_mod,
+                "_read_index_stats",
+                return_value={
+                    "total": 42,
+                    "by_type": {},
+                    "relations_count": 0,
+                    "stale_count": 0,
+                },
+            ):
                 result = cb_configure()
         assert "Vault" in result
         assert isinstance(result, str)
@@ -892,22 +1135,32 @@ class TestCbConfigure:
 # _read_index_stats — SQLite query
 # ===========================================================================
 
+
 class TestReadIndexStats:
     """_read_index_stats queries a real (in-memory via tmp) SQLite database."""
 
     def _make_db(self, tmp_path):
         """Create a minimal SQLite DB with notes and relations tables."""
         import sqlite3
+
         db = tmp_path / "test-index.db"
         conn = sqlite3.connect(str(db))
         conn.execute(
             "CREATE TABLE notes (path TEXT, title TEXT, type TEXT, summary TEXT, tags TEXT, date TEXT)"
         )
         conn.execute("CREATE TABLE relations (src TEXT, dst TEXT, type TEXT)")
-        conn.execute("INSERT INTO notes VALUES ('/vault/a.md', 'A', 'decision', '', '', '')")
-        conn.execute("INSERT INTO notes VALUES ('/vault/b.md', 'B', 'insight', '', '', '')")
-        conn.execute("INSERT INTO notes VALUES ('/vault/c.md', 'C', 'decision', '', '', '')")
-        conn.execute("INSERT INTO relations VALUES ('/vault/a.md', '/vault/b.md', 'related')")
+        conn.execute(
+            "INSERT INTO notes VALUES ('/vault/a.md', 'A', 'decision', '', '', '')"
+        )
+        conn.execute(
+            "INSERT INTO notes VALUES ('/vault/b.md', 'B', 'insight', '', '', '')"
+        )
+        conn.execute(
+            "INSERT INTO notes VALUES ('/vault/c.md', 'C', 'decision', '', '', '')"
+        )
+        conn.execute(
+            "INSERT INTO relations VALUES ('/vault/a.md', '/vault/b.md', 'related')"
+        )
         conn.commit()
         conn.close()
         return db
@@ -948,11 +1201,13 @@ class TestReadIndexStats:
 # cb_status — runs log, index stats, manifest
 # ===========================================================================
 
+
 class TestCbStatus:
     """cb_status shows runs, index health, and config summary."""
 
     def _make_runs_log(self, path, entries):
         import json as _json
+
         path.write_text(
             "\n".join(_json.dumps(e) for e in entries) + "\n",
             encoding="utf-8",
@@ -961,7 +1216,9 @@ class TestCbStatus:
     def test_returns_string_with_no_runs(self, tmp_path):
         config = {**BASE_CONFIG, "vault_path": str(tmp_path)}
         with patch.object(_manage_mod, "_load_config", return_value=config):
-            with patch.object(_manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.jsonl")):
+            with patch.object(
+                _manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.jsonl")
+            ):
                 with patch.object(_manage_mod, "_read_index_stats", return_value={}):
                     result = cb_status()
         assert isinstance(result, str)
@@ -969,30 +1226,51 @@ class TestCbStatus:
 
     def test_shows_recent_run_in_table(self, tmp_path):
         runs_log = tmp_path / "runs.jsonl"
-        self._make_runs_log(runs_log, [{
-            "timestamp": "2026-03-01T12:00:00Z",
-            "session_id": "abc12345",
-            "project": "myproject",
-            "trigger": "compact",
-            "beats_written": 3,
-            "beats_extracted": 4,
-            "duration_seconds": 9.5,
-            "beats": [],
-            "errors": [],
-        }])
+        self._make_runs_log(
+            runs_log,
+            [
+                {
+                    "timestamp": "2026-03-01T12:00:00Z",
+                    "session_id": "abc12345",
+                    "project": "myproject",
+                    "trigger": "compact",
+                    "beats_written": 3,
+                    "beats_extracted": 4,
+                    "duration_seconds": 9.5,
+                    "beats": [],
+                    "errors": [],
+                }
+            ],
+        )
         config = {**BASE_CONFIG, "vault_path": str(tmp_path)}
         with patch.object(_manage_mod, "_load_config", return_value=config):
             with patch.object(_manage_mod, "RUNS_LOG_PATH", str(runs_log)):
-                with patch.object(_manage_mod, "_read_index_stats", return_value={"total": 0, "by_type": {}, "relations_count": 0, "stale_count": 0}):
+                with patch.object(
+                    _manage_mod,
+                    "_read_index_stats",
+                    return_value={
+                        "total": 0,
+                        "by_type": {},
+                        "relations_count": 0,
+                        "stale_count": 0,
+                    },
+                ):
                     result = cb_status()
         assert "abc12345" in result or "2026-03-01" in result
         assert "compact" in result
 
     def test_shows_index_stats_when_available(self, tmp_path):
         config = {**BASE_CONFIG, "vault_path": str(tmp_path)}
-        stats = {"total": 15, "by_type": {"decision": 7, "insight": 8}, "relations_count": 3, "stale_count": 1}
+        stats = {
+            "total": 15,
+            "by_type": {"decision": 7, "insight": 8},
+            "relations_count": 3,
+            "stale_count": 1,
+        }
         with patch.object(_manage_mod, "_load_config", return_value=config):
-            with patch.object(_manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.jsonl")):
+            with patch.object(
+                _manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.jsonl")
+            ):
                 with patch.object(_manage_mod, "_read_index_stats", return_value=stats):
                     result = cb_status()
         assert "15" in result
@@ -1001,7 +1279,9 @@ class TestCbStatus:
     def test_shows_no_index_message_when_stats_empty(self, tmp_path):
         config = {**BASE_CONFIG, "vault_path": str(tmp_path)}
         with patch.object(_manage_mod, "_load_config", return_value=config):
-            with patch.object(_manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.jsonl")):
+            with patch.object(
+                _manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.jsonl")
+            ):
                 with patch.object(_manage_mod, "_read_index_stats", return_value={}):
                     result = cb_status()
         assert "Index not found" in result or "not found" in result.lower()
@@ -1037,6 +1317,7 @@ class TestCbStatus:
 # resources — guide and prompts
 # ===========================================================================
 
+
 class TestResources:
     """Resources and prompts are registered and return expected content."""
 
@@ -1052,14 +1333,24 @@ class TestResources:
         assert "recall" in fake_mcp._prompts
 
     def test_cyberbrain_guide_returns_string(self, tmp_path):
-        config = {**BASE_CONFIG, "vault_path": str(tmp_path), "proactive_recall": True, "desktop_capture_mode": "suggest"}
+        config = {
+            **BASE_CONFIG,
+            "vault_path": str(tmp_path),
+            "proactive_recall": True,
+            "desktop_capture_mode": "suggest",
+        }
         with patch.object(_resources_mod, "_load_config", return_value=config):
             result = fake_mcp._resources["cyberbrain_guide"]["fn"]()
         assert isinstance(result, str)
         assert "cb_recall" in result
 
     def test_orient_prompt_returns_list_with_user_role(self, tmp_path):
-        config = {**BASE_CONFIG, "vault_path": str(tmp_path), "proactive_recall": True, "desktop_capture_mode": "suggest"}
+        config = {
+            **BASE_CONFIG,
+            "vault_path": str(tmp_path),
+            "proactive_recall": True,
+            "desktop_capture_mode": "suggest",
+        }
         with patch.object(_resources_mod, "_load_config", return_value=config):
             result = fake_mcp._prompts["orient"]["fn"]()
         assert isinstance(result, list)
@@ -1082,28 +1373,50 @@ class TestResources:
 
     def test_build_guide_uses_default_filing_instruction_when_empty(self):
         guide = _resources_mod._build_guide(recall_instruction="Check vault.")
-        assert "cb_file" in guide  # default filing instruction mentions cb_file behavior
+        assert (
+            "cb_file" in guide
+        )  # default filing instruction mentions cb_file behavior
 
     def test_get_guide_proactive_mode_mentions_proactive(self, tmp_path):
-        config = {**BASE_CONFIG, "vault_path": str(tmp_path), "proactive_recall": True, "desktop_capture_mode": "suggest"}
+        config = {
+            **BASE_CONFIG,
+            "vault_path": str(tmp_path),
+            "proactive_recall": True,
+            "desktop_capture_mode": "suggest",
+        }
         with patch.object(_resources_mod, "_load_config", return_value=config):
             guide = _resources_mod._get_guide()
         assert "proactively" in guide.lower() or "proactive" in guide.lower()
 
     def test_get_guide_non_proactive_mode_suggests_instead(self, tmp_path):
-        config = {**BASE_CONFIG, "vault_path": str(tmp_path), "proactive_recall": False, "desktop_capture_mode": "suggest"}
+        config = {
+            **BASE_CONFIG,
+            "vault_path": str(tmp_path),
+            "proactive_recall": False,
+            "desktop_capture_mode": "suggest",
+        }
         with patch.object(_resources_mod, "_load_config", return_value=config):
             guide = _resources_mod._get_guide()
         assert "suggest" in guide.lower()
 
     def test_get_guide_auto_capture_mode(self, tmp_path):
-        config = {**BASE_CONFIG, "vault_path": str(tmp_path), "proactive_recall": True, "desktop_capture_mode": "auto"}
+        config = {
+            **BASE_CONFIG,
+            "vault_path": str(tmp_path),
+            "proactive_recall": True,
+            "desktop_capture_mode": "auto",
+        }
         with patch.object(_resources_mod, "_load_config", return_value=config):
             guide = _resources_mod._get_guide()
         assert "immediately" in guide.lower() or "auto" in guide.lower()
 
     def test_get_guide_manual_capture_mode(self, tmp_path):
-        config = {**BASE_CONFIG, "vault_path": str(tmp_path), "proactive_recall": True, "desktop_capture_mode": "manual"}
+        config = {
+            **BASE_CONFIG,
+            "vault_path": str(tmp_path),
+            "proactive_recall": True,
+            "desktop_capture_mode": "manual",
+        }
         with patch.object(_resources_mod, "_load_config", return_value=config):
             guide = _resources_mod._get_guide()
         assert "explicitly" in guide.lower() or "manual" in guide.lower()
@@ -1120,7 +1433,9 @@ class TestResources:
 class TestCbConfigureAdditionalCoverage:
     """Cover lines in cb_configure not hit by the primary TestCbConfigure suite."""
 
-    def test_reads_and_merges_existing_config_when_setting_inbox(self, tmp_path, monkeypatch):
+    def test_reads_and_merges_existing_config_when_setting_inbox(
+        self, tmp_path, monkeypatch
+    ):
         """Lines 68-71: _load_raw() reads an existing config and the write merges it."""
         home = tmp_path / "home"
         home.mkdir()
@@ -1130,7 +1445,10 @@ class TestCbConfigureAdditionalCoverage:
         cfg_file = cfg_dir / "config.json"
         # Pre-populate config with an existing key
         import json as _json
-        cfg_file.write_text(_json.dumps({"vault_path": "/some/vault", "existing_key": "preserved"}))
+
+        cfg_file.write_text(
+            _json.dumps({"vault_path": "/some/vault", "existing_key": "preserved"})
+        )
 
         result = cb_configure(inbox="AI/New-Folder")
 
@@ -1152,6 +1470,7 @@ class TestCbConfigureAdditionalCoverage:
         # Should not raise — invalid JSON is silently treated as empty config
         result = cb_configure(inbox="AI/Inbox")
         import json as _json
+
         updated = _json.loads(cfg_file.read_text())
         assert updated["inbox"] == "AI/Inbox"
         # existing_key was NOT preserved because JSON parse failed
@@ -1184,7 +1503,11 @@ class TestCbConfigureAdditionalCoverage:
         with patch.object(_manage_mod, "_load_config", return_value=BASE_CONFIG):
             result = cb_configure(discover=True)
         # Output should mention "Found" and list exactly 10 vaults
-        lines = [l for l in result.splitlines() if l.strip().startswith(tuple(str(i) + "." for i in range(1, 13)))]
+        lines = [
+            l
+            for l in result.splitlines()
+            if l.strip().startswith(tuple(str(i) + "." for i in range(1, 13)))
+        ]
         assert len(lines) == 10
 
     def test_vault_path_set_starts_background_rebuild(self, tmp_path, monkeypatch):
@@ -1197,6 +1520,7 @@ class TestCbConfigureAdditionalCoverage:
         new_vault = home / "MyNotes"
 
         import threading
+
         threads_started = []
         real_thread_init = threading.Thread.__init__
 
@@ -1215,13 +1539,16 @@ class TestCbConfigureAdditionalCoverage:
         nonexistent = str(tmp_path / "ghost-vault")
         config = {**BASE_CONFIG, "vault_path": nonexistent}
         with patch.object(_manage_mod, "_load_config", return_value=config):
-            with patch.object(_manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-runs.log")):
+            with patch.object(
+                _manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-runs.log")
+            ):
                 result = cb_configure()
         assert "does not exist" in result or "⚠" in result
 
     def test_no_args_shows_last_run_from_runs_log(self, tmp_path):
         """Lines 192-210: last run timestamp and beat count appear in config summary."""
         import json as _json
+
         vault = tmp_path / "vault"
         vault.mkdir()
         runs_log = tmp_path / "runs.log"
@@ -1234,7 +1561,16 @@ class TestCbConfigureAdditionalCoverage:
 
         config = {**BASE_CONFIG, "vault_path": str(vault)}
         with patch.object(_manage_mod, "_load_config", return_value=config):
-            with patch.object(_manage_mod, "_read_index_stats", return_value={"total": 0, "by_type": {}, "relations_count": 0, "stale_count": 0}):
+            with patch.object(
+                _manage_mod,
+                "_read_index_stats",
+                return_value={
+                    "total": 0,
+                    "by_type": {},
+                    "relations_count": 0,
+                    "stale_count": 0,
+                },
+            ):
                 with patch.object(_manage_mod, "RUNS_LOG_PATH", str(runs_log)):
                     result = cb_configure()
 
@@ -1252,6 +1588,7 @@ class TestCbStatusAdditionalCoverage:
 
     def _make_runs_log(self, path, entries):
         import json as _json
+
         path.write_text(
             "\n".join(_json.dumps(e) for e in entries) + "\n",
             encoding="utf-8",
@@ -1260,30 +1597,49 @@ class TestCbStatusAdditionalCoverage:
     def test_stale_paths_shows_warning_in_index_health(self, tmp_path):
         """Lines 239-242 and 252-254: stale_count > 0 shows warning text."""
         config = {**BASE_CONFIG, "vault_path": str(tmp_path)}
-        stats = {"total": 5, "by_type": {"decision": 5}, "relations_count": 0, "stale_count": 3}
+        stats = {
+            "total": 5,
+            "by_type": {"decision": 5},
+            "relations_count": 0,
+            "stale_count": 3,
+        }
         with patch.object(_manage_mod, "_load_config", return_value=config):
-            with patch.object(_manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.jsonl")):
+            with patch.object(
+                _manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.jsonl")
+            ):
                 with patch.object(_manage_mod, "_read_index_stats", return_value=stats):
                     result = cb_status()
         assert "3" in result
-        assert "not found on disk" in result or "stale" in result.lower() or "⚠" in result
+        assert (
+            "not found on disk" in result or "stale" in result.lower() or "⚠" in result
+        )
 
     def test_last_run_beats_list_appears_in_output(self, tmp_path):
         """Lines 281 and 283: beats and errors from the last run are listed."""
         runs_log = tmp_path / "runs.jsonl"
-        self._make_runs_log(runs_log, [{
-            "timestamp": "2026-01-15T12:00:00Z",
-            "session_id": "deadsess",
-            "project": "my-project",
-            "trigger": "compact",
-            "beats_written": 2,
-            "beats_extracted": 2,
-            "duration_seconds": 5.0,
-            "beats": [
-                {"title": "FastAPI Decision", "type": "decision", "scope": "project", "path": "Projects/hermes/FastAPI.md"},
+        self._make_runs_log(
+            runs_log,
+            [
+                {
+                    "timestamp": "2026-01-15T12:00:00Z",
+                    "session_id": "deadsess",
+                    "project": "my-project",
+                    "trigger": "compact",
+                    "beats_written": 2,
+                    "beats_extracted": 2,
+                    "duration_seconds": 5.0,
+                    "beats": [
+                        {
+                            "title": "FastAPI Decision",
+                            "type": "decision",
+                            "scope": "project",
+                            "path": "Projects/hermes/FastAPI.md",
+                        },
+                    ],
+                    "errors": ["Could not write Broken Note.md"],
+                }
             ],
-            "errors": ["Could not write Broken Note.md"],
-        }])
+        )
         config = {**BASE_CONFIG, "vault_path": str(tmp_path)}
         with patch.object(_manage_mod, "_load_config", return_value=config):
             with patch.object(_manage_mod, "RUNS_LOG_PATH", str(runs_log)):
@@ -1295,6 +1651,7 @@ class TestCbStatusAdditionalCoverage:
     def test_semantic_vectors_shown_when_manifest_has_model(self, tmp_path):
         """Lines 300-301: when manifest has model_name, vector count is displayed."""
         import json as _json
+
         manifest = {"model_name": "TaylorAI/bge-micro-v2", "id_map": ["a", "b", "c"]}
         manifest_path = tmp_path / "search-index-manifest.json"
         manifest_path.write_text(_json.dumps(manifest), encoding="utf-8")
@@ -1305,8 +1662,19 @@ class TestCbStatusAdditionalCoverage:
             "search_manifest_path": str(manifest_path),
         }
         with patch.object(_manage_mod, "_load_config", return_value=config):
-            with patch.object(_manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.jsonl")):
-                with patch.object(_manage_mod, "_read_index_stats", return_value={"total": 3, "by_type": {}, "relations_count": 0, "stale_count": 0}):
+            with patch.object(
+                _manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.jsonl")
+            ):
+                with patch.object(
+                    _manage_mod,
+                    "_read_index_stats",
+                    return_value={
+                        "total": 3,
+                        "by_type": {},
+                        "relations_count": 0,
+                        "stale_count": 0,
+                    },
+                ):
                     result = cb_status()
         assert "bge-micro-v2" in result
         assert "3" in result  # 3 vectors in id_map
@@ -1350,10 +1718,14 @@ class TestCbStatusAdditionalCoverage:
         mock_backend.build_full_index = MagicMock()
         mock_sb.get_search_backend.return_value = mock_backend
         import sys
-        with patch.dict(sys.modules, {"cyberbrain.extractors.search_backends": mock_sb}):
+
+        with patch.dict(
+            sys.modules, {"cyberbrain.extractors.search_backends": mock_sb}
+        ):
             cb_configure(vault_path=str(new_vault))
             # Give daemon thread a brief moment to execute
             import time
+
             time.sleep(0.05)
         # The rebuild function ran and called get_search_backend
         # (may or may not complete depending on timing, but no crash)
@@ -1366,14 +1738,28 @@ class TestCbStatusAdditionalCoverage:
         runs_log = tmp_path / "runs.log"
         # Mix of invalid + valid JSON lines — valid one should be found
         import json as _json
-        valid_entry = {"timestamp": "2026-02-01T10:00:00Z", "beats_written": 3, "session_id": "validxyz"}
+
+        valid_entry = {
+            "timestamp": "2026-02-01T10:00:00Z",
+            "beats_written": 3,
+            "session_id": "validxyz",
+        }
         runs_log.write_text(
             "{ invalid json }\n" + _json.dumps(valid_entry) + "\n",
             encoding="utf-8",
         )
         config = {**BASE_CONFIG, "vault_path": str(vault)}
         with patch.object(_manage_mod, "_load_config", return_value=config):
-            with patch.object(_manage_mod, "_read_index_stats", return_value={"total": 0, "by_type": {}, "relations_count": 0, "stale_count": 0}):
+            with patch.object(
+                _manage_mod,
+                "_read_index_stats",
+                return_value={
+                    "total": 0,
+                    "by_type": {},
+                    "relations_count": 0,
+                    "stale_count": 0,
+                },
+            ):
                 with patch.object(_manage_mod, "RUNS_LOG_PATH", str(runs_log)):
                     result = cb_configure()
         # The valid entry (last valid JSON line) should be found
@@ -1403,14 +1789,16 @@ class TestCbStatusAdditionalCoverage:
                         # Path.read_text uses open internally; patch to raise OSError
                         pass  # can't easily patch Path.read_text here
                     # Alternative: patch via the runs_log Path object
-                    with patch.object(Path, "read_text", side_effect=OSError("disk error")):
+                    with patch.object(
+                        Path, "read_text", side_effect=OSError("disk error")
+                    ):
                         result = cb_status()
         assert isinstance(result, str)
         assert "No runs recorded" in result
 
     def test_status_handles_manifest_parse_exception(self, tmp_path):
         """Lines 253-254: invalid manifest JSON is swallowed gracefully."""
-        import json as _json
+
         manifest_path = tmp_path / "manifest.json"
         manifest_path.write_text("{ this is not valid json }", encoding="utf-8")
         config = {
@@ -1419,8 +1807,19 @@ class TestCbStatusAdditionalCoverage:
             "search_manifest_path": str(manifest_path),
         }
         with patch.object(_manage_mod, "_load_config", return_value=config):
-            with patch.object(_manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.jsonl")):
-                with patch.object(_manage_mod, "_read_index_stats", return_value={"total": 0, "by_type": {}, "relations_count": 0, "stale_count": 0}):
+            with patch.object(
+                _manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.jsonl")
+            ):
+                with patch.object(
+                    _manage_mod,
+                    "_read_index_stats",
+                    return_value={
+                        "total": 0,
+                        "by_type": {},
+                        "relations_count": 0,
+                        "stale_count": 0,
+                    },
+                ):
                     result = cb_status()
         # Should not crash — manifest parse error is swallowed
         assert isinstance(result, str)

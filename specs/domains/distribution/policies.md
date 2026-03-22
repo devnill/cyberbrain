@@ -35,3 +35,21 @@ Hooks call entry points defined in `pyproject.toml` (e.g., `cyberbrain-extract`)
 - **Derived from**: DL23; GP-8 (Graceful Degradation — hooks should not silently fail when layout changes)
 - **Established**: cycle 6 planning interview
 - **Status**: active (not yet fully implemented)
+
+## P-7: ruff and basedpyright are the enforced quality gates
+All code must pass `ruff check`, `ruff format --check`, and `basedpyright` at zero errors before merge. pre-commit enforces ruff locally. basedpyright is configured in pyproject.toml with basic mode and targeted per-file ignores.
+- **Derived from**: D-10, D-12; GP-6 (Lean Architecture, Heavy on Quality)
+- **Established**: cycle 012 (WI-058, WI-068, WI-069)
+- **Status**: active
+
+## P-8: Re-export hubs use per-file F401 suppression, not global suppression
+Modules that intentionally re-export symbols use per-file `# noqa: F401` annotations or targeted pyproject.toml per-file ignores. Global F401 suppression is prohibited.
+- **Derived from**: D-11
+- **Established**: cycle 012 (WI-058)
+- **Status**: active
+
+## P-9: Exception handler ambiguity is documented, not silently narrowed
+When the correct narrow exception type is ambiguous, add a `# intentional: <reason>` comment rather than narrowing to a potentially incorrect type. Incorrect narrowing masks runtime errors; documentation preserves the intentionality signal.
+- **Derived from**: D-14; GP-8 (Graceful Degradation Over Hard Failure)
+- **Established**: cycle 012 (WI-070)
+- **Status**: active

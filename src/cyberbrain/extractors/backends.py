@@ -10,7 +10,9 @@ import re
 import sys
 from pathlib import Path
 
-from cyberbrain.extractors.config import GLOBAL_CONFIG_PATH  # noqa: F401 — re-exported for callers
+from cyberbrain.extractors.config import (
+    GLOBAL_CONFIG_PATH,  # noqa: F401 — re-exported for callers
+)
 
 
 class BackendError(Exception):
@@ -47,8 +49,8 @@ def _call_claude_code(system_prompt: str, user_message: str, config: dict) -> st
     resolved = shutil.which(claude_path)
     if not resolved and claude_path == "claude":
         _FALLBACK_PATHS = [
-            "/opt/homebrew/bin/claude",   # macOS Apple Silicon (Homebrew)
-            "/usr/local/bin/claude",       # macOS Intel / Linux (Homebrew)
+            "/opt/homebrew/bin/claude",  # macOS Apple Silicon (Homebrew)
+            "/usr/local/bin/claude",  # macOS Intel / Linux (Homebrew)
             os.path.expanduser("~/.local/bin/claude"),
             "/usr/bin/claude",
         ]
@@ -59,7 +61,7 @@ def _call_claude_code(system_prompt: str, user_message: str, config: dict) -> st
 
     if not resolved:
         raise BackendError(
-            f"'claude' CLI not found (backend=claude-code). "
+            "'claude' CLI not found (backend=claude-code). "
             "Claude Desktop runs MCP servers without your shell PATH. "
             "Fix: add 'claude_path' to ~/.claude/cyberbrain/config.json with the full path, e.g.: "
             '{"claude_path": "/opt/homebrew/bin/claude"}  '
@@ -75,8 +77,17 @@ def _call_claude_code(system_prompt: str, user_message: str, config: dict) -> st
     # This prevents the subprocess from sending PermissionRequest IPC events to the parent TUI.
     # --max-turns 3: haiku occasionally needs >1 internal turn on large transcripts; 3 is
     # enough headroom without opening up tool-use loops (allowedTools "" blocks all tools).
-    cmd = [claude_path, "-p", "--allowedTools", "", "--model", model,
-           "--no-session-persistence", "--max-turns", "3"]
+    cmd = [
+        claude_path,
+        "-p",
+        "--allowedTools",
+        "",
+        "--model",
+        model,
+        "--no-session-persistence",
+        "--max-turns",
+        "3",
+    ]
     print(f"[extract_beats] Using claude-code backend (model={model})", file=sys.stderr)
 
     # Strip Claude Code session vars so claude -p can run as a clean subprocess.
@@ -84,7 +95,9 @@ def _call_claude_code(system_prompt: str, user_message: str, config: dict) -> st
 
     # Use a neutral cwd with no CLAUDE.md to prevent project config injection.
     # Falls back to home directory if the cyberbrain dir doesn't exist yet.
-    default_cwd = str(Path.home() / ".claude" / "cyberbrain")
+    default_cwd = str(
+        Path.home() / ".claude" / "cyberbrain"
+    )  # dynamic: tests monkeypatch Path.home()
     subprocess_cwd = config.get("subprocess_cwd") or default_cwd
 
     try:
@@ -103,14 +116,13 @@ def _call_claude_code(system_prompt: str, user_message: str, config: dict) -> st
             f"claude -p timed out after {config.get('claude_timeout', 120)}s. "
             "Increase claude_timeout in cyberbrain.json or switch to a faster backend."
         )
-    except Exception as e:
+    except Exception as e:  # intentional: subprocess.run can raise OSError, FileNotFoundError, PermissionError, etc.
         raise BackendError(f"claude -p failed to start: {e}")
 
     if result.returncode != 0:
         stderr_snippet = result.stderr[:500].strip() or "(empty)"
         raise BackendError(
-            f"claude -p exited with code {result.returncode}. "
-            f"Stderr: {stderr_snippet}"
+            f"claude -p exited with code {result.returncode}. Stderr: {stderr_snippet}"
         )
 
     output = result.stdout.strip()
@@ -136,7 +148,7 @@ def _call_claude_code(system_prompt: str, user_message: str, config: dict) -> st
 def _call_bedrock(system_prompt: str, user_message: str, config: dict) -> str:
     """Call Anthropic Bedrock via the anthropic SDK."""
     try:
-        import anthropic
+        import anthropic  # type: ignore[import-not-found]  # optional dependency
     except ImportError:
         raise BackendError(
             "'anthropic' package not installed. "
@@ -145,7 +157,10 @@ def _call_bedrock(system_prompt: str, user_message: str, config: dict) -> str:
 
     region = config.get("bedrock_region", "us-east-1")
     model = config.get("model", BEDROCK_DEFAULT_MODEL)
-    print(f"[extract_beats] Using Bedrock backend (region={region}, model={model})", file=sys.stderr)
+    print(
+        f"[extract_beats] Using Bedrock backend (region={region}, model={model})",
+        file=sys.stderr,
+    )
 
     try:
         client = anthropic.AnthropicBedrock(aws_region=region)
@@ -155,7 +170,7 @@ def _call_bedrock(system_prompt: str, user_message: str, config: dict) -> str:
             system=system_prompt,
             messages=[{"role": "user", "content": user_message}],
         )
-    except Exception as e:
+    except Exception as e:  # intentional: Bedrock SDK raises many exception types (auth, rate limit, network, etc.)
         raise BackendError(f"Bedrock API call failed ({type(e).__name__}): {e}")
 
     if not response.content:
@@ -176,14 +191,17 @@ def _call_bedrock(system_prompt: str, user_message: str, config: dict) -> str:
 
 def _call_ollama(system_prompt: str, user_message: str, config: dict) -> str:
     """Call a local Ollama instance via its /api/chat endpoint using urllib."""
-    import urllib.request
     import urllib.error
+    import urllib.request
 
     ollama_url = config.get("ollama_url", OLLAMA_DEFAULT_URL).rstrip("/")
     model = config.get("model", "llama3.2")
     timeout = config.get("claude_timeout", 120)
 
-    print(f"[extract_beats] Using Ollama backend (url={ollama_url}, model={model})", file=sys.stderr)
+    print(
+        f"[extract_beats] Using Ollama backend (url={ollama_url}, model={model})",
+        file=sys.stderr,
+    )
 
     payload = {
         "model": model,
@@ -216,7 +234,7 @@ def _call_ollama(system_prompt: str, user_message: str, config: dict) -> str:
         raise BackendError(f"Ollama connection error: {e.reason}")
     except TimeoutError:
         raise BackendError(f"Ollama request timed out after {timeout}s.")
-    except Exception as e:
+    except Exception as e:  # intentional: catches any remaining urllib errors (e.g. ssl.SSLError, socket.gaierror)
         raise BackendError(f"Ollama request failed: {e}")
 
     try:

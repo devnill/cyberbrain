@@ -23,20 +23,20 @@ from __future__ import annotations
 
 import os
 import re
-import subprocess
 import sqlite3
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, runtime_checkable
-
 
 # ---------------------------------------------------------------------------
 # SearchResult
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SearchResult:
-    path: str                      # absolute path to the note
+    path: str  # absolute path to the note
     title: str = ""
     summary: str = ""
     tags: list[str] = field(default_factory=list)
@@ -44,13 +44,14 @@ class SearchResult:
     note_type: str = ""
     date: str = ""
     score: float = 0.0
-    snippet: str = ""              # matching excerpt (FTS5/grep)
-    backend: str = ""              # which backend produced this result
+    snippet: str = ""  # matching excerpt (FTS5/grep)
+    backend: str = ""  # which backend produced this result
 
 
 # ---------------------------------------------------------------------------
 # SearchBackend Protocol
 # ---------------------------------------------------------------------------
+
 
 @runtime_checkable
 class SearchBackend(Protocol):
@@ -74,6 +75,7 @@ class SearchBackend(Protocol):
 # ---------------------------------------------------------------------------
 # GrepBackend — zero dependencies, always available
 # ---------------------------------------------------------------------------
+
 
 class GrepBackend:
     """Current grep-based search behaviour, wrapped as a SearchBackend."""
@@ -99,7 +101,8 @@ class GrepBackend:
         for term in terms:
             result = subprocess.run(
                 ["grep", "-r", "-l", "--include=*.md", "-i", term, self._vault],
-                capture_output=True, text=True,
+                capture_output=True,
+                text=True,
             )
             for path in result.stdout.strip().splitlines():
                 if path:
@@ -110,27 +113,32 @@ class GrepBackend:
                     count = found.get(path, (0, mtime))[0] + 1
                     found[path] = (count, mtime)
 
-        ranked = sorted(found, key=lambda p: (found[p][0], found[p][1]), reverse=True)[:top_k]
+        ranked = sorted(found, key=lambda p: (found[p][0], found[p][1]), reverse=True)[
+            :top_k
+        ]
         results = []
         for path in ranked:
             fm = _read_frontmatter(path)
-            results.append(SearchResult(
-                path=path,
-                title=fm.get("title", "") or Path(path).stem,
-                summary=fm.get("summary", ""),
-                tags=_normalise_list(fm.get("tags", [])),
-                related=_normalise_list(fm.get("related", [])),
-                note_type=fm.get("type", ""),
-                date=str(fm.get("date", ""))[:10],
-                score=float(found[path][0]),
-                backend="grep",
-            ))
+            results.append(
+                SearchResult(
+                    path=path,
+                    title=fm.get("title", "") or Path(path).stem,
+                    summary=fm.get("summary", ""),
+                    tags=_normalise_list(fm.get("tags", [])),
+                    related=_normalise_list(fm.get("related", [])),
+                    note_type=fm.get("type", ""),
+                    date=str(fm.get("date", ""))[:10],
+                    score=float(found[path][0]),
+                    backend="grep",
+                )
+            )
         return results
 
 
 # ---------------------------------------------------------------------------
 # FTS5Backend — SQLite FTS5 BM25, no new dependencies
 # ---------------------------------------------------------------------------
+
 
 class FTS5Backend:
     """
@@ -206,7 +214,8 @@ class FTS5Backend:
 
     def index_note(self, note_path: str, metadata: dict) -> None:
         """Index or re-index a single note. Skips if content hash unchanged."""
-        import hashlib, json
+        import hashlib
+        import json
 
         try:
             text = Path(note_path).read_text(encoding="utf-8")
@@ -228,55 +237,77 @@ class FTS5Backend:
             if text.startswith("---"):
                 end = text.find("\n---", 3)
                 if end != -1:
-                    body = text[end + 4:].strip()
+                    body = text[end + 4 :].strip()
 
             tags_json = json.dumps(metadata.get("tags", []))
             related_json = json.dumps(metadata.get("related", []))
 
             if existing:
-                conn.execute("""
+                conn.execute(
+                    """
                     UPDATE notes SET path=?, content_hash=?, title=?, summary=?,
                         tags=?, related=?, type=?, scope=?, project=?, date=?, body=?
                     WHERE id=?
-                """, (
-                    note_path, content_hash,
-                    metadata.get("title", ""),
-                    metadata.get("summary", ""),
-                    tags_json, related_json,
-                    metadata.get("type", ""), metadata.get("scope", ""),
-                    metadata.get("project", ""), str(metadata.get("date", ""))[:10],
-                    body[:50_000],  # cap body stored in FTS
-                    note_id,
-                ))
+                """,
+                    (
+                        note_path,
+                        content_hash,
+                        metadata.get("title", ""),
+                        metadata.get("summary", ""),
+                        tags_json,
+                        related_json,
+                        metadata.get("type", ""),
+                        metadata.get("scope", ""),
+                        metadata.get("project", ""),
+                        str(metadata.get("date", ""))[:10],
+                        body[:50_000],  # cap body stored in FTS
+                        note_id,
+                    ),
+                )
             else:
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT INTO notes (id, path, content_hash, title, summary,
                         tags, related, type, scope, project, date, body)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    note_id, note_path, content_hash,
-                    metadata.get("title", ""),
-                    metadata.get("summary", ""),
-                    tags_json, related_json,
-                    metadata.get("type", ""), metadata.get("scope", ""),
-                    metadata.get("project", ""), str(metadata.get("date", ""))[:10],
-                    body[:50_000],
-                ))
+                """,
+                    (
+                        note_id,
+                        note_path,
+                        content_hash,
+                        metadata.get("title", ""),
+                        metadata.get("summary", ""),
+                        tags_json,
+                        related_json,
+                        metadata.get("type", ""),
+                        metadata.get("scope", ""),
+                        metadata.get("project", ""),
+                        str(metadata.get("date", ""))[:10],
+                        body[:50_000],
+                    ),
+                )
 
     def build_index(self) -> None:
         """Build full index from vault. Incremental — skips unchanged notes."""
         import sys
+
         vault = Path(self._vault)
         md_files = list(vault.rglob("*.md"))
         total = len(md_files)
-        print(f"[search_backends] FTS5 index: building from {total} notes...", file=sys.stderr)
+        print(
+            f"[search_backends] FTS5 index: building from {total} notes...",
+            file=sys.stderr,
+        )
         count = 0
         for md_file in md_files:
             fm = _read_frontmatter(str(md_file))
             self.index_note(str(md_file), fm)
             count += 1
             if count % 100 == 0:
-                print(f"[search_backends] FTS5 index: {count}/{total} ({count*100//total}%)", file=sys.stderr)
+                print(
+                    f"[search_backends] FTS5 index: {count}/{total} ({count * 100 // total}%)",
+                    file=sys.stderr,
+                )
         print(f"[search_backends] FTS5 index: {count}/{total} done", file=sys.stderr)
         self.prune_stale_notes()
 
@@ -287,22 +318,28 @@ class FTS5Backend:
         Returns the number of notes pruned.
         """
         import sys
+
         with self._connect() as conn:
             rows = conn.execute("SELECT id, path FROM notes").fetchall()
             stale_ids = [row["id"] for row in rows if not Path(row["path"]).exists()]
             if not stale_ids:
                 return 0
             placeholders = ",".join("?" * len(stale_ids))
-            conn.execute(f"DELETE FROM relations WHERE from_id IN ({placeholders})", stale_ids)
+            conn.execute(
+                f"DELETE FROM relations WHERE from_id IN ({placeholders})", stale_ids
+            )
             conn.execute(f"DELETE FROM notes WHERE id IN ({placeholders})", stale_ids)
-        print(f"[search_backends] Pruned {len(stale_ids)} stale note(s) from index", file=sys.stderr)
+        print(
+            f"[search_backends] Pruned {len(stale_ids)} stale note(s) from index",
+            file=sys.stderr,
+        )
         return len(stale_ids)
 
     def search(self, query: str, top_k: int = 5, **filters) -> list[SearchResult]:
         import json
 
         # Escape FTS5 special characters in query
-        safe_query = re.sub(r'[^\w\s]', ' ', query).strip()
+        safe_query = re.sub(r"[^\w\s]", " ", query).strip()
         if not safe_query:
             return []
 
@@ -311,7 +348,8 @@ class FTS5Backend:
 
         try:
             with self._connect() as conn:
-                rows = conn.execute("""
+                rows = conn.execute(
+                    """
                     SELECT n.path, n.title, n.summary, n.tags, n.related,
                            n.type, n.date,
                            bm25(notes_fts, 10.0, 5.0, 3.0, 1.0) AS score,
@@ -321,7 +359,9 @@ class FTS5Backend:
                     WHERE notes_fts MATCH ?
                     ORDER BY score
                     LIMIT ?
-                """, (fts_query, top_k)).fetchall()
+                """,
+                    (fts_query, top_k),
+                ).fetchall()
         except sqlite3.OperationalError:
             # FTS5 table may be empty or query malformed — return nothing
             return []
@@ -336,24 +376,27 @@ class FTS5Backend:
                 related = json.loads(row["related"] or "[]")
             except (json.JSONDecodeError, TypeError):
                 related = []
-            results.append(SearchResult(
-                path=row["path"],
-                title=row["title"] or Path(row["path"]).stem,
-                summary=row["summary"] or "",
-                tags=tags,
-                related=related,
-                note_type=row["type"] or "",
-                date=str(row["date"] or "")[:10],
-                score=abs(float(row["score"])),  # bm25() returns negative values
-                snippet=row["snip"] or "",
-                backend="fts5",
-            ))
+            results.append(
+                SearchResult(
+                    path=row["path"],
+                    title=row["title"] or Path(row["path"]).stem,
+                    summary=row["summary"] or "",
+                    tags=tags,
+                    related=related,
+                    note_type=row["type"] or "",
+                    date=str(row["date"] or "")[:10],
+                    score=abs(float(row["score"])),  # bm25() returns negative values
+                    snippet=row["snip"] or "",
+                    backend="fts5",
+                )
+            )
         return results
 
 
 # ---------------------------------------------------------------------------
 # HybridBackend — FTS5 BM25 + fastembed HNSW, fused via RRF
 # ---------------------------------------------------------------------------
+
 
 class HybridBackend:
     """
@@ -387,19 +430,22 @@ class HybridBackend:
 
     def _get_model(self):
         if self._model is None:
-            from fastembed import TextEmbedding
+            from fastembed import TextEmbedding  # noqa: I001  # type: ignore[import-not-found]  # optional dependency
+
             self._model = TextEmbedding(model_name=self._model_name)
         return self._model
 
     def _load_or_create_index(self):
         """Load usearch HNSW index; validate manifest; rebuild if stale."""
         import sys
+
         if self._index is not None:
             return
 
-        import json
-        import numpy as np
-        from usearch.index import Index
+        import json  # noqa: I001
+
+        import numpy as np  # noqa: I001  # type: ignore[import-not-found]  # optional dependency
+        from usearch.index import Index  # noqa: I001  # type: ignore[import-not-found]  # optional dependency
 
         # Check manifest for model/dim consistency
         manifest_path = Path(self._manifest_path)
@@ -418,7 +464,9 @@ class HybridBackend:
                     if index_path.exists():
                         index_path.unlink()
                 dim = manifest.get("embedding_dim", 384)
-            except Exception:
+            except (
+                Exception
+            ):  # intentional: malformed manifest is non-fatal; fall back to default dim
                 pass
 
         self._index = Index(ndim=dim, metric="cos", dtype="f32")
@@ -430,8 +478,11 @@ class HybridBackend:
                 if manifest_path.exists():
                     manifest = json.loads(manifest_path.read_text())
                     self._id_map = manifest.get("id_map", [])
-            except Exception as e:
-                print(f"[search_backends] USearch load failed: {e}. Rebuilding.", file=sys.stderr)
+            except Exception as e:  # intentional: usearch load or JSON parse can fail; rebuild from scratch
+                print(
+                    f"[search_backends] USearch load failed: {e}. Rebuilding.",
+                    file=sys.stderr,
+                )
                 self._index = Index(ndim=dim, metric="cos", dtype="f32")
 
         # Warm-up query to force page faults during init, not at query time
@@ -441,7 +492,8 @@ class HybridBackend:
 
     def _embed(self, text: str):
         """Embed a single text string. Returns numpy float32 array."""
-        import numpy as np
+        import numpy as np  # type: ignore[import-not-found]  # optional dependency
+
         model = self._get_model()
         vecs = list(model.embed([text]))
         return np.array(vecs[0], dtype=np.float32)
@@ -453,14 +505,17 @@ class HybridBackend:
         # Only embed if semantic layer is available
         try:
             self._embed_note(note_path, metadata)
-        except Exception as e:
+        except Exception as e:  # intentional: embedding failure is non-fatal; FTS5 result still available
             import sys
-            print(f"[search_backends] Embedding skipped for {Path(note_path).name}: {e}", file=sys.stderr)
+
+            print(
+                f"[search_backends] Embedding skipped for {Path(note_path).name}: {e}",
+                file=sys.stderr,
+            )
 
     def _embed_note(self, note_path: str, metadata: dict) -> None:
         """Compute and store embedding for a note's metadata fields."""
-        import json, numpy as np
-        from usearch.index import Index
+        import json
 
         self._load_or_create_index()
 
@@ -474,7 +529,7 @@ class HybridBackend:
         else:
             try:
                 tags_str = " ".join(json.loads(str(tags_raw)))
-            except Exception:
+            except (json.JSONDecodeError, TypeError, ValueError):
                 tags_str = str(tags_raw)
 
         embed_text = f"{title}. {summary} {tags_str}".strip()
@@ -484,7 +539,7 @@ class HybridBackend:
         vec = self._embed(embed_text)
         note_id = len(self._id_map)
         self._id_map.append(note_path)
-        self._index.add(note_id, vec)
+        self._index.add(note_id, vec)  # type: ignore[reportOptionalMemberAccess]  # _index loaded by _load_or_create_index
 
     def build_index(self) -> None:
         """Build full FTS5 + usearch index from vault. Opportunistically reuses SC index."""
@@ -497,24 +552,34 @@ class HybridBackend:
             return
 
         # Fall back to embedding everything
-        print("[search_backends] Building semantic index (this may take a moment)...", file=sys.stderr)
+        print(
+            "[search_backends] Building semantic index (this may take a moment)...",
+            file=sys.stderr,
+        )
         vault = Path(self._vault)
         for md_file in vault.rglob("*.md"):
             fm = _read_frontmatter(str(md_file))
             try:
                 self._embed_note(str(md_file), fm)
-            except Exception as e:
-                print(f"[search_backends] Embedding failed for {md_file.name}: {e}", file=sys.stderr)
+            except Exception as e:  # intentional: individual note embedding failure is non-fatal; continue building
+                print(
+                    f"[search_backends] Embedding failed for {md_file.name}: {e}",
+                    file=sys.stderr,
+                )
 
         self._save_index()
-        print(f"[search_backends] Semantic index built: {len(self._id_map)} notes", file=sys.stderr)
+        print(
+            f"[search_backends] Semantic index built: {len(self._id_map)} notes",
+            file=sys.stderr,
+        )
 
     def _try_import_smart_connections_index(self) -> bool:
         """
         Opportunistically read Smart Connections' .ajson index if it exists in the vault
         and was built with a compatible model. Returns True if import succeeded.
         """
-        import sys, json
+        import json
+        import sys
 
         sc_dir = Path(self._vault) / ".smart-env"
         if not sc_dir.exists():
@@ -525,10 +590,9 @@ class HybridBackend:
         if sc_settings.exists():
             try:
                 sc_cfg = json.loads(sc_settings.read_text())
-                sc_model = (
-                    sc_cfg.get("smart_sources", {}).get("embed_model")
-                    or sc_cfg.get("embed_model", "")
-                )
+                sc_model = sc_cfg.get("smart_sources", {}).get(
+                    "embed_model"
+                ) or sc_cfg.get("embed_model", "")
                 # Normalise model name: SC may store short names like "TaylorAI/bge-micro-v2"
                 if sc_model and sc_model != self._model_name:
                     print(
@@ -537,7 +601,7 @@ class HybridBackend:
                         file=sys.stderr,
                     )
                     return False
-            except Exception:
+            except Exception:  # intentional: malformed SC settings.json is non-fatal; proceed with import attempt
                 pass
 
         # Try multi-file mode first (one .ajson per note), then single-file
@@ -568,9 +632,11 @@ class HybridBackend:
         Parse a Smart Connections .ajson file and import vectors into usearch.
         Returns number of vectors imported.
         """
-        import json, sys
+        import json
+        import sys
+
         try:
-            import numpy as np
+            import numpy as np  # type: ignore[import-not-found]  # optional dependency
         except ImportError:
             return 0
 
@@ -603,32 +669,39 @@ class HybridBackend:
                 if not vec:
                     continue
 
-                abs_path = str(Path(self._vault) / path_in_vault) if path_in_vault else ""
+                abs_path = (
+                    str(Path(self._vault) / path_in_vault) if path_in_vault else ""
+                )
                 if not abs_path or abs_path in self._id_map:
                     continue
 
                 try:
                     note_id = len(self._id_map)
                     self._id_map.append(abs_path)
-                    self._index.add(note_id, np.array(vec, dtype=np.float32))
+                    self._index.add(note_id, np.array(vec, dtype=np.float32))  # type: ignore[reportOptionalMemberAccess]  # _index loaded by _load_or_create_index
                     imported += 1
-                except Exception as e:
-                    print(f"[search_backends] SC import failed for {path_in_vault}: {e}", file=sys.stderr)
+                except Exception as e:  # intentional: usearch index.add can fail (dim mismatch, etc.); skip entry
+                    print(
+                        f"[search_backends] SC import failed for {path_in_vault}: {e}",
+                        file=sys.stderr,
+                    )
 
         return imported
 
     def _save_index(self) -> None:
         """Persist usearch index and manifest to disk."""
-        import json, sys
+        import json
+        import sys
+
         try:
-            self._index.save(self._usearch_path)
+            self._index.save(self._usearch_path)  # type: ignore[reportOptionalMemberAccess]  # _index loaded by _load_or_create_index
             manifest = {
                 "model_name": self._model_name,
-                "embedding_dim": self._index.ndim,
+                "embedding_dim": self._index.ndim,  # type: ignore[reportOptionalMemberAccess]  # _index loaded by _load_or_create_index
                 "id_map": self._id_map,
             }
             Path(self._manifest_path).write_text(json.dumps(manifest, indent=2))
-        except Exception as e:
+        except Exception as e:  # intentional: usearch save or file write can fail; non-fatal, index will rebuild next time
             print(f"[search_backends] Could not save index: {e}", file=sys.stderr)
 
     def search(self, query: str, top_k: int = 5, **filters) -> list[SearchResult]:
@@ -645,18 +718,24 @@ class HybridBackend:
             return bm25_results[:top_k]
 
         # RRF fusion
-        return _rrf_fuse(bm25_results, semantic_results, top_k=top_k, backend_name=self.backend_name())
+        return _rrf_fuse(
+            bm25_results,
+            semantic_results,
+            top_k=top_k,
+            backend_name=self.backend_name(),
+        )
 
     def _semantic_search(self, query: str, top_k: int = 10) -> list[SearchResult]:
         """Run HNSW ANN search on query embedding. Returns empty list on any failure."""
         import sys
+
         try:
             self._load_or_create_index()
             if not self._id_map:
                 return []
 
             vec = self._embed(query)
-            matches = self._index.search(vec, k=min(top_k, len(self._id_map)))
+            matches = self._index.search(vec, k=min(top_k, len(self._id_map)))  # type: ignore[reportOptionalMemberAccess]  # _index loaded by _load_or_create_index
 
             results = []
             for match in matches:
@@ -665,19 +744,21 @@ class HybridBackend:
                     continue
                 path = self._id_map[idx]
                 fm = _read_frontmatter(path)
-                results.append(SearchResult(
-                    path=path,
-                    title=fm.get("title", "") or Path(path).stem,
-                    summary=fm.get("summary", ""),
-                    tags=_normalise_list(fm.get("tags", [])),
-                    related=_normalise_list(fm.get("related", [])),
-                    note_type=fm.get("type", ""),
-                    date=str(fm.get("date", ""))[:10],
-                    score=float(match.distance),
-                    backend="semantic",
-                ))
+                results.append(
+                    SearchResult(
+                        path=path,
+                        title=fm.get("title", "") or Path(path).stem,
+                        summary=fm.get("summary", ""),
+                        tags=_normalise_list(fm.get("tags", [])),
+                        related=_normalise_list(fm.get("related", [])),
+                        note_type=fm.get("type", ""),
+                        date=str(fm.get("date", ""))[:10],
+                        score=float(match.distance),
+                        backend="semantic",
+                    )
+                )
             return results
-        except Exception as e:
+        except Exception as e:  # intentional: any semantic search failure degrades gracefully to BM25-only
             print(f"[search_backends] Semantic search error: {e}", file=sys.stderr)
             return []
 
@@ -685,6 +766,7 @@ class HybridBackend:
 # ---------------------------------------------------------------------------
 # RRF fusion
 # ---------------------------------------------------------------------------
+
 
 def _rrf_fuse(
     bm25_results: list[SearchResult],
@@ -723,7 +805,9 @@ def _rrf_fuse(
 # Backend factory
 # ---------------------------------------------------------------------------
 
-_DEFAULT_DB_PATH = str(Path.home() / ".claude" / "cyberbrain" / "search-index.db")
+from cyberbrain.extractors.state import SEARCH_DB_PATH as _STATE_DB_PATH
+
+_DEFAULT_DB_PATH = str(_STATE_DB_PATH)
 _DEFAULT_MODEL = "TaylorAI/bge-micro-v2"
 
 
@@ -735,7 +819,6 @@ def get_search_backend(config: dict) -> SearchBackend:
       search_backend  — "auto" | "hybrid" | "fts5" | "grep"  (default: "auto")
       embedding_model — HuggingFace model name                 (default: TaylorAI/bge-micro-v2)
     """
-    import sys
 
     vault_path = config.get("vault_path", "")
     db_path = config.get("search_db_path", _DEFAULT_DB_PATH)
@@ -744,14 +827,16 @@ def get_search_backend(config: dict) -> SearchBackend:
 
     def _has_fastembed() -> bool:
         try:
-            import fastembed  # noqa: F401
+            import fastembed  # noqa: F401  # type: ignore[import-not-found]  # optional dependency
+
             return True
         except ImportError:
             return False
 
     def _has_usearch() -> bool:
         try:
-            import usearch  # noqa: F401
+            import usearch  # noqa: F401  # type: ignore[import-not-found]  # optional dependency
+
             return True
         except ImportError:
             return False
@@ -784,6 +869,6 @@ def get_search_backend(config: dict) -> SearchBackend:
 # Shared helpers (canonical implementations live in frontmatter.py)
 # ---------------------------------------------------------------------------
 
-from cyberbrain.extractors.frontmatter import read_frontmatter as _read_frontmatter
-from cyberbrain.extractors.frontmatter import normalise_list as _normalise_list
 from cyberbrain.extractors.frontmatter import derive_id as _derive_id
+from cyberbrain.extractors.frontmatter import normalise_list as _normalise_list
+from cyberbrain.extractors.frontmatter import read_frontmatter as _read_frontmatter

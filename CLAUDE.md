@@ -83,6 +83,14 @@ echo '{"transcript_path": "/path/to/transcript.jsonl", "session_id": "test-123",
 
 ---
 
+## Quality Tooling
+
+- **ruff**: Linter and formatter. Config in `pyproject.toml` under `[tool.ruff]`. Run: `uv run ruff format .` and `uv run ruff check .`
+- **basedpyright**: Type checker. Config in `pyproject.toml` under `[tool.basedpyright]`. Run: `uv run basedpyright src/cyberbrain/`
+- **pre-commit**: Enforces ruff format + lint on every commit. Config in `.pre-commit-config.yaml`. Install: `uv run pre-commit install`
+
+---
+
 ## Architecture
 
 ### Data Flow
@@ -108,6 +116,8 @@ Beat routing:
 | `src/cyberbrain/extractors/extract_beats.py` | Core engine; parses JSONL/text transcripts, calls LLM backend, writes vault notes, daily journal |
 | `src/cyberbrain/extractors/backends.py` | LLM backend implementations (claude-code, bedrock, ollama); env var stripping; subprocess hardening |
 | `src/cyberbrain/extractors/analyze_vault.py` | Vault structure analyzer used by `cb_setup`; produces JSON report |
+| `src/cyberbrain/extractors/state.py` | Centralized state file paths (`~/.claude/cyberbrain/` constants) |
+| `src/cyberbrain/extractors/config.py` | Config loading and `CyberbrainConfig` TypedDict — defines all known config fields with types |
 | `src/cyberbrain/prompts/extract-beats-system.md` / `extract-beats-user.md` | Extraction LLM prompts — edit to change extraction behavior |
 | `src/cyberbrain/prompts/autofile-system.md` / `autofile-user.md` | Autofile routing prompts |
 | `src/cyberbrain/prompts/enrich-system.md` / `enrich-user.md` | Batch enrichment prompts — support `{vault_type_context}` injection |
@@ -118,7 +128,8 @@ Beat routing:
 | `src/cyberbrain/mcp/tools/setup.py` | `cb_setup` tool — two-phase vault analysis and CLAUDE.md generation |
 | `src/cyberbrain/mcp/tools/enrich.py` | `cb_enrich` tool — batch frontmatter enrichment |
 | `src/cyberbrain/mcp/tools/manage.py` | `cb_configure` + `cb_status` tools |
-| `src/cyberbrain/mcp/tools/restructure.py` | `cb_restructure` tool — split large notes, merge related clusters, create hub pages, and move clusters into subfolders |
+| `src/cyberbrain/mcp/tools/restructure/pipeline.py` | `cb_restructure` tool registration and main orchestration |
+| `src/cyberbrain/mcp/tools/restructure/*.py` | Phase modules: collect, cluster, cache, audit, decide, generate, execute, format, utils |
 | `src/cyberbrain/mcp/tools/review.py` | `cb_review` tool — working memory review (promote/extend/delete) |
 | `src/cyberbrain/prompts/restructure-system.md` / `restructure-user.md` | Restructure LLM prompts (split + merge) |
 | `src/cyberbrain/prompts/restructure-decide-system.md` / `restructure-decide-user.md` | Restructure decision prompts — action selection for clusters and large notes |
@@ -167,6 +178,8 @@ Global config at `~/.claude/cyberbrain/config.json`:
   "trash_folder": ".trash"
 }
 ```
+
+All known config fields and their types are defined in the `CyberbrainConfig` TypedDict in `src/cyberbrain/extractors/config.py`. When adding new config keys, add them there first.
 
 The vault's `CLAUDE.md` may contain a `## Cyberbrain Preferences` section (managed via `cb_configure(show_prefs/set_prefs/reset_prefs)`) that is injected into extraction and restructure prompts to guide LLM behavior without editing prompt files directly.
 
