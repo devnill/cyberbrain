@@ -131,6 +131,17 @@ Pass `--yes` to skip the confirmation prompt. The uninstaller removes all instal
 | `consolidation_log` | `"AI/Cyberbrain-Log.md"` | Vault-relative path for the consolidation/review audit log |
 | `consolidation_log_enabled` | `true` | Set `false` to disable the audit log |
 | `trash_folder` | `".trash"` | Vault-relative folder for soft-deleted notes |
+| `autofile_model` | *(uses `model`)* | Separate model for autofile routing decisions |
+| `uncertain_filing_behavior` | `"inbox"` | What to do on low-confidence filing: `"inbox"` or `"ask"` |
+| `uncertain_filing_threshold` | `0.7` | Confidence cutoff (0.0–1.0) below which `uncertain_filing_behavior` applies |
+| `search_backend` | `"hybrid"` | Search backend: `"grep"`, `"fts5"`, or `"hybrid"` |
+| `search_db_path` | `~/.claude/cyberbrain/search-index.db` | Path to the SQLite search index |
+| `embedding_model` | `"TaylorAI/bge-micro-v2"` | Model for semantic embeddings (hybrid backend) |
+| `quality_gate_enabled` | `true` | Run LLM-as-judge validation on curation output |
+| `index_refresh_interval` | `3600` | Seconds before cb_recall triggers an incremental index refresh |
+| `desktop_capture_mode` | `"suggest"` | Claude Desktop filing behavior: `"suggest"`, `"auto"`, or `"manual"` |
+
+All config fields and their types are defined in the `CyberbrainConfig` TypedDict in `src/cyberbrain/extractors/config.py`.
 
 ---
 
