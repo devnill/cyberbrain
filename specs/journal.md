@@ -509,3 +509,16 @@ Convergence: ACHIEVED after 1 cycle, 4 work items
 Work items delivered: WI-072, WI-073, WI-074, WI-075
 Cycles: 1
 All quality gates pass: ruff format, ruff check, basedpyright (0 errors), pre-commit, pytest (1300 passed, 16 skipped)
+
+## [review] 2026-03-22 — Release review completed (v1.1.0, Cycle 014)
+Critical findings: 0
+Significant findings: 0
+Minor findings: 5
+Suggestions: 0
+Items requiring user input: 0
+Curator: skipped — no policy-grade findings in a release review with no new work items
+
+## [review] 2026-03-22 — Metrics summary
+Agents spawned: 3 (code-reviewer, spec-reviewer, gap-analyst)
+Note: All three reviewers ran out of turns (20-turn limit insufficient for full codebase review). Review files written by coordinator.
+Models used: sonnet

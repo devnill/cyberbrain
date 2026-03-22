@@ -1,0 +1,30 @@
+# Decision Log — Cycle 014 (Release Review v1.1.0)
+
+## Release Decisions
+
+### D1: Version 1.1.0 (minor bump)
+Significant quality improvements with no new features or breaking changes justifies a minor version bump. Semver-compliant.
+
+### D2: FastMCP migration dismissed
+The register(mcp) closure pattern works correctly. V3 alternatives (mount, FileSystemProvider) offer no functional benefit and risk tool name instability. Dismissed as non-issue.
+
+### D3: CI/CD deferred
+Pre-commit provides local enforcement. CI/CD requires infrastructure decisions beyond the codebase. Deferred — not a release blocker for a single-developer project.
+
+### D4: All legacy work items archived
+24 work items from cycles 1-13 archived. work-items.yaml is empty. Clean slate for future feature work.
+
+## Summary of Architecture Quality Changes (Cycles 10-13)
+
+| Change | Impact |
+|--------|--------|
+| restructure.py → 11-file package | Navigability, testability |
+| state.py centralized paths | Single source of truth, 12 constants |
+| extract_beats.py hub eliminated | Direct imports, no indirection |
+| shared.py direct imports | No extract_beats dependency |
+| conftest.py cleaned | No sys.modules injection |
+| ruff + basedpyright + pre-commit | Automated quality enforcement |
+| TypedDict config | IDE completion, type safety |
+| Exception handlers documented | Code reviewability |
+| Test patterns consolidated | Onboarding, maintainability |
+| Constraint C1 → Python 3.11+ | Matches reality |
