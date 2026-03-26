@@ -2559,3 +2559,200 @@ class TestMain:
                     )
                 except SystemExit as e:
                     assert e.code in (None, 0)
+
+
+# ===========================================================================
+# run_extraction() orchestration
+# ===========================================================================
+
+
+class TestRunExtractionOrchestration:
+    """run_extraction() config passthrough and beats parameter paths."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, tmp_path, monkeypatch):
+        """Set up isolated vault, config, and log paths for each test."""
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+
+        self.vault = tmp_path / "vault"
+        self.vault.mkdir()
+        (self.vault / "AI" / "Claude-Sessions").mkdir(parents=True)
+
+        log_dir = tmp_path / "logs"
+        log_dir.mkdir()
+        self.extract_log = log_dir / "cb-extract.log"
+        self.runs_log = log_dir / "cb-runs.jsonl"
+
+        self.config = {
+            "vault_path": str(self.vault),
+            "inbox": "AI/Claude-Sessions",
+            "backend": "claude-code",
+            "model": "claude-haiku-4-5",
+            "claude_timeout": 30,
+            "autofile": False,
+            "daily_journal": False,
+        }
+
+        monkeypatch.setattr(
+            "cyberbrain.extractors.run_log.EXTRACT_LOG_PATH", self.extract_log
+        )
+        monkeypatch.setattr(
+            "cyberbrain.extractors.run_log.RUNS_LOG_PATH", self.runs_log
+        )
+
+    def _make_beat(self, title="Config Test Beat"):
+        return {
+            "title": title,
+            "type": "insight",
+            "scope": "general",
+            "summary": "A test beat.",
+            "tags": ["test"],
+            "body": "## Body\n\nContent.",
+        }
+
+    def test_explicit_config_is_used_without_calling_resolve_config(self, monkeypatch):
+        """When config is passed explicitly, resolve_config() is never called."""
+        resolve_called = []
+
+        def _reject_resolve(cwd):
+            resolve_called.append(cwd)
+            raise AssertionError(
+                "resolve_config should not be called when config is provided"
+            )
+
+        monkeypatch.setattr(eb, "resolve_config", _reject_resolve)
+
+        beat = self._make_beat("Explicit Config Beat")
+        result = eb.run_extraction(
+            None,
+            "sess-explicit-config",
+            "manual",
+            str(self.vault),
+            config=self.config,
+            beats=[beat],
+        )
+
+        assert resolve_called == [], (
+            "resolve_config was called despite config being provided"
+        )
+        assert result["beats_written"] == 1
+        assert result["skipped"] is False
+
+    def test_none_config_falls_back_to_resolve_config(self, monkeypatch):
+        """When config=None, resolve_config(cwd) is called to load the config."""
+        resolve_called = []
+        original_resolve = eb.resolve_config
+
+        def _tracking_resolve(cwd):
+            resolve_called.append(cwd)
+            return self.config
+
+        monkeypatch.setattr(eb, "resolve_config", _tracking_resolve)
+
+        beat = self._make_beat("Fallback Config Beat")
+        result = eb.run_extraction(
+            None,
+            "sess-fallback-config",
+            "manual",
+            str(self.vault),
+            config=None,
+            beats=[beat],
+        )
+
+        assert len(resolve_called) == 1
+        assert resolve_called[0] == str(self.vault)
+        assert result["beats_written"] == 1
+
+    def test_beats_parameter_skips_llm_extraction(self, monkeypatch):
+        """When beats are pre-provided, extract_beats() (LLM) is never called."""
+        extract_called = []
+
+        def _reject_extract(transcript_text, cfg, trigger, cwd):
+            extract_called.append(True)
+            raise AssertionError(
+                "extract_beats should not be called when beats are pre-provided"
+            )
+
+        monkeypatch.setattr(eb, "extract_beats", _reject_extract)
+
+        beat = self._make_beat("Pre-provided Beat")
+        result = eb.run_extraction(
+            None,
+            "sess-prebeats",
+            "manual",
+            str(self.vault),
+            config=self.config,
+            beats=[beat],
+        )
+
+        assert extract_called == [], (
+            "extract_beats was called despite beats being provided"
+        )
+        assert result["beats_count"] == 1
+        assert result["beats_written"] == 1
+
+    def test_beats_parameter_writes_beats_to_vault(self):
+        """Pre-provided beats are written to the vault correctly."""
+        beat = self._make_beat("Pre-provided Vault Beat")
+        result = eb.run_extraction(
+            None,
+            "sess-prebeats-vault",
+            "manual",
+            str(self.vault),
+            config=self.config,
+            beats=[beat],
+        )
+
+        assert result["beats_written"] == 1
+        assert len(result["written_paths"]) == 1
+        written_path = result["written_paths"][0]
+        assert written_path.exists()
+        assert "Pre-provided Vault Beat" in written_path.read_text(encoding="utf-8")
+
+    def test_beats_parameter_records_zero_llm_duration(self):
+        """llm_duration_seconds is 0.0 in the runs log when beats are pre-provided."""
+        beat = self._make_beat("Zero LLM Duration Beat")
+        eb.run_extraction(
+            None,
+            "sess-zero-llm",
+            "manual",
+            str(self.vault),
+            config=self.config,
+            beats=[beat],
+        )
+
+        assert self.runs_log.exists()
+        runs_data = json.loads(self.runs_log.read_text().strip())
+        assert runs_data["llm_duration_seconds"] == 0.0
+
+    def test_beats_parameter_writes_extract_log(self):
+        """Deduplication log entry is written when beats are pre-provided."""
+        beat = self._make_beat("Dedup Log Beat")
+        eb.run_extraction(
+            None,
+            "sess-dedup-prebeats",
+            "manual",
+            str(self.vault),
+            config=self.config,
+            beats=[beat],
+        )
+
+        assert self.extract_log.exists()
+        assert "sess-dedup-prebeats" in self.extract_log.read_text()
+
+    def test_explicit_config_vault_path_is_used_for_routing(self):
+        """Beats are written to the vault specified in the explicit config, not from disk."""
+        beat = self._make_beat("Routing Beat")
+        result = eb.run_extraction(
+            None,
+            "sess-routing",
+            "manual",
+            "/some/other/cwd",
+            config=self.config,
+            beats=[beat],
+        )
+
+        assert result["beats_written"] == 1
+        written_path = result["written_paths"][0]
+        # Must be inside self.vault, not derived from /some/other/cwd
+        assert str(written_path).startswith(str(self.vault))

@@ -1,0 +1,65 @@
+id: WI-093
+type: work_item
+title: "Quality fixes: type errors, lazy paths, architecture doc"
+status: done
+complexity: small
+scope:
+  - path: src/cyberbrain/extractors/state.py
+    op: modify
+  - path: src/cyberbrain/extractors/run_log.py
+    op: modify
+  - path: src/cyberbrain/extractors/config.py
+    op: modify
+  - path: src/cyberbrain/extractors/evaluate.py
+    op: modify
+  - path: src/cyberbrain/extractors/search_index.py
+    op: modify
+  - path: src/cyberbrain/extractors/search_backends.py
+    op: modify
+  - path: src/cyberbrain/mcp/shared.py
+    op: modify
+  - path: src/cyberbrain/mcp/tools/recall.py
+    op: modify
+  - path: src/cyberbrain/mcp/tools/restructure/cache.py
+    op: modify
+  - path: src/cyberbrain/mcp/tools/restructure/cluster.py
+    op: modify
+  - path: .ideate/plan/architecture.yaml
+    op: modify
+depends: []
+blocks:
+  - WI-094
+criteria:
+  - state.py no longer evaluates Path.home() at import time — all paths computed via functions
+  - All 12 import sites updated to call functions instead of importing constants
+  - basedpyright reports 0 errors on src/cyberbrain/
+  - Architecture tensions T5, T6, T7 are marked as resolved with brief resolution notes
+  - All existing tests pass (1310+)
+domain: cross-cutting
+notes: |-
+  ## Implementation Notes
+
+  ### state.py lazy paths
+  Convert all module-level constants to functions:
+  ```python
+  def _base() -> Path:
+      return Path.home() / ".claude" / "cyberbrain"
+
+  def config_path() -> Path:
+      return _base() / "config.json"
+  ```
+  All constants become snake_case functions: CONFIG_PATH -> config_path(), SEARCH_DB_PATH -> search_db_path(), etc.
+  Update all 12 import sites to call the function at use site.
+
+  ### basedpyright fixes
+  1. shared.py:90 — _load_config() return type: annotate as CyberbrainConfig or use a cast
+  2. evaluate.py:465 — widen parameter type or cast
+
+  ### Architecture tensions
+  Mark T5 (hook/MCP divergence), T6, T7 as resolved. T1 (vault writes) is being resolved by WI-094/095/096 this cycle.
+resolution: null
+cycle_created: 21
+cycle_modified: null
+content_hash: 52aa11c17e543f6cc38b3b789308aa2090e4c6121980c00dfaa375321bd75b73
+token_count: 517
+file_path: .ideate/work-items/WI-093.yaml

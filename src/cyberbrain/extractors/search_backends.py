@@ -805,9 +805,7 @@ def _rrf_fuse(
 # Backend factory
 # ---------------------------------------------------------------------------
 
-from cyberbrain.extractors.state import SEARCH_DB_PATH as _STATE_DB_PATH
-
-_DEFAULT_DB_PATH = str(_STATE_DB_PATH)
+from cyberbrain.extractors.state import search_db_path as _search_db_path
 _DEFAULT_MODEL = "TaylorAI/bge-micro-v2"
 
 
@@ -821,7 +819,7 @@ def get_search_backend(config: dict) -> SearchBackend:
     """
 
     vault_path = config.get("vault_path", "")
-    db_path = config.get("search_db_path", _DEFAULT_DB_PATH)
+    db_path = config.get("search_db_path", str(_search_db_path()))
     model_name = config.get("embedding_model", _DEFAULT_MODEL)
     preference = config.get("search_backend", "auto")
 

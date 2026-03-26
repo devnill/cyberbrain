@@ -13,15 +13,8 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from cyberbrain.extractors.state import (
-    SEARCH_DB_PATH as _SEARCH_DB_PATH,
-)
-from cyberbrain.extractors.state import (
-    SEARCH_MANIFEST_PATH as _SEARCH_MANIFEST_PATH,
-)
-from cyberbrain.extractors.state import (
-    WM_RECALL_LOG_PATH as _WM_RECALL_LOG,
-)
+from cyberbrain.extractors.state import search_db_path as _search_db_path
+from cyberbrain.extractors.state import wm_recall_log_path as _wm_recall_log_path
 from cyberbrain.mcp.shared import (
     _call_claude_code_backend,
     _get_search_backend,
@@ -31,9 +24,6 @@ from cyberbrain.mcp.shared import (
 from cyberbrain.mcp.shared import (
     _load_tool_prompt as _load_prompt,
 )
-
-_DEFAULT_DB_PATH = str(_SEARCH_DB_PATH)
-_DEFAULT_MANIFEST_PATH = str(_SEARCH_MANIFEST_PATH)
 
 
 def _log_wm_recall(query: str, wm_paths: list[str], total_results: int) -> None:
@@ -49,8 +39,9 @@ def _log_wm_recall(query: str, wm_paths: list[str], total_results: int) -> None:
         "total_results": total_results,
     }
     try:
-        _WM_RECALL_LOG.parent.mkdir(parents=True, exist_ok=True)
-        with open(_WM_RECALL_LOG, "a", encoding="utf-8") as f:
+        log = _wm_recall_log_path()
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with open(log, "a", encoding="utf-8") as f:
             f.write(_json.dumps(entry) + "\n")
     except OSError:
         pass
@@ -60,7 +51,7 @@ def _find_note_by_title(title: str, config: dict) -> "Path | None":
     """Look up a note by title in the FTS5 index. Returns resolved Path or None."""
     import sqlite3
 
-    db_path = config.get("search_db_path", _DEFAULT_DB_PATH)
+    db_path = config.get("search_db_path", str(_search_db_path()))
     if not Path(db_path).exists():
         return None
     try:

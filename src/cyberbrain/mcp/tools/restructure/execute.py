@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from cyberbrain.mcp.shared import _is_within_vault, _move_to_trash
+from cyberbrain.mcp.shared import _move_to_trash, move_vault_note, write_vault_note
 from cyberbrain.mcp.tools.restructure.format import _validate_frontmatter
 
 
@@ -48,19 +48,17 @@ def _execute_cluster_decisions(
                 )
                 continue
             dest_dir = vault / destination_rel
-            if not _is_within_vault(vault, dest_dir):
-                result_lines.append(
-                    f"  Cluster {cluster_idx}: move-cluster skipped — path traversal rejected"
-                )
-                continue
-            dest_dir.mkdir(parents=True, exist_ok=True)
             moved_count = 0
             for src_path in source_paths:
                 dest_path = dest_dir / src_path.name
                 try:
-                    src_path.rename(dest_path)
+                    move_vault_note(src_path, dest_path, str(vault))
                     written_paths.append(dest_path)
                     moved_count += 1
+                except ValueError:
+                    result_lines.append(
+                        f"  Cluster {cluster_idx}: move-cluster skipped — path traversal rejected"
+                    )
                 except OSError as e:
                     result_lines.append(
                         f"    Warning: could not move {src_path.name}: {e}"
@@ -84,11 +82,6 @@ def _execute_cluster_decisions(
                 continue
 
             output_path = vault / merged_path_rel
-            if not _is_within_vault(vault, output_path):
-                result_lines.append(
-                    f"  Cluster {cluster_idx}: merge skipped — path traversal rejected"
-                )
-                continue
 
             provenance_lines = (
                 f"\ncb_source: cb-restructure"
@@ -107,8 +100,13 @@ def _execute_cluster_decisions(
                     merged_content, f"Cluster {cluster_idx} merged note"
                 )
             )
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_text(merged_content, encoding="utf-8")
+            try:
+                write_vault_note(output_path, merged_content, str(vault))
+            except ValueError:
+                result_lines.append(
+                    f"  Cluster {cluster_idx}: merge skipped — path traversal rejected"
+                )
+                continue
             notes_created += 1
             written_paths.append(output_path)
 
@@ -143,11 +141,6 @@ def _execute_cluster_decisions(
                 continue
 
             output_path = vault / hub_path_rel
-            if not _is_within_vault(vault, output_path):
-                result_lines.append(
-                    f"  Cluster {cluster_idx}: hub-spoke skipped — path traversal rejected"
-                )
-                continue
 
             provenance_lines = f"\ncb_source: cb-restructure\ncb_created: {ts}"
             if hub_content.startswith("---"):
@@ -160,8 +153,13 @@ def _execute_cluster_decisions(
             result_lines.extend(
                 _validate_frontmatter(hub_content, f"Cluster {cluster_idx} hub note")
             )
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_text(hub_content, encoding="utf-8")
+            try:
+                write_vault_note(output_path, hub_content, str(vault))
+            except ValueError:
+                result_lines.append(
+                    f"  Cluster {cluster_idx}: hub-spoke skipped — path traversal rejected"
+                )
+                continue
             notes_created += 1
             written_paths.append(output_path)
 
@@ -189,24 +187,28 @@ def _execute_cluster_decisions(
             subfolder = vault / subfolder_path_rel
             hub_out = vault / hub_path_rel
 
-            if not _is_within_vault(vault, subfolder) or not _is_within_vault(
-                vault, hub_out
-            ):
+            # Validate both paths are within vault before doing any work
+            try:
+                subfolder.resolve().relative_to(vault.resolve())
+                hub_out.resolve().relative_to(vault.resolve())
+            except ValueError:
                 result_lines.append(
                     f"  Cluster {cluster_idx}: subfolder skipped — path traversal rejected"
                 )
                 continue
-
-            subfolder.mkdir(parents=True, exist_ok=True)
 
             # Move cluster notes into the new subfolder
             moved: list[Path] = []
             for src_path in source_paths:
                 dest = subfolder / src_path.name
                 try:
-                    src_path.rename(dest)
+                    move_vault_note(src_path, dest, str(vault))
                     moved.append(dest)
                     written_paths.append(dest)
+                except ValueError:
+                    result_lines.append(
+                        f"  Cluster {cluster_idx}: subfolder skipped — path traversal rejected"
+                    )
                 except OSError as e:
                     result_lines.append(
                         f"    Warning: could not move {src_path.name}: {e}"
@@ -226,8 +228,13 @@ def _execute_cluster_decisions(
                     hub_content, f"Cluster {cluster_idx} subfolder hub"
                 )
             )
-            hub_out.parent.mkdir(parents=True, exist_ok=True)
-            hub_out.write_text(hub_content, encoding="utf-8")
+            try:
+                write_vault_note(hub_out, hub_content, str(vault))
+            except ValueError:
+                result_lines.append(
+                    f"  Cluster {cluster_idx}: subfolder skipped — path traversal rejected"
+                )
+                continue
             notes_created += 1
             written_paths.append(hub_out)
 

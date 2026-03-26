@@ -316,7 +316,7 @@ class TestExtendReviewAfter:
     def test_bumps_review_date(self, tmp_path):
         p = tmp_path / "note.md"
         p.write_text("---\ncb_review_after: 2026-01-01\n---\n")
-        result = review_mod._extend_review_after(p, weeks=4)
+        result = review_mod._extend_review_after(p, weeks=4, vault_path=str(tmp_path))
         assert result is True
         content = p.read_text()
         new_date = (date.today() + timedelta(weeks=4)).isoformat()
@@ -324,13 +324,13 @@ class TestExtendReviewAfter:
 
     def test_returns_false_on_oserror(self, tmp_path):
         missing = tmp_path / "nonexistent.md"
-        result = review_mod._extend_review_after(missing, weeks=4)
+        result = review_mod._extend_review_after(missing, weeks=4, vault_path=str(tmp_path))
         assert result is False
 
     def test_returns_false_when_no_field(self, tmp_path):
         p = tmp_path / "note.md"
         p.write_text("---\ntitle: X\n---\n")
-        result = review_mod._extend_review_after(p)
+        result = review_mod._extend_review_after(p, vault_path=str(tmp_path))
         assert result is False
 
 

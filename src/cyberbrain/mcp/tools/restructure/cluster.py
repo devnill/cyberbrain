@@ -3,7 +3,7 @@
 import json
 import re
 
-from cyberbrain.extractors.state import SEARCH_MANIFEST_PATH
+from cyberbrain.extractors.state import search_manifest_path as _search_manifest_path
 from cyberbrain.mcp.shared import _load_tool_prompt as _load_prompt
 from cyberbrain.mcp.tools.restructure.cache import (
     _load_groups_cache,
@@ -101,7 +101,7 @@ def _embedding_hierarchical_clusters(
     import numpy as np  # type: ignore[import-not-found]  # optional dependency
 
     # Load manifest for id_map and embedding_dim
-    manifest_path = SEARCH_MANIFEST_PATH
+    manifest_path = _search_manifest_path()
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):

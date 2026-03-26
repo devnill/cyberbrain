@@ -28,7 +28,14 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from cyberbrain.extractors.search_backends import SearchBackend
 
-from cyberbrain.extractors.state import INDEX_SCAN_MARKER_PATH as _SCAN_MARKER_PATH
+from cyberbrain.extractors.state import index_scan_marker_path as _index_scan_marker_path
+
+
+def __getattr__(name: str):  # noqa: N807 — PEP 562 lazy module attributes
+    if name == "_SCAN_MARKER_PATH":
+        return _index_scan_marker_path()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 _DEFAULT_REFRESH_INTERVAL = 3600  # seconds
 
@@ -146,10 +153,13 @@ def incremental_refresh(config: dict, max_age_seconds: int | None = None) -> int
     if not vault_path or not Path(vault_path).exists():
         return -1
 
-    # Read the marker timestamp
+    # Read the marker timestamp — access via module namespace so tests can patch
+    import cyberbrain.extractors.search_index as _self
+
+    marker = _self._SCAN_MARKER_PATH  # __getattr__ or test-patched
     try:
-        if _SCAN_MARKER_PATH.exists():
-            last_scan_ts = float(_SCAN_MARKER_PATH.read_text().strip())
+        if marker.exists():
+            last_scan_ts = float(marker.read_text().strip())
         else:
             last_scan_ts = 0.0
     except (OSError, ValueError) as e:
@@ -188,8 +198,8 @@ def incremental_refresh(config: dict, max_age_seconds: int | None = None) -> int
                 print(f"[search_index] Prune failed: {e}", file=sys.stderr)
 
         # Update marker
-        _SCAN_MARKER_PATH.parent.mkdir(parents=True, exist_ok=True)
-        _SCAN_MARKER_PATH.write_text(str(now))
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(str(now))
 
     except Exception as e:  # intentional: any vault walk failure (permissions, etc.) is non-fatal; caller gets -1
         print(f"[search_index] incremental_refresh failed: {e}", file=sys.stderr)
@@ -202,13 +212,13 @@ def main() -> None:
     """Entry point for cyberbrain-reindex CLI and __main__ invocation."""
     import json
 
-    from cyberbrain.extractors.state import CONFIG_PATH
+    from cyberbrain.extractors.state import config_path as _config_path
 
-    config_path = CONFIG_PATH
-    if not config_path.exists():
+    _cp = _config_path()
+    if not _cp.exists():
         print("No config found at ~/.claude/cyberbrain/config.json", file=sys.stderr)
         sys.exit(1)
-    config = json.loads(config_path.read_text())
+    config = json.loads(_cp.read_text())
     # Force refresh regardless of age by passing max_age_seconds=0
     count = incremental_refresh(config, max_age_seconds=0)
     if count >= 0:

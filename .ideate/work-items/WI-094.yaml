@@ -1,0 +1,66 @@
+id: WI-094
+type: work_item
+title: Add vault write abstraction layer
+status: done
+complexity: small
+scope:
+  - path: src/cyberbrain/extractors/vault.py
+    op: modify
+  - path: tests/test_vault.py
+    op: modify
+depends:
+  - WI-093
+blocks:
+  - WI-095
+  - WI-096
+criteria:
+  - vault.py exports write_vault_note(path, content, vault_path) that validates path is within vault, creates parent dirs, and writes
+  - vault.py exports update_vault_note(path, content, vault_path) for updating existing notes
+  - vault.py exports move_vault_note(src, dest, vault_path) for moving notes within vault
+  - All three raise ValueError if path is outside vault
+  - shared.py re-exports the three functions (done in WI-093 scope since shared.py is already modified there)
+  - "Tests cover: happy path, path traversal rejection, parent dir creation"
+  - All existing tests pass
+domain: extraction
+notes: |-
+  ## Implementation Notes
+
+  ### New functions in vault.py
+
+  ```python
+  def _is_within_vault_check(vault: Path, target: Path) -> None:
+      """Raise ValueError if target is not within vault."""
+      try:
+          target.resolve().relative_to(vault.resolve())
+      except ValueError:
+          raise ValueError(f"Path {target} is not within vault {vault}")
+
+  def write_vault_note(path: Path, content: str, vault_path: str) -> Path:
+      vault = Path(vault_path)
+      _is_within_vault_check(vault, path)
+      path.parent.mkdir(parents=True, exist_ok=True)
+      path.write_text(content, encoding="utf-8")
+      return path
+
+  def update_vault_note(path: Path, content: str, vault_path: str) -> Path:
+      vault = Path(vault_path)
+      _is_within_vault_check(vault, path)
+      path.write_text(content, encoding="utf-8")
+      return path
+
+  def move_vault_note(src: Path, dest: Path, vault_path: str) -> Path:
+      vault = Path(vault_path)
+      _is_within_vault_check(vault, src)
+      _is_within_vault_check(vault, dest)
+      dest.parent.mkdir(parents=True, exist_ok=True)
+      src.rename(dest)
+      return dest
+  ```
+
+  Note: WI-093 already modifies shared.py. The re-exports for these functions should be added as part of that work or noted for the executor to include when WI-094 runs (since WI-094 depends on WI-093).
+resolution: null
+cycle_created: 21
+cycle_modified: null
+content_hash: e3accee46be29f847ca1c61fa238b0455943d3e91f9453ad17ddb31edf384903
+token_count: 570
+file_path: .ideate/work-items/WI-094.yaml

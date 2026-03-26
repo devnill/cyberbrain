@@ -17,7 +17,7 @@ import json
 import os
 import sys
 import time
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -50,12 +50,25 @@ from cyberbrain.extractors.vault import (
 # ---------------------------------------------------------------------------
 
 
-def run_extraction(transcript_text, session_id, trigger, cwd, config=None):
+def run_extraction(transcript_text, session_id, trigger, cwd, config=None, beats=None):
     """Shared extraction orchestration for both CLI and MCP paths.
 
     Handles: config loading (if not provided), dedup check, beat extraction,
     vault writing (with autofile if enabled), extract log, runs log, and
     journal entry (if configured).
+
+    Args:
+        transcript_text: Parsed transcript string. May be None when beats are
+            pre-provided via the beats parameter.
+        session_id: Session identifier for dedup and logging.
+        trigger: Compaction trigger type string.
+        cwd: Working directory of the Claude Code session.
+        config: Pre-loaded config dict. When not None, used directly without
+            calling resolve_config(cwd). Defaults to None (resolve from cwd).
+        beats: Pre-extracted beats list. When provided, skips transcript
+            parsing and LLM extraction. Defaults to None (extract from
+            transcript_text). llm_duration is recorded as 0.0 when beats are
+            pre-provided.
 
     Returns a dict with:
         skipped (bool)         — True if session was already extracted (dedup)
@@ -65,7 +78,7 @@ def run_extraction(transcript_text, session_id, trigger, cwd, config=None):
         beat_records (list)    — list of dicts with title/type/scope/path for run log
         run_errors (list[str]) — per-beat error messages (non-fatal)
     """
-    cfg: dict = resolve_config(cwd)  # type: ignore[assignment]  # CyberbrainConfig is a TypedDict (dict subclass)
+    cfg: dict = config if config is not None else resolve_config(cwd)  # type: ignore[assignment]  # CyberbrainConfig is a TypedDict (dict subclass)
 
     # Dedup check
     if is_session_already_extracted(session_id):
@@ -80,10 +93,13 @@ def run_extraction(transcript_text, session_id, trigger, cwd, config=None):
 
     start = time.monotonic()
 
-    # Beat extraction
-    llm_start = time.monotonic()
-    beats = extract_beats(transcript_text, cfg, trigger, cwd)
-    llm_duration = time.monotonic() - llm_start
+    # Beat extraction — skip when beats are pre-provided
+    if beats is not None:
+        llm_duration = 0.0
+    else:
+        llm_start = time.monotonic()
+        beats = extract_beats(transcript_text, cfg, trigger, cwd)
+        llm_duration = time.monotonic() - llm_start
 
     if not beats:
         # Write dedup + runs log even when nothing was extracted
@@ -285,9 +301,20 @@ def main():
             _print_dry_run_preview(beats, config, autofile_enabled)
             sys.exit(0)
 
-        # Write beats directly (bypass run_extraction's transcript/LLM path)
-        _write_beats_and_log(beats, session_id, args.trigger, args.cwd, config, llm_duration=0.0)
-        print(f"[extract_beats] Done. beats written.", file=sys.stderr)
+        # Write beats directly via run_extraction with pre-provided beats
+        result = run_extraction(
+            None, session_id, args.trigger, args.cwd, config=config, beats=beats
+        )
+        if result["skipped"]:
+            print(
+                f"[extract_beats] Session '{session_id}' already extracted. Skipping.",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"[extract_beats] Done. {result['beats_written']} beat(s) written.",
+                file=sys.stderr,
+            )
         return
 
     # Normal transcript path
@@ -393,95 +420,6 @@ def _print_dry_run_preview(beats, config, autofile_enabled):
     for line in lines_out:
         print(line)
     print(f"{total} beat(s) would be written. Vault not modified.")
-
-
-def _write_beats_and_log(beats, session_id, trigger, cwd, config, llm_duration=0.0):
-    """Write pre-extracted beats to vault and write log entries.
-
-    Used by the --beats-json CLI path where transcript parsing and LLM
-    extraction are skipped.
-    """
-    start = time.monotonic()
-    now = datetime.now(UTC)
-    written: list = []
-    run_errors: list = []
-    beat_records: list = []
-    autofile_enabled = config.get("autofile", False)
-
-    vault_context: str | None = None
-    if autofile_enabled:
-        vault_context_text = read_vault_claude_md(config["vault_path"])
-        vault_context = (
-            vault_context_text
-            if vault_context_text is not None
-            else "File notes using human-readable names with spaces. Use types: decision, insight, problem, reference."
-        )
-
-    for beat in beats:
-        try:
-            if autofile_enabled:
-                try:
-                    path = autofile_beat(
-                        beat,
-                        config,
-                        session_id,
-                        cwd,
-                        now,
-                        vault_context=vault_context,
-                    )
-                except BackendError as e:
-                    print(
-                        f"[extract_beats] autofile failed, filing to inbox: {e}",
-                        file=sys.stderr,
-                    )
-                    path = write_beat(beat, config, session_id, cwd, now)
-            else:
-                path = write_beat(beat, config, session_id, cwd, now)
-            if path:
-                written.append(path)
-                beat_records.append(
-                    {
-                        "title": beat.get("title", ""),
-                        "type": beat.get("type", ""),
-                        "scope": beat.get("scope", ""),
-                        "path": os.path.relpath(str(path), config["vault_path"]),
-                    }
-                )
-                print(f"[extract_beats] Wrote: {path}", file=sys.stderr)
-        except Exception as e:  # intentional: per-beat write failure is non-fatal; log and continue to next beat
-            err_msg = f"write error on '{beat.get('title', '?')}': {e}"
-            run_errors.append(err_msg)
-            print(
-                f"[extract_beats] Failed on '{beat.get('title', '?')}': {e}",
-                file=sys.stderr,
-            )
-
-    project_name = config.get("project_name", Path(cwd).name)
-
-    if config.get("daily_journal", False) and written:
-        write_journal_entry(written, config, session_id, project_name, now)
-
-    write_extract_log_entry(session_id, len(written))
-
-    duration = time.monotonic() - start
-    write_runs_log_entry(
-        {
-            "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "session_id": session_id,
-            "trigger": trigger,
-            "project": project_name,
-            "backend": config.get("backend", DEFAULT_BACKEND),
-            "model": config.get("model", CLI_DEFAULT_MODEL),
-            "duration_seconds": round(duration, 1),
-            "llm_duration_seconds": round(llm_duration, 1),
-            "beats_extracted": len(beats),
-            "beats_written": len(written),
-            "beats": beat_records,
-            "errors": run_errors,
-        }
-    )
-
-    print(f"[extract_beats] Done. {len(written)} beat(s) written.", file=sys.stderr)
 
 
 if __name__ == "__main__":

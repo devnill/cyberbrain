@@ -1220,7 +1220,7 @@ class TestCbStatus:
         config = {**BASE_CONFIG, "vault_path": str(tmp_path)}
         with patch.object(_manage_mod, "_load_config", return_value=config):
             with patch.object(
-                _manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.jsonl")
+                _manage_mod, "runs_log_path", lambda: tmp_path / "no-log.jsonl"
             ):
                 with patch.object(_manage_mod, "_read_index_stats", return_value={}):
                     result = cb_status()
@@ -1247,7 +1247,7 @@ class TestCbStatus:
         )
         config = {**BASE_CONFIG, "vault_path": str(tmp_path)}
         with patch.object(_manage_mod, "_load_config", return_value=config):
-            with patch.object(_manage_mod, "RUNS_LOG_PATH", str(runs_log)):
+            with patch.object(_manage_mod, "runs_log_path", lambda: runs_log):
                 with patch.object(
                     _manage_mod,
                     "_read_index_stats",
@@ -1272,7 +1272,7 @@ class TestCbStatus:
         }
         with patch.object(_manage_mod, "_load_config", return_value=config):
             with patch.object(
-                _manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.jsonl")
+                _manage_mod, "runs_log_path", lambda: tmp_path / "no-log.jsonl"
             ):
                 with patch.object(_manage_mod, "_read_index_stats", return_value=stats):
                     result = cb_status()
@@ -1283,7 +1283,7 @@ class TestCbStatus:
         config = {**BASE_CONFIG, "vault_path": str(tmp_path)}
         with patch.object(_manage_mod, "_load_config", return_value=config):
             with patch.object(
-                _manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.jsonl")
+                _manage_mod, "runs_log_path", lambda: tmp_path / "no-log.jsonl"
             ):
                 with patch.object(_manage_mod, "_read_index_stats", return_value={}):
                     result = cb_status()
@@ -1308,7 +1308,7 @@ class TestCbStatus:
         self._make_runs_log(runs_log, entries)
         config = {**BASE_CONFIG, "vault_path": str(tmp_path)}
         with patch.object(_manage_mod, "_load_config", return_value=config):
-            with patch.object(_manage_mod, "RUNS_LOG_PATH", str(runs_log)):
+            with patch.object(_manage_mod, "runs_log_path", lambda: runs_log):
                 with patch.object(_manage_mod, "_read_index_stats", return_value={}):
                     result = cb_status(last_n_runs=2)
         # Only the last 2 entries should appear — sess0004 and sess0005
@@ -1543,7 +1543,7 @@ class TestCbConfigureAdditionalCoverage:
         config = {**BASE_CONFIG, "vault_path": nonexistent}
         with patch.object(_manage_mod, "_load_config", return_value=config):
             with patch.object(
-                _manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-runs.log")
+                _manage_mod, "runs_log_path", lambda: tmp_path / "no-runs.log"
             ):
                 result = cb_configure()
         assert "does not exist" in result or "⚠" in result
@@ -1574,7 +1574,7 @@ class TestCbConfigureAdditionalCoverage:
                     "stale_count": 0,
                 },
             ):
-                with patch.object(_manage_mod, "RUNS_LOG_PATH", str(runs_log)):
+                with patch.object(_manage_mod, "runs_log_path", lambda: runs_log):
                     result = cb_configure()
 
         assert "2026-01-15" in result or "abc123" in result
@@ -1608,7 +1608,7 @@ class TestCbStatusAdditionalCoverage:
         }
         with patch.object(_manage_mod, "_load_config", return_value=config):
             with patch.object(
-                _manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.jsonl")
+                _manage_mod, "runs_log_path", lambda: tmp_path / "no-log.jsonl"
             ):
                 with patch.object(_manage_mod, "_read_index_stats", return_value=stats):
                     result = cb_status()
@@ -1645,7 +1645,7 @@ class TestCbStatusAdditionalCoverage:
         )
         config = {**BASE_CONFIG, "vault_path": str(tmp_path)}
         with patch.object(_manage_mod, "_load_config", return_value=config):
-            with patch.object(_manage_mod, "RUNS_LOG_PATH", str(runs_log)):
+            with patch.object(_manage_mod, "runs_log_path", lambda: runs_log):
                 with patch.object(_manage_mod, "_read_index_stats", return_value={}):
                     result = cb_status()
         assert "FastAPI Decision" in result
@@ -1666,7 +1666,7 @@ class TestCbStatusAdditionalCoverage:
         }
         with patch.object(_manage_mod, "_load_config", return_value=config):
             with patch.object(
-                _manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.jsonl")
+                _manage_mod, "runs_log_path", lambda: tmp_path / "no-log.jsonl"
             ):
                 with patch.object(
                     _manage_mod,
@@ -1763,7 +1763,7 @@ class TestCbStatusAdditionalCoverage:
                     "stale_count": 0,
                 },
             ):
-                with patch.object(_manage_mod, "RUNS_LOG_PATH", str(runs_log)):
+                with patch.object(_manage_mod, "runs_log_path", lambda: runs_log):
                     result = cb_configure()
         # The valid entry (last valid JSON line) should be found
         assert "2026-02-01" in result or "validxyz" in result
@@ -1774,7 +1774,7 @@ class TestCbStatusAdditionalCoverage:
         runs_log.write_text("not json at all\nalso bad\n", encoding="utf-8")
         config = {**BASE_CONFIG, "vault_path": str(tmp_path)}
         with patch.object(_manage_mod, "_load_config", return_value=config):
-            with patch.object(_manage_mod, "RUNS_LOG_PATH", str(runs_log)):
+            with patch.object(_manage_mod, "runs_log_path", lambda: runs_log):
                 with patch.object(_manage_mod, "_read_index_stats", return_value={}):
                     result = cb_status()
         # Should not crash — bad lines are skipped
@@ -1786,7 +1786,7 @@ class TestCbStatusAdditionalCoverage:
         runs_log.write_text('{"timestamp": "2026-01-01T00:00:00Z"}\n')
         config = {**BASE_CONFIG, "vault_path": str(tmp_path)}
         with patch.object(_manage_mod, "_load_config", return_value=config):
-            with patch.object(_manage_mod, "RUNS_LOG_PATH", str(runs_log)):
+            with patch.object(_manage_mod, "runs_log_path", lambda: runs_log):
                 with patch.object(_manage_mod, "_read_index_stats", return_value={}):
                     with patch("builtins.open", side_effect=OSError("disk error")):
                         # Path.read_text uses open internally; patch to raise OSError
@@ -1811,7 +1811,7 @@ class TestCbStatusAdditionalCoverage:
         }
         with patch.object(_manage_mod, "_load_config", return_value=config):
             with patch.object(
-                _manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.jsonl")
+                _manage_mod, "runs_log_path", lambda: tmp_path / "no-log.jsonl"
             ):
                 with patch.object(
                     _manage_mod,

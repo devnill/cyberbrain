@@ -430,3 +430,45 @@ cb_created: {date_str}{wm_fields}{uncertain_routing_field}
     )
 
     return output_path
+
+
+# ---------------------------------------------------------------------------
+# Vault write abstraction layer
+# ---------------------------------------------------------------------------
+
+
+def _is_within_vault_check(vault: Path, target: Path) -> None:
+    """Raise ValueError if target is not within vault."""
+    try:
+        target.resolve().relative_to(vault.resolve())
+    except ValueError:
+        raise ValueError(f"Path {target} is not within vault {vault}")
+
+
+def write_vault_note(path: Path, content: str, vault_path: str) -> Path:
+    """Write content to path within vault, creating parent dirs as needed."""
+    vault = Path(vault_path)
+    _is_within_vault_check(vault, path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+def update_vault_note(path: Path, content: str, vault_path: str) -> Path:
+    """Overwrite an existing vault note with new content."""
+    vault = Path(vault_path)
+    _is_within_vault_check(vault, path)
+    if not path.exists():
+        raise FileNotFoundError(f"Note does not exist: {path}")
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+def move_vault_note(src: Path, dest: Path, vault_path: str) -> Path:
+    """Move a vault note from src to dest within the vault."""
+    vault = Path(vault_path)
+    _is_within_vault_check(vault, src)
+    _is_within_vault_check(vault, dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    src.rename(dest)
+    return dest

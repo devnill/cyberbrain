@@ -7,7 +7,8 @@ from pathlib import Path
 # 1. Primary: relative to this file (works in plugin cache via ${CLAUDE_PLUGIN_ROOT})
 # 2. Fallback: legacy installed location for existing installs
 _PROMPTS_DIR_PRIMARY = Path(__file__).parent.parent / "prompts"
-from cyberbrain.extractors.state import PROMPTS_DIR_LEGACY as _PROMPTS_DIR_LEGACY
+from cyberbrain.extractors.state import prompts_dir_legacy as _prompts_dir_legacy
+from cyberbrain.extractors.state import runs_log_path as _runs_log_path
 
 # ---------------------------------------------------------------------------
 # Direct imports from source modules — avoids the extract_beats re-export hub,
@@ -25,9 +26,9 @@ try:
     from cyberbrain.extractors.frontmatter import (
         parse_frontmatter as _parse_frontmatter,
     )
-    from cyberbrain.extractors.run_log import RUNS_LOG_PATH, write_journal_entry
+    from cyberbrain.extractors.run_log import write_journal_entry
     from cyberbrain.extractors.transcript import parse_jsonl_transcript
-    from cyberbrain.extractors.vault import write_beat
+    from cyberbrain.extractors.vault import move_vault_note, update_vault_note, write_beat, write_vault_note
 except ImportError as e:
     raise RuntimeError(
         f"Could not import cyberbrain extractors. "
@@ -73,7 +74,7 @@ def _load_tool_prompt(filename: str) -> str:
         return primary_path.read_text(encoding="utf-8")
 
     # Fallback: legacy installed location
-    legacy_path = _PROMPTS_DIR_LEGACY / filename
+    legacy_path = _prompts_dir_legacy() / filename
     if legacy_path.exists():
         return legacy_path.read_text(encoding="utf-8")
 
@@ -87,7 +88,8 @@ def _load_tool_prompt(filename: str) -> str:
 
 
 def _load_config(cwd: str = "") -> dict:
-    return _resolve_config(cwd or str(Path.home()))
+    from typing import cast
+    return cast(dict, _resolve_config(cwd or str(Path.home())))
 
 
 def _is_within_vault(vault: Path, target: Path) -> bool:

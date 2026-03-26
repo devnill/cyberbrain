@@ -2,9 +2,7 @@
 
 import json
 
-from cyberbrain.extractors.state import GROUPS_CACHE_PATH
-
-_GROUPS_CACHE = GROUPS_CACHE_PATH
+from cyberbrain.extractors.state import groups_cache_path as _groups_cache_path
 
 
 def _save_groups_cache(
@@ -17,7 +15,7 @@ def _save_groups_cache(
         "groups": [[n["rel_path"] for n in cluster] for cluster in clusters],
     }
     try:
-        _GROUPS_CACHE.write_text(json.dumps(cache_data), encoding="utf-8")
+        _groups_cache_path().write_text(json.dumps(cache_data), encoding="utf-8")
     except OSError:
         pass
 
@@ -27,7 +25,7 @@ def _load_groups_cache(
 ) -> list[list[dict]] | None:
     """Load cached grouping if it exists and matches the folder and strategy. Returns None on miss."""
     try:
-        data = json.loads(_GROUPS_CACHE.read_text(encoding="utf-8"))
+        data = json.loads(_groups_cache_path().read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
     if data.get("folder") != folder_path:
@@ -46,6 +44,6 @@ def _load_groups_cache(
 def _clear_groups_cache() -> None:
     """Remove the groups cache file."""
     try:
-        _GROUPS_CACHE.unlink(missing_ok=True)
+        _groups_cache_path().unlink(missing_ok=True)
     except OSError:
         pass

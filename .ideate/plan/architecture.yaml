@@ -455,17 +455,17 @@ content: |
   
   `frontmatter.py` was created to consolidate duplicated implementations. However, `shared.py._parse_frontmatter()`, `analyze_vault.parse_frontmatter()`, and `search_backends.py` (fallback path) each still contain their own implementations. `frontmatter.py` is the canonical source but not universally used.
   
-  ### T5: Hook vs MCP Extraction Path Divergence
+  ### T5: Hook vs MCP Extraction Path Divergence ~~[RESOLVED]~~
   
-  The PreCompact hook invokes `src/cyberbrain/extractors/extract_beats.py` as a CLI script. The MCP `cb_extract` tool imports `_extract_beats` as a function. Both paths converge at the extractor layer, but the hook path goes through the full `main()` function (including dedup check, runs log, journal writing) while the MCP path reimplements parts of that orchestration in `src/cyberbrain/mcp/tools/extract.py`.
+  Resolved by WI-088 (cycle 017) — unified via run_extraction(). Fully resolved by WI-092 (cycle 21). Both the PreCompact hook path and the MCP cb_extract path now route through the same run_extraction() orchestration function in extract_beats.py, eliminating the reimplementation of dedup, runs log, and journal writing in the MCP tool.
   
-  ### T6: Search Backend Initialization
+  ### T6: Search Backend Initialization ~~[RESOLVED]~~
   
-  `shared.py._get_search_backend()` uses a module-level global `_search_backend` with no cache invalidation. `search_index.py._get_backend()` uses a dict cache keyed by vault_path + backend + model. If config changes mid-session (via `cb_configure`), the `shared.py` backend is not refreshed. The `search_index.py` cache would create a new instance but `shared.py` would not.
+  Resolved by WI-088 (cycle 017). `shared.py._invalidate_search_backend()` is now called by `cb_configure` after any config change that affects search (vault_path, search_backend, embedding_model). This ensures the module-level backend is re-initialized on the next cb_recall call. The `search_index.py` dict cache keys on vault_path + backend + model, so config changes that affect those fields also create a fresh backend instance.
   
-  ### T7: Relation Vocabulary Divergence
+  ### T7: Relation Vocabulary Divergence ~~[RESOLVED]~~
   
-  `vault.py` defines `VALID_PREDICATES = {"related", "references", "broader", "narrower", "supersedes", "wasDerivedFrom"}` (SKOS/Dublin Core/PROV-O vocabulary). The knowledge-graph-enhancement spec defines a different vocabulary: `related-to`, `causes`, `caused-by`, `supersedes`, `implements`, `contradicts`. The code uses the SKOS vocabulary for validation; the prompts instruct the LLM to use the spec vocabulary. Relations with spec-vocabulary predicates that don't match `VALID_PREDICATES` are silently normalized to "related".
+  Resolved by WI-089 (cycle 017). The VALID_PREDICATES set in vault.py was updated to match the prompt vocabulary: {"related-to", "causes", "caused-by", "supersedes", "implements", "contradicts", "references", "broader", "narrower", "wasDerivedFrom"}. The extraction and autofile prompts and the validation code now use the same predicate set, eliminating silent normalization to "related" for spec-vocabulary predicates.
   
   ### T8: Working Memory Folder as Routing Override
   
@@ -538,5 +538,5 @@ content: |
   4. **Cross-module dependencies have matching Provides/Requires pairs.** All interfaces are documented in the Interface Contracts section above. The MCP shared bridge (shared.py) is the primary coupling point between the MCP layer and the extractor layer.
   
   **Result: Coverage check passes.** Known gaps are flagged as design tensions (T1-T8) above.
-content_hash: "4ef8caa9042c7cb54b37b5bd77a0f8925ddeaed757f29c056b670f3b30ffd3da"
+content_hash: "38ad05312f30cd0f20e0c8cdfe70165eb52a128e1a7932d77cd782e7e4f820a3"
 token_count: 7093

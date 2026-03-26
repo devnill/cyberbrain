@@ -9,7 +9,13 @@ import sys
 from pathlib import Path
 from typing import TypedDict
 
-from cyberbrain.extractors.state import CONFIG_PATH as GLOBAL_CONFIG_PATH
+from cyberbrain.extractors.state import config_path as _config_path_fn
+
+
+def __getattr__(name: str):  # noqa: N807 — PEP 562 lazy module attributes
+    if name == "GLOBAL_CONFIG_PATH":
+        return _config_path_fn()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 PROJECT_CONFIG_NAME = "cyberbrain.local.json"
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
@@ -53,22 +59,25 @@ class CyberbrainConfig(TypedDict, total=False):
 
 
 def load_global_config() -> CyberbrainConfig:
-    if not GLOBAL_CONFIG_PATH.exists():
+    import cyberbrain.extractors.config as _self
+
+    _cfg_path = _self.GLOBAL_CONFIG_PATH  # goes through __getattr__ or test-patched attribute
+    if not _cfg_path.exists():
         print(
-            f"[extract_beats] Global config not found at {GLOBAL_CONFIG_PATH}. "
+            f"[extract_beats] Global config not found at {_cfg_path}. "
             "Create it with vault_path and inbox.",
             file=sys.stderr,
         )
         sys.exit(0)
 
-    with open(GLOBAL_CONFIG_PATH) as f:
+    with open(_cfg_path) as f:
         config = json.load(f)
 
     missing = [k for k in REQUIRED_GLOBAL_FIELDS if not config.get(k)]
     if missing:
         print(
             f"[extract_beats] Global config missing fields: {missing}. "
-            f"Edit {GLOBAL_CONFIG_PATH}.",
+            f"Edit {_cfg_path}.",
             file=sys.stderr,
         )
         sys.exit(0)
@@ -82,7 +91,7 @@ def load_global_config() -> CyberbrainConfig:
     ):
         print(
             f"[extract_beats] vault_path '{config['vault_path']}' is a placeholder or does not exist. "
-            f"Edit {GLOBAL_CONFIG_PATH} with your real vault path.",
+            f"Edit {_cfg_path} with your real vault path.",
             file=sys.stderr,
         )
         sys.exit(0)
@@ -93,7 +102,7 @@ def load_global_config() -> CyberbrainConfig:
     if vault_path == home or vault_path == root:
         print(
             f"[extract_beats] vault_path must not be your home directory or filesystem root. "
-            f"Edit {GLOBAL_CONFIG_PATH}.",
+            f"Edit {_cfg_path}.",
             file=sys.stderr,
         )
         sys.exit(0)

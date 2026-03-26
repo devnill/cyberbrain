@@ -8,19 +8,20 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from cyberbrain.extractors.state import runs_log_path, search_db_path, search_manifest_path
 from cyberbrain.mcp.shared import (
-    RUNS_LOG_PATH,
     _invalidate_search_backend,
     _load_config,
 )
-from cyberbrain.mcp.tools.recall import _DEFAULT_DB_PATH, _DEFAULT_MANIFEST_PATH
+
+
 
 
 def _read_index_stats(config: dict) -> dict:
     """Query SQLite index for note counts, relation count, and stale path count."""
     import sqlite3
 
-    db_path = config.get("search_db_path", _DEFAULT_DB_PATH)
+    db_path = config.get("search_db_path", str(search_db_path()))
     try:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
@@ -512,7 +513,7 @@ def register(mcp: FastMCP) -> None:
         )
 
         # Last extraction run
-        runs_log = Path(RUNS_LOG_PATH)
+        runs_log = runs_log_path()
         if runs_log.exists():
             try:
                 import json as _json2
@@ -562,7 +563,7 @@ def register(mcp: FastMCP) -> None:
 
         # --- Recent runs ---
         runs = []
-        runs_log = Path(RUNS_LOG_PATH)
+        runs_log = runs_log_path()
         if runs_log.exists():
             try:
                 lines = runs_log.read_text(encoding="utf-8").splitlines()
@@ -583,7 +584,7 @@ def register(mcp: FastMCP) -> None:
         manifest = {}
         try:
             manifest_path = Path(
-                config.get("search_manifest_path", _DEFAULT_MANIFEST_PATH)
+                config.get("search_manifest_path", str(search_manifest_path()))
             )
             if manifest_path.exists():
                 manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -697,9 +698,7 @@ def register(mcp: FastMCP) -> None:
             try:
                 import sqlite3 as _sqlite3
 
-                from cyberbrain.mcp.tools.recall import _DEFAULT_DB_PATH
-
-                db_path = config.get("search_db_path", _DEFAULT_DB_PATH)
+                db_path = config.get("search_db_path", str(search_db_path()))
                 conn = _sqlite3.connect(db_path)
                 total_notes = conn.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
                 conn.close()

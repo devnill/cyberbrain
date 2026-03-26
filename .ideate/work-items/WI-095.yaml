@@ -1,0 +1,43 @@
+id: WI-095
+type: work_item
+title: Enforce C-06 in cb_review
+status: done
+complexity: small
+scope:
+  - path: src/cyberbrain/mcp/tools/review.py
+    op: modify
+  - path: tests/test_review_tool.py
+    op: modify
+depends:
+  - WI-094
+blocks: []
+criteria:
+  - review.py no longer calls path.write_text() or open() for vault files directly
+  - All vault writes go through write_vault_note(), update_vault_note(), or _move_to_trash()
+  - Consolidation log append works correctly
+  - All existing review tests pass
+  - No behavioral change — same notes written to same paths
+domain: curation
+notes: |-
+  ## Implementation Notes
+
+  ### Three write sites to migrate
+
+  1. **Line 192**: `path.write_text(updated)` — updating cb_review_after date.
+     Replace with: `update_vault_note(path, updated, config["vault_path"])`
+
+  2. **Lines 207-208**: `f.write(header + body)` — appending to consolidation log.
+     Read existing, append, write via update_vault_note().
+
+  3. **Line 432**: `output_path.write_text(promoted_content)` — writing promoted note.
+     Replace with: `write_vault_note(output_path, promoted_content, config["vault_path"])`
+     Remove the preceding mkdir call since write_vault_note handles it.
+
+  ### Import changes
+  Add: `from cyberbrain.mcp.shared import write_vault_note, update_vault_note`
+resolution: null
+cycle_created: 21
+cycle_modified: null
+content_hash: fe7b90939220e270b27ec8b9d0dfb27bb124484b326f991a8ed164e94f4f456b
+token_count: 340
+file_path: .ideate/work-items/WI-095.yaml

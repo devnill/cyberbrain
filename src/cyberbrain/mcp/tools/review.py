@@ -18,6 +18,8 @@ from cyberbrain.mcp.shared import (
     _move_to_trash,
     _parse_frontmatter,
     _prune_index,
+    update_vault_note,
+    write_vault_note,
 )
 from cyberbrain.mcp.shared import (
     _load_tool_prompt as _load_prompt,
@@ -172,7 +174,7 @@ def _format_notes_block(notes: list[dict], clusters: list[list[int]]) -> str:
     return "\n\n---\n\n".join(parts)
 
 
-def _extend_review_after(path: Path, weeks: int = 4) -> bool:
+def _extend_review_after(path: Path, weeks: int = 4, vault_path: str = "") -> bool:
     """Bump cb_review_after by `weeks` weeks. Returns True on success."""
     try:
         text = path.read_text(encoding="utf-8")
@@ -189,9 +191,9 @@ def _extend_review_after(path: Path, weeks: int = 4) -> bool:
     if updated == text:
         return False
     try:
-        path.write_text(updated, encoding="utf-8")
+        update_vault_note(path, updated, vault_path)
         return True
-    except OSError:
+    except (OSError, FileNotFoundError):
         return False
 
 
@@ -200,12 +202,16 @@ def _append_errata(vault: Path, config: dict, entries: list[str]) -> None:
         return
     log_rel = config.get("consolidation_log", "AI/Cyberbrain-Log.md")
     log_path = vault / log_rel
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+    vault_path_str = str(vault)
     now = datetime.now(UTC)
     header = f"\n## {now.strftime('%Y-%m-%d')} — Working Memory Review\n\n"
     body = "\n".join(f"- {e}" for e in entries) + "\n"
-    with open(log_path, "a", encoding="utf-8") as f:
-        f.write(header + body)
+    new_content = header + body
+    if log_path.exists():
+        existing = log_path.read_text(encoding="utf-8")
+        update_vault_note(log_path, existing + new_content, vault_path_str)
+    else:
+        write_vault_note(log_path, new_content, vault_path_str)
 
 
 def register(mcp: FastMCP) -> None:
@@ -428,8 +434,7 @@ def register(mcp: FastMCP) -> None:
                             promoted_content[:end] + prov + promoted_content[end:]
                         )
 
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                output_path.write_text(promoted_content, encoding="utf-8")
+                write_vault_note(output_path, promoted_content, vault_path_str)
                 promoted += 1
                 written_paths.append(output_path)
 
@@ -452,7 +457,7 @@ def register(mcp: FastMCP) -> None:
             elif action == "extend":
                 extended_paths = []
                 for note in affected_notes:
-                    if _extend_review_after(note["path"], extend_weeks):
+                    if _extend_review_after(note["path"], extend_weeks, vault_path_str):
                         extended += 1
                         extended_paths.append(note["title"])
                 result_lines.append(

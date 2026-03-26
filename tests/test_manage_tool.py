@@ -648,7 +648,7 @@ class TestCbConfigureNoArgs:
                 return_value={"total": 5, "by_type": {}},
             ):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-runs.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-runs.log"
                 ):
                     result = _cb_configure()()
         assert "Cyberbrain Configuration" in result
@@ -671,7 +671,7 @@ class TestCbConfigureNoArgs:
                 return_value={"total": 0, "by_type": {}},
             ):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-runs.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-runs.log"
                 ):
                     result = _cb_configure()()
         assert "Tool models:" in result
@@ -689,7 +689,7 @@ class TestCbConfigureNoArgs:
                 return_value={"total": 0, "by_type": {}},
             ):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-runs.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-runs.log"
                 ):
                     result = _cb_configure()()
         assert "Tool models:" not in result
@@ -698,7 +698,7 @@ class TestCbConfigureNoArgs:
         cfg = {**BASE_CONFIG, "vault_path": ""}
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(
-                manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-runs.log")
+                manage_mod, "runs_log_path", lambda: tmp_path / "no-runs.log"
             ):
                 result = _cb_configure()()
         assert "not configured" in result.lower()
@@ -707,7 +707,7 @@ class TestCbConfigureNoArgs:
         cfg = {**BASE_CONFIG, "vault_path": str(tmp_path / "missing")}
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(
-                manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-runs.log")
+                manage_mod, "runs_log_path", lambda: tmp_path / "no-runs.log"
             ):
                 result = _cb_configure()()
         assert "does not exist" in result
@@ -731,7 +731,7 @@ class TestCbConfigureNoArgs:
                 "_read_index_stats",
                 return_value={"total": 10, "by_type": {}},
             ):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(log_file)):
+                with patch.object(manage_mod, "runs_log_path", (lambda: log_file)):
                     result = _cb_configure()()
         assert "2026-03-07" in result
         assert "abc12345" in result
@@ -751,7 +751,7 @@ class TestCbConfigureNoArgs:
                 "_read_index_stats",
                 return_value={"total": 0, "by_type": {}},
             ):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(log_file)):
+                with patch.object(manage_mod, "runs_log_path", (lambda: log_file)):
                     result = _cb_configure()()
         # Should still return without error
         assert "Cyberbrain Configuration" in result
@@ -766,7 +766,7 @@ class TestCbConfigureNoArgs:
 
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(log_file)):
+                with patch.object(manage_mod, "runs_log_path", (lambda: log_file)):
                     result = _cb_configure()()
         assert "Cyberbrain Configuration" in result
 
@@ -782,7 +782,7 @@ class TestCbStatus:
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-log.log"
                 ):
                     result = _cb_status()()
         assert "Cyberbrain Status" in result
@@ -814,7 +814,7 @@ class TestCbStatus:
 
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(log_file)):
+                with patch.object(manage_mod, "runs_log_path", (lambda: log_file)):
                     result = _cb_status()()
         assert "sess0001" in result
         assert "my-project" in result
@@ -831,7 +831,7 @@ class TestCbStatus:
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value=stats):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-log.log"
                 ):
                     result = _cb_status()()
         assert "42" in result
@@ -849,7 +849,7 @@ class TestCbStatus:
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-log.log"
                 ):
                     result = _cb_status()()
         assert "Per-tool models" in result
@@ -861,7 +861,7 @@ class TestCbStatus:
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-log.log"
                 ):
                     result = _cb_status()()
         assert "Per-tool models" not in result
@@ -871,7 +871,7 @@ class TestCbStatus:
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-log.log"
                 ):
                     result = _cb_status()()
         assert "Quality gate: DISABLED" in result
@@ -881,7 +881,7 @@ class TestCbStatus:
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-log.log"
                 ):
                     result = _cb_status()()
         assert "Quality gate" not in result
@@ -891,7 +891,7 @@ class TestCbStatus:
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-log.log"
                 ):
                     result = _cb_status()()
         assert "Proactive recall: DISABLED" in result
@@ -901,7 +901,7 @@ class TestCbStatus:
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-log.log"
                 ):
                     result = _cb_status()()
         assert "Proactive recall" not in result
@@ -917,7 +917,7 @@ class TestCbStatus:
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value=stats):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-log.log"
                 ):
                     result = _cb_status()()
         assert "2 path(s) not found" in result
@@ -931,7 +931,7 @@ class TestCbStatus:
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-log.log"
                 ):
                     result = _cb_status()()
         assert "Preferences: set" in result
@@ -945,7 +945,7 @@ class TestCbStatus:
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-log.log"
                 ):
                     result = _cb_status()()
         assert "Preferences: not set" in result
@@ -974,7 +974,7 @@ class TestCbStatus:
         ):
             with patch.object(manage_mod, "_read_index_stats", return_value=stats):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-log.log"
                 ):
                     result = _cb_status()()
         assert "all-minilm" in result
@@ -1003,7 +1003,7 @@ class TestCbStatus:
 
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(log_file)):
+                with patch.object(manage_mod, "runs_log_path", (lambda: log_file)):
                     result = _cb_status()(last_n_runs=3)
         assert "last 3" in result
 
@@ -1025,7 +1025,7 @@ class TestCbStatus:
 
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(log_file)):
+                with patch.object(manage_mod, "runs_log_path", (lambda: log_file)):
                     result = _cb_status()()
         assert "Something went wrong" in result
 
@@ -1047,7 +1047,7 @@ class TestCbStatus:
 
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(log_file)):
+                with patch.object(manage_mod, "runs_log_path", (lambda: log_file)):
                     result = _cb_status()()
         assert "No beats written in last run" in result
 
@@ -1068,7 +1068,7 @@ class TestCbStatus:
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-log.log"
                 ):
                     result = _cb_status()()
         assert "Working memory" in result
@@ -1090,7 +1090,7 @@ class TestCbStatus:
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-log.log"
                 ):
                     result = _cb_status()()
         assert "Working memory" in result
@@ -1105,7 +1105,7 @@ class TestCbStatus:
         log_dir.mkdir()
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(log_dir)):
+                with patch.object(manage_mod, "runs_log_path", (lambda: log_dir)):
                     result = _cb_status()()
         assert "Cyberbrain Status" in result
         assert "No runs recorded" in result
@@ -1284,7 +1284,7 @@ class TestCbStatusProvenanceCoverage:
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-log.log"
                 ):
                     result = _cb_status()()
         assert "Cyberbrain Status" in result
@@ -1310,7 +1310,7 @@ class TestCbStatusProvenanceCoverage:
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-log.log"
                 ):
                     # Should not raise — exception is caught silently
                     result = _cb_status()()
@@ -1324,7 +1324,7 @@ class TestCbStatusProvenanceCoverage:
 
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(log_file)):
+                with patch.object(manage_mod, "runs_log_path", (lambda: log_file)):
                     result = _cb_status()()
         assert "No runs recorded" in result
 
@@ -1336,7 +1336,7 @@ class TestCbStatusProvenanceCoverage:
 
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(log_dir)):
+                with patch.object(manage_mod, "runs_log_path", (lambda: log_dir)):
                     result = _cb_status()()
         assert "No runs recorded" in result
 
@@ -1356,7 +1356,7 @@ class TestCbStatusProvenanceCoverage:
         ):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-log.log"
                 ):
                     result = _cb_status()()
         assert "Cyberbrain Status" in result
@@ -1376,7 +1376,7 @@ class TestCbStatusProvenanceCoverage:
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-log.log"
                 ):
                     result = _cb_status()()
         assert "Working memory" in result
@@ -1399,7 +1399,7 @@ class TestCbStatusProvenanceCoverage:
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-log.log"
                 ):
                     result = _cb_status()()
         assert "Working memory" in result
@@ -1423,7 +1423,7 @@ class TestCbStatusProvenanceCoverage:
         with patch.object(manage_mod, "_load_config", return_value=cfg):
             with patch.object(manage_mod, "_read_index_stats", return_value={}):
                 with patch.object(
-                    manage_mod, "RUNS_LOG_PATH", str(tmp_path / "no-log.log")
+                    manage_mod, "runs_log_path", lambda: tmp_path / "no-log.log"
                 ):
                     with patch(
                         "yaml.safe_load", side_effect=yaml.YAMLError("bad yaml")
@@ -1493,7 +1493,7 @@ class TestCbConfigureEdgeCases:
                 # We achieve this by creating a directory at the log path (IsADirectoryError)
                 log_dir = tmp_path / "log_as_dir"
                 log_dir.mkdir()
-                with patch.object(manage_mod, "RUNS_LOG_PATH", str(log_dir)):
+                with patch.object(manage_mod, "runs_log_path", (lambda: log_dir)):
                     result = _cb_configure()()
         assert "Cyberbrain Configuration" in result
 

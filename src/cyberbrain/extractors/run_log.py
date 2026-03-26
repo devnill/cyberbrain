@@ -9,15 +9,27 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from cyberbrain.extractors.state import EXTRACT_LOG_PATH, RUNS_LOG_PATH
+from cyberbrain.extractors.state import extract_log_path, runs_log_path
+
+
+def __getattr__(name: str):  # noqa: N807 — PEP 562 lazy module attributes
+    """Lazy module attributes — tests can still patch by name via monkeypatch.setattr."""
+    if name == "EXTRACT_LOG_PATH":
+        return extract_log_path()
+    if name == "RUNS_LOG_PATH":
+        return runs_log_path()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def is_session_already_extracted(session_id: str) -> bool:
     """Check if a session ID already appears in the deduplication log."""
-    if not EXTRACT_LOG_PATH.exists():
+    import cyberbrain.extractors.run_log as _self
+
+    log = _self.EXTRACT_LOG_PATH  # __getattr__ or test-patched
+    if not log.exists():
         return False
     try:
-        text = EXTRACT_LOG_PATH.read_text(encoding="utf-8")
+        text = log.read_text(encoding="utf-8")
         for line in text.splitlines():
             parts = line.split("\t")
             if len(parts) >= 2 and parts[1] == session_id:
@@ -33,11 +45,14 @@ def is_session_already_extracted(session_id: str) -> bool:
 
 def write_extract_log_entry(session_id: str, beat_count: int) -> None:
     """Append a tab-separated entry to the deduplication log."""
+    import cyberbrain.extractors.run_log as _self
+
     try:
-        EXTRACT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        log = _self.EXTRACT_LOG_PATH
+        log.parent.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
         entry = f"{timestamp}\t{session_id}\t{beat_count}\n"
-        with open(EXTRACT_LOG_PATH, "a", encoding="utf-8") as f:
+        with open(log, "a", encoding="utf-8") as f:
             f.write(entry)
     except OSError as e:
         print(
@@ -48,9 +63,12 @@ def write_extract_log_entry(session_id: str, beat_count: int) -> None:
 
 def write_runs_log_entry(entry: dict) -> None:
     """Append a JSON object to the runs log (one entry per extraction run)."""
+    import cyberbrain.extractors.run_log as _self
+
     try:
-        RUNS_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(RUNS_LOG_PATH, "a", encoding="utf-8") as f:
+        log = _self.RUNS_LOG_PATH
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with open(log, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
     except OSError as e:
         print(

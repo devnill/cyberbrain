@@ -1,9 +1,40 @@
 id: J-000-002
 type: journal_entry
 phase: execute
-date: "2026-03-09"
+date: 2026-03-26
 cycle_created: 0
-title: Group 1 executed
-content: "Completed work items 001 (evaluation tooling framework), 002 (automatic invocation validation test plan), 003 (knowledge graph + ML research). Key output: cb_evaluate MCP tool + extractors/evaluate.py (18 tests passing), manual test plan with 16 test cases across 4 groups, 466-line research report recommending SQL-based graph expansion over graph ML. Research finding: graph ML methods (TransE, RotatE, GNNs) are not viable at personal vault scale (1K-10K notes, sparse graph). Recommended approach: recursive CTEs on existing relations table as third RRF channel."
-content_hash: f5f1b096c8e090f0404ab0b063453368fe6690d2106598e7ed09aa2c3749f837
-token_count: 175
+title: execution-complete
+content: >-
+  ## [execute] 2026-03-26 — Execution complete
+
+
+  ### WI-094: Add vault write abstraction layer
+
+  Status: complete with rework
+
+  Rework: 1 significant finding — update_vault_note missing existence check.
+  Fixed. 2 minor findings fixed (missing tests for nonexistent file paths).
+
+
+  ### WI-095: Enforce C-06 in cb_review
+
+  Status: complete
+
+  All 3 direct vault write sites migrated to write_vault_note/update_vault_note.
+  Consolidation log append converted to read+write pattern. _extend_review_after
+  signature updated to accept vault_path.
+
+
+  ### WI-096: Enforce C-06 in cb_restructure
+
+  Status: complete
+
+  All 5 direct vault write sites migrated to write_vault_note/move_vault_note.
+  Inline _is_within_vault checks replaced with try/except ValueError.
+
+
+  ### Summary
+
+  All 5 work items complete. 1331 tests passing, 0 pyright errors. C-06
+  constraint now enforced — review.py and restructure/execute.py have zero
+  direct .write_text() or .rename() calls on vault paths.
