@@ -39,6 +39,12 @@ except ImportError as e:
 _search_backend = None
 
 
+def _invalidate_search_backend() -> None:
+    """Reset the cached search backend so the next call re-initialises it."""
+    global _search_backend
+    _search_backend = None
+
+
 def _get_search_backend(config: dict):
     """Return cached search backend, initialised lazily."""
     global _search_backend

@@ -1,0 +1,13 @@
+id: J-016-001
+type: journal_entry
+phase: refine
+date: "2026-03-22"
+cycle_created: 16
+title: Refinement planning completed
+content: |
+  Trigger: Documentation-related minor findings from cycles 014-015
+  Principles changed: none
+  New work items: 080-082
+  Three items: comprehensive ARCHITECTURE.md update for current src-layout (080), README MCP JSON clarification for both install paths (081), close resolved domain questions and archive housekeeping (082). All documentation/housekeeping — no code changes.
+content_hash: "667a05345272523a90cf5ec49eaebb780c194467d0b6d216083f71add6c9f020"
+token_count: 130

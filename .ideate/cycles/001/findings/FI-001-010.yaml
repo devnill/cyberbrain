@@ -1,0 +1,18 @@
+id: FI-001-010
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: significant
+title: UNCERTAIN treated same as FAIL in review gate (FIXED)
+description: |
+  - **File**: `mcp/tools/review.py`
+  - **Issue**: Both UNCERTAIN and FAIL verdicts produced identical "Gate blocked" output. Spec requires UNCERTAIN to be flagged for confirmation, not hard-blocked.
+  - **Fix**: Added verdict check: UNCERTAIN shows "**Needs confirmation**" with re-run guidance; FAIL shows "Gate blocked".
+file_path: cycles/001/findings/FI-001-010.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-011
+verdict: Pass
+content_hash: d81d158ec3bf3bc60f8779b9aca1e9b9526084b858d40e7afb4d954ac1ce308e
+token_count: 160

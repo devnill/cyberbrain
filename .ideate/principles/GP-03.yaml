@@ -1,0 +1,11 @@
+id: GP-03
+type: guiding_principle
+name: High Signal-to-Noise Above All
+status: active
+description: What gets captured, curated, and injected into context must be directly useful. Irrelevant or diluted content is worse than nothing — it consumes context tokens and can mislead the LLM. A vault full of noise is worse than a small vault with high-quality signal. This applies to extraction (don't capture noise), curation (merge/split to improve discoverability), and retrieval (inject only what's relevant).
+amendment_history: []
+cycle_created: 1
+cycle_modified: null
+content_hash: f0a35e238406172f43b0faecb3169b795b6de8755b1afe48ca8f18c862b1b509
+token_count: 157
+file_path: .ideate/principles/GP-03.yaml

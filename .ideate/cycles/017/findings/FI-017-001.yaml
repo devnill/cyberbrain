@@ -1,0 +1,18 @@
+id: FI-017-001
+type: finding
+cycle: 17
+reviewer: code-reviewer
+severity: significant
+title: Worker hit rate limit — coordinator completed rework
+description: |
+  - **Issue**: Worker-088 exhausted its API rate limit after 86 tool calls and ~16 minutes. The refactor was complete but left 6 test failures and 8 pyright errors.
+  - **Impact**: Coordinator fixed all issues. No functional impact.
+  - **Resolution**: 5 test patches updated from _extract_beats to run_extraction, 1 test isolation fix, 2 type annotations added.
+file_path: cycles/017/findings/FI-017-001.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-088
+verdict: Pass
+content_hash: "63fe1055741d07441e07c340b69a3a2e95889625c1a3ddb0794cb8f3ccd6114c"
+token_count: 168

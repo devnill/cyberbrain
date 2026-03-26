@@ -466,11 +466,11 @@ def autofile_beat(
 
         # Update search index post-create
         try:
-            from search_index import update_search_index  # noqa: I001  # type: ignore[import-not-found]  # optional runtime dependency
+            from cyberbrain.extractors.search_index import update_search_index
 
             fm = parse_frontmatter(output_path.read_text(encoding="utf-8"))
             update_search_index(str(output_path), fm, config)
-        except Exception:  # intentional: search index update is non-fatal for autofile; ImportError if not installed
+        except Exception:  # intentional: search index update is non-fatal for autofile
             pass
 
         return output_path

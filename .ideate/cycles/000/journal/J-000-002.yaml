@@ -1,0 +1,9 @@
+id: J-000-002
+type: journal_entry
+phase: execute
+date: "2026-03-09"
+cycle_created: 0
+title: Group 1 executed
+content: "Completed work items 001 (evaluation tooling framework), 002 (automatic invocation validation test plan), 003 (knowledge graph + ML research). Key output: cb_evaluate MCP tool + extractors/evaluate.py (18 tests passing), manual test plan with 16 test cases across 4 groups, 466-line research report recommending SQL-based graph expansion over graph ML. Research finding: graph ML methods (TransE, RotatE, GNNs) are not viable at personal vault scale (1K-10K notes, sparse graph). Recommended approach: recursive CTEs on existing relations table as third RRF channel."
+content_hash: f5f1b096c8e090f0404ab0b063453368fe6690d2106598e7ed09aa2c3749f837
+token_count: 175

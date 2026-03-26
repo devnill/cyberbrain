@@ -1,0 +1,11 @@
+id: J-019-003
+type: journal_entry
+phase: execute
+date: "2026-03-23"
+cycle_created: 19
+title: "Work item 084: Clean up install.sh/uninstall.sh references in README"
+content: |
+  Status: complete
+  All install.sh/uninstall.sh references removed. Manual install now uses clone+uv sync. Uninstall uses plugin command.
+content_hash: fdb51d6e12006cd604948057f45315d5dd711bfc49ad3a236914ac56d2d39d5b
+token_count: 81

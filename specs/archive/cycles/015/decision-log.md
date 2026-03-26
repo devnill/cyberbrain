@@ -1,0 +1,14 @@
+# Decision Log — Cycle 015
+
+## DL1: evaluate.py Q-8 confirmed already fixed
+The refinement interview identified evaluate.py bare import (distribution Q-8) as a candidate fix. Investigation confirmed it was already fixed in a prior cycle. Q-8 marked resolved in domain questions.
+
+## DL2: FTS5 fallback uses try/except instead of conditional
+WI-077 replaced `if _has_fastembed() or True:` with `try: FTS5Backend / except: GrepBackend`. This is a defensive pattern — FTS5 is available in most Python builds but not guaranteed. The try/except is more robust than a boolean check.
+
+## DL3: README MCP example uses uv run pattern
+WI-079 review found the Claude Desktop MCP JSON example referenced stale venv paths. Updated to `uv run --directory` pattern. This serves the plugin install path; the manual install path via install.sh may need a separate example in a future cycle.
+
+## Open Questions
+- ARCHITECTURE.md staleness — should it be updated comprehensively or deprecated in favor of specs/plan/architecture.md?
+- Cycle 013 incremental reviews not archived — housekeeping task

@@ -1,0 +1,11 @@
+id: J-011-004
+type: journal_entry
+phase: brrr
+date: "2026-03-22"
+cycle_created: 11
+title: "Cycle 1 — Work item 069: Establish basedpyright clean baseline"
+content: |
+  Status: complete
+  29 errors resolved: vault.py return type corrected (Path → Path | None), type: ignore with specific rule codes on optional imports and duck-typed protocol calls, type annotation narrowing in enrich.py. 0 errors, 0 warnings. 1294 passed.
+content_hash: "970167a836961fe760d6224198b7fd7168f442099ce95afbfefb52028d54ff8e"
+token_count: 108

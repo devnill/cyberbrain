@@ -1,0 +1,18 @@
+id: FI-001-015
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: minor
+title: Unused Verdict import (FIXED)
+description: |
+  - **File**: `mcp/tools/recall.py`
+  - **Issue**: `Verdict` imported but never used.
+  - **Fix**: Removed from import.
+file_path: cycles/001/findings/FI-001-015.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-012
+verdict: Pass
+content_hash: "2fd72be531ab16ec2eddbf162608cc2bc25bc2a69edcdae0b67a035fe530459d"
+token_count: 100

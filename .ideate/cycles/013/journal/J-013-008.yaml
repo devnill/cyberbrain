@@ -1,0 +1,15 @@
+id: J-013-008
+type: journal_entry
+phase: review
+date: "2026-03-22"
+cycle_created: 13
+title: Release review completed (v1.1.0, Cycle 014)
+content: |
+  Critical findings: 0
+  Significant findings: 0
+  Minor findings: 5
+  Suggestions: 0
+  Items requiring user input: 0
+  Curator: skipped — no policy-grade findings in a release review with no new work items
+content_hash: "56115e097fe43999aa779f5f9cbd603ab6e2ee4c77edafc0c37937a68ebade0d"
+token_count: 91

@@ -89,12 +89,13 @@ likely exist in the vault. Relations are used to build a knowledge graph in Obsi
 
 | Predicate | When to use |
 |---|---|
-| `related` | General associative link; non-committal. Use as default when unsure. |
-| `references` | This beat explicitly cites or depends on another note. |
-| `broader` | The linked note is a more general concept that this beat is a specific instance of. |
-| `narrower` | The linked note is more specific than this beat. |
-| `supersedes` | This beat replaces or updates the linked note (newer decision, corrected config). |
-| `wasDerivedFrom` | This beat extends or was built on the linked note. |
+| `related` | General association between notes. Use as default when unsure. |
+| `references` | This note cites or refers to the target. |
+| `causes` | This note describes something that led to the target. |
+| `caused-by` | This note was caused by the target. |
+| `supersedes` | This note replaces the target (target is outdated). |
+| `implements` | This note realizes a decision or plan from the target. |
+| `contradicts` | This note conflicts with the target. |
 
 **Rules:**
 - Only name notes that very likely already exist in the vault — use titles you saw referenced

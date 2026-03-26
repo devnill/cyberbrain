@@ -4,10 +4,11 @@ test_extract_file_tools.py — tests for src/cyberbrain/mcp/tools/extract.py and
 Covers gaps not reached by test_mcp_server.py:
 - extract.py: transcript outside ~/.claude/projects/ -> ToolError
 - extract.py: plain text .txt file (non-JSONL path)
-- extract.py: autofile_enabled=True calls autofile_beat
+- extract.py: BackendError from run_extraction -> ToolError with backend name
 - extract.py: OSError reading plain text file -> ToolError
-- extract.py: BackendError -> ToolError with backend name
-- extract.py: daily_journal=True + written -> write_journal_entry called
+- extract.py: run_extraction returns beats -> summary formatted correctly
+- extract.py: run_extraction returns skipped -> skipped message returned
+- extract.py: transcript truncation applied before calling run_extraction
 - file.py: autofile_enabled=True calls autofile_beat
 - file.py: autofile_enabled=True + folder override -> uses write_beat (autofile disabled)
 - file.py: daily_journal=True -> write_journal_entry called
@@ -16,6 +17,11 @@ Patching strategy: use patch.object(module, "attr") rather than string-based
 patch("tools.extract.attr") so patches always target the live module object
 held by our import reference, regardless of what other test files do to
 sys.modules.
+
+cb_extract delegates orchestration (dedup, vault writing, logs, journal) to
+run_extraction() in extract_beats.py. Tests for that shared orchestration live
+in test_extract_beats.py. These tests verify the MCP layer: path restriction,
+transcript parsing/truncation, BackendError handling, and result formatting.
 """
 
 import sys
@@ -168,11 +174,19 @@ class TestCbExtractPathRestriction:
 
         mod = _get_extract_module()
         cb_extract = _register_extract()
+        _fake_result = {
+            "skipped": False,
+            "beats_count": 0,
+            "beats_written": 0,
+            "written_paths": [],
+            "beat_records": [],
+            "run_errors": [],
+        }
         with patch.object(mod, "_load_config", return_value=config):
             with patch.object(
                 mod, "parse_jsonl_transcript", return_value="User: hello"
             ):
-                with patch.object(mod, "_extract_beats", return_value=[]):
+                with patch.object(mod, "run_extraction", return_value=_fake_result):
                     result = cb_extract(transcript_path=str(transcript))
 
         assert "No beats extracted" in result
@@ -203,14 +217,22 @@ class TestCbExtractPlainText:
 
         mod = _get_extract_module()
         cb_extract = _register_extract()
-        mock_beats = MagicMock(return_value=[])
+        _fake_result = {
+            "skipped": False,
+            "beats_count": 0,
+            "beats_written": 0,
+            "written_paths": [],
+            "beat_records": [],
+            "run_errors": [],
+        }
+        mock_run = MagicMock(return_value=_fake_result)
         with patch.object(mod, "_load_config", return_value=config):
-            with patch.object(mod, "_extract_beats", mock_beats):
+            with patch.object(mod, "run_extraction", mock_run):
                 result = cb_extract(transcript_path=str(transcript))
 
-        # extract_beats should have been called with the plain text content
-        mock_beats.assert_called_once()
-        call_args = mock_beats.call_args[0]
+        # run_extraction should have been called with the plain text content
+        mock_run.assert_called_once()
+        call_args = mock_run.call_args[0]
         assert "jwt" in call_args[0].lower() or "JWT" in call_args[0]
         assert "No beats extracted" in result
 
@@ -250,7 +272,7 @@ class TestCbExtractBackendError:
     def test_backend_error_raises_tool_error_with_backend_name(
         self, tmp_path, monkeypatch
     ):
-        """BackendError becomes ToolError mentioning the backend name."""
+        """BackendError from run_extraction becomes ToolError mentioning the backend name."""
         from fastmcp.exceptions import ToolError
 
         home = tmp_path / "home"
@@ -276,7 +298,7 @@ class TestCbExtractBackendError:
             ):
                 with patch.object(
                     mod,
-                    "_extract_beats",
+                    "run_extraction",
                     side_effect=BackendError("connection refused"),
                 ):
                     with pytest.raises(ToolError, match="ollama"):
@@ -289,10 +311,10 @@ class TestCbExtractBackendError:
 
 
 class TestCbExtractAutofile:
-    """When autofile=True, autofile_beat is called instead of write_beat."""
+    """cb_extract delegates autofile routing to run_extraction; result is formatted correctly."""
 
-    def test_autofile_enabled_calls_autofile_beat(self, tmp_path, monkeypatch):
-        """autofile=True routes each beat through autofile_beat."""
+    def test_beats_written_appear_in_summary(self, tmp_path, monkeypatch):
+        """run_extraction result with written beats produces a 'Created:' summary."""
         home = tmp_path / "home"
         (home / ".claude" / "projects").mkdir(parents=True)
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
@@ -307,30 +329,35 @@ class TestCbExtractAutofile:
         vault.mkdir()
         config = _base_config(vault, autofile=True)
 
-        fake_path = vault / "AI/Claude-Sessions/Use Connection Pooling.md"
-        fake_path.parent.mkdir(parents=True, exist_ok=True)
-        fake_path.touch()
+        fake_record = {
+            "title": "Use Connection Pooling",
+            "type": "decision",
+            "scope": "project",
+            "path": "AI/Claude-Sessions/Use Connection Pooling.md",
+        }
+        _fake_result = {
+            "skipped": False,
+            "beats_count": 1,
+            "beats_written": 1,
+            "written_paths": [vault / "AI/Claude-Sessions/Use Connection Pooling.md"],
+            "beat_records": [fake_record],
+            "run_errors": [],
+        }
 
         mod = _get_extract_module()
         cb_extract = _register_extract()
-        mock_autofile = MagicMock(return_value=fake_path)
-        mock_write = MagicMock(return_value=None)
-
         with patch.object(mod, "_load_config", return_value=config):
             with patch.object(
                 mod, "parse_jsonl_transcript", return_value="User: hello"
             ):
-                with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT]):
-                    with patch.object(mod, "autofile_beat", mock_autofile):
-                        with patch.object(mod, "write_beat", mock_write):
-                            result = cb_extract(transcript_path=str(transcript))
+                with patch.object(mod, "run_extraction", return_value=_fake_result):
+                    result = cb_extract(transcript_path=str(transcript))
 
-        mock_autofile.assert_called_once()
-        mock_write.assert_not_called()
         assert "Created" in result
+        assert "Use Connection Pooling.md" in result
 
-    def test_autofile_disabled_calls_write_beat(self, tmp_path, monkeypatch):
-        """autofile=False routes each beat through write_beat."""
+    def test_no_beats_returns_no_beats_message(self, tmp_path, monkeypatch):
+        """run_extraction returning zero beats produces 'No beats extracted.' message."""
         home = tmp_path / "home"
         (home / ".claude" / "projects").mkdir(parents=True)
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
@@ -345,26 +372,25 @@ class TestCbExtractAutofile:
         vault.mkdir()
         config = _base_config(vault, autofile=False)
 
-        fake_path = vault / "AI/Claude-Sessions/Use Connection Pooling.md"
-        fake_path.parent.mkdir(parents=True, exist_ok=True)
-        fake_path.touch()
+        _fake_result = {
+            "skipped": False,
+            "beats_count": 0,
+            "beats_written": 0,
+            "written_paths": [],
+            "beat_records": [],
+            "run_errors": [],
+        }
 
         mod = _get_extract_module()
         cb_extract = _register_extract()
-        mock_autofile = MagicMock(return_value=None)
-        mock_write = MagicMock(return_value=fake_path)
-
         with patch.object(mod, "_load_config", return_value=config):
             with patch.object(
                 mod, "parse_jsonl_transcript", return_value="User: hello"
             ):
-                with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT]):
-                    with patch.object(mod, "autofile_beat", mock_autofile):
-                        with patch.object(mod, "write_beat", mock_write):
-                            result = cb_extract(transcript_path=str(transcript))
+                with patch.object(mod, "run_extraction", return_value=_fake_result):
+                    result = cb_extract(transcript_path=str(transcript))
 
-        mock_write.assert_called_once()
-        mock_autofile.assert_not_called()
+        assert "No beats extracted" in result
 
 
 # ===========================================================================
@@ -373,10 +399,16 @@ class TestCbExtractAutofile:
 
 
 class TestCbExtractDailyJournal:
-    """When daily_journal=True and beats were written, write_journal_entry is called."""
+    """cb_extract delegates journal writing to run_extraction.
 
-    def test_daily_journal_called_when_beats_written(self, tmp_path, monkeypatch):
-        """daily_journal=True causes write_journal_entry to be invoked after extraction."""
+    Journal behavior (write_journal_entry called/not-called) is tested at the
+    run_extraction level in test_extract_beats.py. Here we verify that the
+    cb_extract MCP layer correctly passes the config to run_extraction and
+    formats the result.
+    """
+
+    def test_run_extraction_called_with_correct_trigger(self, tmp_path, monkeypatch):
+        """cb_extract always calls run_extraction with trigger='manual'."""
         home = tmp_path / "home"
         (home / ".claude" / "projects").mkdir(parents=True)
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
@@ -391,30 +423,35 @@ class TestCbExtractDailyJournal:
         vault.mkdir()
         config = _base_config(vault, daily_journal=True)
 
-        fake_path = vault / "AI/Claude-Sessions/Use Connection Pooling.md"
-        fake_path.parent.mkdir(parents=True, exist_ok=True)
-        fake_path.touch()
+        _fake_result = {
+            "skipped": False,
+            "beats_count": 0,
+            "beats_written": 0,
+            "written_paths": [],
+            "beat_records": [],
+            "run_errors": [],
+        }
 
         mod = _get_extract_module()
         cb_extract = _register_extract()
-        mock_journal = MagicMock()
-        mock_write = MagicMock(return_value=fake_path)
+        mock_run = MagicMock(return_value=_fake_result)
 
         with patch.object(mod, "_load_config", return_value=config):
             with patch.object(
                 mod, "parse_jsonl_transcript", return_value="User: hello"
             ):
-                with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT]):
-                    with patch.object(mod, "write_beat", mock_write):
-                        with patch.object(mod, "write_journal_entry", mock_journal):
-                            cb_extract(transcript_path=str(transcript))
+                with patch.object(mod, "run_extraction", mock_run):
+                    cb_extract(transcript_path=str(transcript))
 
-        mock_journal.assert_called_once()
+        mock_run.assert_called_once()
+        call_kwargs = mock_run.call_args
+        # trigger is passed as positional arg index 2 or keyword
+        args, kwargs = call_kwargs
+        trigger = args[2] if len(args) > 2 else kwargs.get("trigger", args[2] if len(args) > 2 else None)
+        assert trigger == "manual"
 
-    def test_daily_journal_not_called_when_no_beats_written(
-        self, tmp_path, monkeypatch
-    ):
-        """daily_journal=True but no beats written -> write_journal_entry NOT called."""
+    def test_skipped_session_returns_skipped_message(self, tmp_path, monkeypatch):
+        """When run_extraction returns skipped=True, cb_extract returns a skipped message."""
         home = tmp_path / "home"
         (home / ".claude" / "projects").mkdir(parents=True)
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
@@ -427,22 +464,27 @@ class TestCbExtractDailyJournal:
 
         vault = tmp_path / "vault"
         vault.mkdir()
-        config = _base_config(vault, daily_journal=True)
+        config = _base_config(vault)
+
+        _skipped_result = {
+            "skipped": True,
+            "beats_count": 0,
+            "beats_written": 0,
+            "written_paths": [],
+            "beat_records": [],
+            "run_errors": [],
+        }
 
         mod = _get_extract_module()
         cb_extract = _register_extract()
-        mock_journal = MagicMock()
-
         with patch.object(mod, "_load_config", return_value=config):
             with patch.object(
                 mod, "parse_jsonl_transcript", return_value="User: hello"
             ):
-                with patch.object(mod, "_extract_beats", return_value=[]):
-                    with patch.object(mod, "write_journal_entry", mock_journal):
-                        result = cb_extract(transcript_path=str(transcript))
+                with patch.object(mod, "run_extraction", return_value=_skipped_result):
+                    result = cb_extract(transcript_path=str(transcript))
 
-        mock_journal.assert_not_called()
-        assert "No beats extracted" in result
+        assert "already extracted" in result.lower() or "Skipping" in result
 
 
 # ===========================================================================
@@ -985,7 +1027,7 @@ class TestCbExtractAdditional:
     """Additional coverage for less common paths."""
 
     def test_long_transcript_is_truncated(self, tmp_path, monkeypatch):
-        """Transcripts over 150k characters are truncated before extraction."""
+        """Transcripts over 150k characters are truncated before run_extraction is called."""
         home = tmp_path / "home"
         (home / ".claude" / "projects").mkdir(parents=True)
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
@@ -1003,67 +1045,29 @@ class TestCbExtractAdditional:
         cb_extract = _register_extract()
         captured_text = []
 
-        def capture_extract(text, *args, **kwargs):
+        _fake_result = {
+            "skipped": False,
+            "beats_count": 0,
+            "beats_written": 0,
+            "written_paths": [],
+            "beat_records": [],
+            "run_errors": [],
+        }
+
+        def capture_run(text, *args, **kwargs):
             captured_text.append(text)
-            return []
+            return _fake_result
 
         with patch.object(mod, "_load_config", return_value=config):
-            with patch.object(mod, "_extract_beats", side_effect=capture_extract):
+            with patch.object(mod, "run_extraction", side_effect=capture_run):
                 cb_extract(transcript_path=str(transcript))
 
         assert len(captured_text) == 1
         assert captured_text[0].startswith("...[earlier content truncated]...")
         assert len(captured_text[0]) < 160_000
 
-    def test_autofile_reads_vault_claude_md_when_present(self, tmp_path, monkeypatch):
-        """When autofile=True and vault CLAUDE.md exists, it's read and passed to autofile_beat."""
-        home = tmp_path / "home"
-        (home / ".claude" / "projects").mkdir(parents=True)
-        monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
-
-        transcript = home / ".claude" / "projects" / "session.jsonl"
-        transcript.write_text(
-            '{"type": "user", "message": {"role": "user", "content": "hello"}}\n',
-            encoding="utf-8",
-        )
-
-        vault = tmp_path / "vault"
-        vault.mkdir()
-        # Write a vault CLAUDE.md
-        claude_md = vault / "CLAUDE.md"
-        claude_md.write_text(
-            "# Vault Instructions\n\nUse type: decision, insight.", encoding="utf-8"
-        )
-
-        config = _base_config(vault, autofile=True)
-
-        fake_path = vault / "AI/Claude-Sessions/Use Connection Pooling.md"
-        fake_path.parent.mkdir(parents=True, exist_ok=True)
-        fake_path.touch()
-
-        mod = _get_extract_module()
-        cb_extract = _register_extract()
-        mock_autofile = MagicMock(return_value=fake_path)
-
-        with patch.object(mod, "_load_config", return_value=config):
-            with patch.object(
-                mod, "parse_jsonl_transcript", return_value="User: hello"
-            ):
-                with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT]):
-                    with patch.object(mod, "autofile_beat", mock_autofile):
-                        with patch.object(
-                            mod, "write_beat", MagicMock(return_value=None)
-                        ):
-                            cb_extract(transcript_path=str(transcript))
-
-        # autofile_beat should have been called with vault_context containing the CLAUDE.md content
-        mock_autofile.assert_called_once()
-        call_kwargs = mock_autofile.call_args[1]
-        assert "vault_context" in call_kwargs
-        assert "Vault Instructions" in call_kwargs["vault_context"]
-
-    def test_write_beat_exception_is_recorded_in_output(self, tmp_path, monkeypatch):
-        """When write_beat raises, the error is recorded in the summary (not re-raised)."""
+    def test_run_errors_appear_in_summary(self, tmp_path, monkeypatch):
+        """Per-beat write errors from run_extraction are included in the summary."""
         home = tmp_path / "home"
         (home / ".claude" / "projects").mkdir(parents=True)
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
@@ -1078,6 +1082,15 @@ class TestCbExtractAdditional:
         vault.mkdir()
         config = _base_config(vault)
 
+        _fake_result = {
+            "skipped": False,
+            "beats_count": 1,
+            "beats_written": 0,
+            "written_paths": [],
+            "beat_records": [],
+            "run_errors": ["write error on 'Use Connection Pooling': disk full"],
+        }
+
         mod = _get_extract_module()
         cb_extract = _register_extract()
 
@@ -1085,14 +1098,11 @@ class TestCbExtractAdditional:
             with patch.object(
                 mod, "parse_jsonl_transcript", return_value="User: hello"
             ):
-                with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT]):
-                    with patch.object(
-                        mod, "write_beat", side_effect=OSError("disk full")
-                    ):
-                        result = cb_extract(transcript_path=str(transcript))
+                with patch.object(mod, "run_extraction", return_value=_fake_result):
+                    result = cb_extract(transcript_path=str(transcript))
 
         # Error is recorded in the summary, not raised
-        assert "Error on" in result or "disk full" in result
+        assert "disk full" in result or "write error" in result.lower()
 
 
 # ===========================================================================

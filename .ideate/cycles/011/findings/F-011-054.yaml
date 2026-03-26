@@ -1,0 +1,15 @@
+id: F-011-054
+type: finding
+cycle: 11
+reviewer: code-reviewer
+severity: minor
+title: ruff ignore list now has 18 rules
+description: The ignore list grew by 2 (UP038, B007) this cycle. Each is documented. The breadth is acceptable for a project at this stage but should not grow further without review.
+file_path: cycles/011/findings/F-011-054.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-011
+verdict: Pass
+content_hash: ed7665328a83a5837dad2a20b862f25f71063fe3650ab9bd972d5bb173304075
+token_count: 115

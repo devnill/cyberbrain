@@ -1,0 +1,11 @@
+id: J-009-013
+type: journal_entry
+phase: execute
+date: "2026-03-16"
+cycle_created: 9
+title: "Work item 051: Test wrapper script"
+content: |
+  Status: complete
+  `scripts/test.py` created as executable wrapper. Pass 1: quiet pytest run (affected-only by default). Pass 2: re-runs failed tests with detail. Single line summary on pass, failure detail on fail. Usage: `python scripts/test.py` or `python scripts/test.py --full`. All acceptance criteria met. 1287 tests passing.
+content_hash: "8c6520c7c63e2ded529ea3186dc73d3c4b95e5427efad57bba7b1cd37701eb29"
+token_count: 121

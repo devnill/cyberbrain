@@ -1,0 +1,11 @@
+id: GP-09
+type: guiding_principle
+name: Dry Run as First-Class Feature
+status: active
+description: All destructive operations support dry-run mode showing full content, types, tags, destinations, and routing rationale without writing anything. The pipeline executes fully in dry-run — the only difference is the final write. This is necessary for building trust in automated curation.
+amendment_history: []
+cycle_created: 1
+cycle_modified: null
+content_hash: ba1e0407689ed30185d62e589c2845c2f901be9c7df9fad05c7c5666c2423a58
+token_count: 127
+file_path: .ideate/principles/GP-09.yaml

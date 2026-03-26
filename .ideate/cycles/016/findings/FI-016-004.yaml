@@ -1,0 +1,18 @@
+id: FI-016-004
+type: finding
+cycle: 16
+reviewer: code-reviewer
+severity: minor
+title: Test module count annotation ambiguous
+description: |
+  - **File**: `ARCHITECTURE.md:959`
+  - **Issue**: "24 modules" not straightforwardly derivable from file count.
+  - **Suggested fix**: Changed to "22 test files" (counting test_*.py files). **Applied.**
+file_path: cycles/016/findings/FI-016-004.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-080
+verdict: Pass
+content_hash: ec5eae3280af65574f3273e40a1b42ca3f69c8dd2522c9451bf8a4781fa39b8b
+token_count: 125

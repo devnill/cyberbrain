@@ -1,0 +1,14 @@
+id: Q-12
+type: domain_question
+domain: distribution
+status: resolved — CLAUDE.md updated in WI-073 (cycle 013) to reflect restructure sub-package. Key Files table now lists `restructure/pipeline.py` and `restructure/*.py` with accurate descriptions.
+impact: Agents and developers reading CLAUDE.md will look for a non-existent single file and miss the phase-based sub-module structure.
+source: archive/cycles/012/gap-analysis.md (G4)
+resolution: null
+resolved_in: 13
+description: CLAUDE.md documents `src/cyberbrain/mcp/tools/restructure.py` as a single module. WI-062 decomposed it into a sub-package with 11 files. The documentation is now stale.
+cycle_created: 1
+cycle_modified: null
+content_hash: a1c6051685d14cda5ab1d5a40df83d59295546cd5b264871481b443d2e0c362d
+token_count: 188
+file_path: .ideate/questions/Q-12.yaml

@@ -1,0 +1,18 @@
+id: F-001-008
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: minor
+title: _EXTRACTOR_DIR computed in shared.py but never used
+description: |
+  - **File**: `/Users/dan/code/cyberbrain/src/cyberbrain/mcp/shared.py:15-23`
+  - **Issue**: `_EXTRACTOR_DIR` is computed (with fallback logic) but is never referenced anywhere in the file. The actual extractor imports happen via `from cyberbrain.extractors.extract_beats import ...` at lines 30-44, which does not use this variable.
+  - **Suggested fix**: Remove the dead `_PLUGIN_ROOT`, `_EXTRACTOR_DIR_PLUGIN`, `_EXTRACTOR_DIR_LEGACY`, and `_EXTRACTOR_DIR` variable declarations.
+file_path: cycles/001/findings/F-001-008.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-001
+verdict: Fail
+content_hash: af91eb02e6ffebea78e8a5c59bfe3e5cc47531d9771d50fcd9df45550e81abe1
+token_count: 197

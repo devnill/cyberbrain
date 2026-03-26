@@ -1,0 +1,11 @@
+id: GP-07
+type: guiding_principle
+name: Cheap Models Where Possible, Quality Models Where Necessary
+status: active
+description: Use the cheapest model that produces acceptable output for each task. Classification, routing, and metadata enrichment are cheap-model tasks. Content generation (merging notes, writing hub pages, synthesis) may need stronger models. Model selection should be per-task, not global, once the quality data supports it.
+amendment_history: []
+cycle_created: 1
+cycle_modified: null
+content_hash: ab4d1c370ee2debdb0835ae4a0b851f3a3dbe71afacf3fca2af6aaf7f80f803f
+token_count: 141
+file_path: .ideate/principles/GP-07.yaml

@@ -859,10 +859,13 @@ def get_search_backend(config: dict) -> SearchBackend:
     if _has_fastembed() and _has_usearch():
         return HybridBackend(vault_path, db_path, model_name)
 
-    if _has_fastembed() or True:  # FTS5 is always available (stdlib sqlite3)
+    # FTS5 is available in most Python builds; fall back to GrepBackend if not
+    try:
         return FTS5Backend(vault_path, db_path)
-
-    return GrepBackend(vault_path)
+    except Exception as exc:
+        import sys
+        print(f"[search_backends] FTS5Backend init failed, falling back to GrepBackend: {exc}", file=sys.stderr)
+        return GrepBackend(vault_path)
 
 
 # ---------------------------------------------------------------------------

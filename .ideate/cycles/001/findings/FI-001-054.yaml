@@ -1,0 +1,18 @@
+id: FI-001-054
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: minor
+title: `scope` inference for document intake is underspecified
+description: |
+  - **File**: `/Users/dan/code/cyberbrain/specs/plan/intake-interface-design.md:175`
+  - **Issue**: The sample beat dict at line 175 infers `"scope": "project" if cwd else "general"`. But `cwd` is present for routing purposes even when filing a general document from within a project directory. The existing `cb_file` UC2 path has the same inference. This is not novel, but the design does not acknowledge it, meaning an implementer might not realize this is intentional and matches current behavior.
+  - **Suggested fix**: Add a one-line note to implementation concern #1 stating that scope inference matches current `cb_file` behavior and is intentional.
+file_path: cycles/001/findings/FI-001-054.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-040
+verdict: Pass
+content_hash: d5c3093bc15bd0ca053dd282c07d7d0a5fccf814b88fee9d32e06fbb27936cc1
+token_count: 242

@@ -1,0 +1,18 @@
+id: FI-001-022
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: minor
+title: No test for split-subfolder dispatch
+description: |
+  - **File**: `tests/test_restructure_tool.py`
+  - **Issue**: split-subfolder action not explicitly tested, though it follows the same code path as split.
+  - **Note**: Acceptance criteria says "all three paths" (merge/split/hub), all covered.
+file_path: cycles/001/findings/FI-001-022.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-015
+verdict: Pass
+content_hash: "95f691804c89e165f1fc258cf629b90b5da24050df7d8cd0a82f8171bf0505f6"
+token_count: 133

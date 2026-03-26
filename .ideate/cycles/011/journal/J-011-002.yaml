@@ -1,0 +1,11 @@
+id: J-011-002
+type: journal_entry
+phase: brrr
+date: "2026-03-22"
+cycle_created: 11
+title: "Cycle 1 — Work item 067: Update requires-python"
+content: |
+  Status: complete
+  pyproject.toml already had >=3.11. Updated constraint C1 in constraints.md from "Python 3.8+" to "Python 3.11+".
+content_hash: af5bda2435f98c26c88d767168f972a2c9c94688ce8769dcd8f91e247d08514d
+token_count: 75

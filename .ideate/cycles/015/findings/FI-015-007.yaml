@@ -1,0 +1,19 @@
+id: FI-015-007
+type: finding
+cycle: 15
+reviewer: code-reviewer
+severity: significant
+title: Inline reference to prompts/ used pre-src-layout path
+description: |
+  - **File**: `README.md:452`
+  - **Issue**: Referenced `prompts/claude-desktop-project.md` instead of `src/cyberbrain/prompts/claude-desktop-project.md`.
+  - **Impact**: Users cannot find the file.
+  - **Suggested fix**: Added `src/cyberbrain/` prefix. **Applied.**
+file_path: cycles/015/findings/FI-015-007.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-079
+verdict: Pass
+content_hash: f779172bb3b9ad7c3e1b277e6d7cfe9d23891a19d5d11c8c9c3b054f9ccf7cbd
+token_count: 144

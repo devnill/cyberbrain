@@ -1,0 +1,11 @@
+id: J-008-002
+type: journal_entry
+phase: execute
+date: "2026-03-12"
+cycle_created: 8
+title: "Work item 034: Restructure to src layout with cyberbrain namespace"
+content: |
+  Status: complete
+  Restructured project from flat directory layout to src layout with `cyberbrain` namespace package. Created `src/cybrain/` with `__init__.py`, created `src/cybrain/mcp/__init__.py` and `src/cybrain/extractors/__init__.py`. Moved `mcp/` → `src/cybrain/mcp/`, `extractors/` → `src/cybrain/extractors/`, `prompts/` → `src/cybrain/prompts/`. Updated pyproject.toml for src layout with entry points `cyberbrain-mcp` and `cyberbrain-extract`. Migrated all imports to `cyberbrain.*` namespace. Updated test files for src layout with `sys.modules` mock clearing where needed. Created `tests/__init__.py` for package imports. All acceptance criteria met. 1217 tests passing.
+content_hash: "0aac46e332827c3f70c0b92614f47048dd535d3b925cb8230da2f8c796919c1d"
+token_count: 217

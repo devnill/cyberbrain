@@ -1,0 +1,10 @@
+id: C-05
+type: constraint
+category: technology
+status: active
+description: "Filename character restrictions. Beat titles cannot contain `#`, `[`, `]`, or `^` — these break Obsidian wikilink resolution."
+cycle_created: 1
+cycle_modified: null
+content_hash: "27edef1baf2a45b5a610ec5ff96b083d59eafc69ad14363c67a233355d6da8e4"
+token_count: 75
+file_path: .ideate/constraints/C-05.yaml

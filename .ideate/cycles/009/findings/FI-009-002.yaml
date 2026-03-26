@@ -1,0 +1,18 @@
+id: FI-009-002
+type: finding
+cycle: 9
+reviewer: code-reviewer
+severity: minor
+title: Debug print statements left in production test file
+description: |
+  - **File**: `/Users/dan/code/cyberbrain/tests/test_setup_enrich_tools.py:568-575`
+  - **Issue**: Seven `print(f"DEBUG: ...")` statements were left in `test_skips_daily_journal_notes`. These print to stderr on every test run, polluting CI output and indicating uncommitted debugging work.
+  - **Suggested fix**: Remove lines 568-575 entirely. The `import sys` on line 568 should also be removed as it is only used by the debug prints.
+file_path: cycles/009/findings/FI-009-002.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-052
+verdict: Fail
+content_hash: da0680a31b1654026be64ee55166b7fd0b1f93cd1df61d1e8bc6285f8396a0fe
+token_count: 185

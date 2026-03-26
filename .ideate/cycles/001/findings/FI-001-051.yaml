@@ -1,0 +1,19 @@
+id: FI-001-051
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: significant
+title: "\"Tools Removed\" section misrepresents scope of change"
+description: |
+  - **File**: `/Users/dan/code/cyberbrain/specs/plan/intake-interface-design.md:126-133`
+  - **Issue**: The section is titled "Tools Removed" and states "None." But `cb_file` is not simply retained — it gains two new parameters (`title`, `tags`), one parameter is renamed (`type_override` → `type`), and it gains a new behavioral mode. The section does not acknowledge the rename of `type_override`. An implementer reading this section in isolation would not know that `type_override` is being removed from the interface.
+  - **Impact**: The rename is documented later (line 124) but the "Tools Removed" section, which is the natural place to check for breaking changes, does not mention it. This creates a documentation gap that could cause an implementer to miss updating callers and tests.
+  - **Suggested fix**: Add a "Parameters Changed" subsection under the "Tools Removed" section that explicitly lists: `type_override` renamed to `type` (breaking change for named-argument callers); `title` added; `tags` added. Cross-reference the backward compatibility concern at line 207.
+file_path: cycles/001/findings/FI-001-051.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-040
+verdict: Pass
+content_hash: "281bca8139522d3713338b9019626474e1ba42a53911e912f4afd7d5480bec87"
+token_count: 351

@@ -1,0 +1,14 @@
+id: Q-09
+type: domain_question
+domain: distribution
+status: open
+impact: Developers following a `pip install -r` path get an under-specified install that fails at runtime on import. The files will also be bundled in any built wheel, creating confusion.
+source: archive/cycles/002/decision-log.md (OQ8); archive/cycles/002/gap-analysis.md (MI1); archive/cycles/002/code-quality.md (M3)
+resolution: null
+resolved_in: null
+description: Should `src/cyberbrain/extractors/requirements.txt` and `src/cyberbrain/mcp/requirements.txt` be deleted? They specify an incomplete dependency subset and any path that still references them (e.g. the bedrock install path in install.sh) installs without `fastmcp`, `mcp`, and `ruamel.yaml`.
+cycle_created: 1
+cycle_modified: null
+content_hash: ac22d64b5091bf294208bca753a6060a7a95a5c877fa89ffcdf181caa3f73aad
+token_count: 207
+file_path: .ideate/questions/Q-09.yaml

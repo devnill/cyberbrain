@@ -1,0 +1,10 @@
+id: C-11
+type: constraint
+category: design
+status: active
+description: Single session dedup. Extraction is deduplicated by session ID via `cb-extract.log`. Each session is processed at most once.
+cycle_created: 1
+cycle_modified: null
+content_hash: b5ceac33e78917871cffeb3f596913044dc6165b44391cba591ce7af70f23271
+token_count: 74
+file_path: .ideate/constraints/C-11.yaml

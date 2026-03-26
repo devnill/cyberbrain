@@ -1,0 +1,11 @@
+id: GP-01
+type: guiding_principle
+name: Zero Ceremony for the Common Case
+status: active
+description: Automatic capture requires no user action after initial setup. Manual filing requires minimal input. The system does the classification work. This extends to all curation operations — extraction, filing, enrichment, restructuring, and working memory review should default to automatic behavior that produces good results without user intervention.
+amendment_history: []
+cycle_created: 1
+cycle_modified: null
+content_hash: "8b66a19233ad25b36326e5ec558508efcffd5fbe9c58c4ad081fe10df2e7b194"
+token_count: 143
+file_path: .ideate/principles/GP-01.yaml

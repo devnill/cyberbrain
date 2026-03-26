@@ -889,75 +889,102 @@ set_prefs/reset_prefs)`.
 ## File Reference
 
 ```
-cyberbrain/
-├── extractors/
-│   ├── extract_beats.py       Entry point — re-exports all modules
-│   ├── extractor.py           LLM-based beat extraction
-│   ├── backends.py            LLM backends (claude-code, bedrock, ollama)
-│   ├── config.py              Config loading, prompt loading
-│   ├── transcript.py          JSONL transcript parsing
-│   ├── vault.py               Note writing, routing, relations, filename gen
-│   ├── autofile.py            LLM-driven filing decisions
-│   ├── frontmatter.py         YAML frontmatter parsing
-│   ├── run_log.py             Dedup log, runs log, daily journal
-│   ├── search_backends.py     GrepBackend, FTS5Backend, HybridBackend
-│   ├── search_index.py        Index coordination — caching, incremental updates
-│   └── analyze_vault.py       Vault structure analyzer (for cb_setup)
+cyberbrain/                    Repo root
+├── src/cyberbrain/
+│   ├── extractors/
+│   │   ├── extract_beats.py       CLI entry point; orchestrates extraction pipeline
+│   │   ├── extractor.py           LLM-based beat extraction
+│   │   ├── backends.py            LLM backends (claude-code, bedrock, ollama)
+│   │   ├── config.py              Config loading, prompt loading
+│   │   ├── transcript.py          JSONL transcript parsing
+│   │   ├── vault.py               Note writing, routing, relations, filename gen
+│   │   ├── autofile.py            LLM-driven filing decisions
+│   │   ├── frontmatter.py         YAML frontmatter parsing
+│   │   ├── run_log.py             Dedup log, runs log, daily journal
+│   │   ├── search_backends.py     GrepBackend, FTS5Backend, HybridBackend
+│   │   ├── search_index.py        Index coordination — caching, incremental updates
+│   │   ├── analyze_vault.py       Vault structure analyzer (for cb_setup)
+│   │   ├── state.py               Centralized path constants (~/.claude/cyberbrain/)
+│   │   ├── quality_gate.py        LLM-as-judge quality scoring
+│   │   └── evaluate.py            Dev tool for extractor evaluation
+│   │
+│   ├── mcp/
+│   │   ├── server.py              FastMCP entry point
+│   │   ├── shared.py              Bridge to extractor layer
+│   │   ├── resources.py           MCP resources and prompts
+│   │   └── tools/
+│   │       ├── extract.py         cb_extract
+│   │       ├── file.py            cb_file
+│   │       ├── recall.py          cb_recall + cb_read
+│   │       ├── setup.py           cb_setup
+│   │       ├── enrich.py          cb_enrich
+│   │       ├── manage.py          cb_configure + cb_status
+│   │       ├── review.py          cb_review
+│   │       ├── reindex.py         cb_reindex
+│   │       └── restructure/       cb_restructure sub-package
+│   │           ├── pipeline.py    Tool registration and main orchestration
+│   │           ├── collect.py     Note collection phase
+│   │           ├── cluster.py     Clustering / grouping phase
+│   │           ├── cache.py       Grouping result cache
+│   │           ├── audit.py       Topical fit and quality audit phase
+│   │           ├── decide.py      Action selection phase
+│   │           ├── generate.py    Content generation phase
+│   │           ├── execute.py     Filesystem execution phase
+│   │           ├── format.py      Output formatting
+│   │           └── utils.py       Shared helpers
+│   │
+│   └── prompts/                   23 LLM prompt templates
+│       ├── extract-beats-{system,user}.md     Beat extraction
+│       ├── autofile-{system,user}.md          Filing decisions
+│       ├── enrich-{system,user}.md            Metadata enrichment
+│       ├── synthesize-{system,user}.md        Multi-note synthesis
+│       ├── restructure-{system,user}.md       Split/merge decisions (legacy)
+│       ├── restructure-{decide,generate,audit,group}-{system,user}.md  Multi-phase
+│       ├── review-{system,user}.md            Working memory review
+│       ├── quality-gate-system.md             LLM-as-judge quality scoring
+│       ├── evaluate-system.md                Extractor evaluation scoring
+│       └── claude-desktop-project.md          Desktop system prompt
 │
 ├── hooks/
-│   ├── pre-compact-extract.sh PreCompact hook (synchronous)
-│   └── session-end-extract.sh SessionEnd hook (detached)
-│
-├── prompts/                   19 LLM prompt templates
-│   ├── extract-beats-{system,user}.md     Beat extraction
-│   ├── autofile-{system,user}.md          Filing decisions
-│   ├── enrich-{system,user}.md            Metadata enrichment
-│   ├── restructure-{system,user}.md       Split/merge decisions (legacy)
-│   ├── restructure-{decide,generate,audit,group}-{system,user}.md  Multi-phase
-│   ├── review-{system,user}.md            Working memory review
-│   └── claude-desktop-project.md          Desktop system prompt
+│   ├── pre-compact-extract.sh     PreCompact hook (synchronous)
+│   ├── session-end-extract.sh     SessionEnd extraction hook (detached)
+│   ├── session-end-reindex.sh     SessionEnd index refresh (detached)
+│   └── hooks.json                 Plugin hook registration manifest
 │
 ├── mcp/
-│   ├── server.py              FastMCP entry point
-│   ├── shared.py              Bridge to extractor layer
-│   ├── resources.py           MCP resources and prompts
-│   └── tools/
-│       ├── extract.py         cb_extract
-│       ├── file.py            cb_file
-│       ├── recall.py          cb_recall + cb_read
-│       ├── setup.py           cb_setup
-│       ├── enrich.py          cb_enrich
-│       ├── manage.py          cb_configure + cb_status
-│       ├── restructure.py     cb_restructure
-│       ├── review.py          cb_review
-│       └── reindex.py         cb_reindex
+│   └── start.sh                   MCP server launch script (uv run)
 │
 ├── scripts/
-│   └── import.py              Bulk import from Claude Desktop / ChatGPT exports
+│   └── import.py                  Bulk import from Claude Desktop / ChatGPT exports
 │
-├── tests/                     Test suite (~17,600 LOC, 16 modules)
+├── tests/                         Test suite (~26,300 LOC, 22 test files, 1300 tests)
 │
-├── specs/                     Planning artifacts (ideate structure)
-│   ├── legacy/                Original specs (v1_spec, GOALS, deferred, etc.)
-│   ├── steering/              Guiding principles, constraints, interview
-│   └── plan/                  Architecture, modules, work items
+├── specs/                         Planning artifacts (ideate structure)
+│   ├── legacy/                    Original specs (v1_spec, GOALS, deferred, etc.)
+│   ├── steering/                  Guiding principles, constraints, interview
+│   └── plan/                      Architecture, modules, work items
 │
-├── install.sh                 Installs to ~/.claude/cyberbrain/
-├── build.sh                   Builds release tarball
-└── uninstall.sh               Removes installation
+├── .claude-plugin/
+│   ├── plugin.json                Claude Code plugin manifest
+│   └── mcp.json                   MCP server declaration
+├── pyproject.toml                 Package metadata, dependencies, tool config
+├── VERSION                        Current version string
+├── CHANGELOG.md                   Release history
+└── QUICKSTART.md                  Getting started guide
 
-Installed locations (~/.claude/cyberbrain/):
-├── extractors/                All extractor modules
-├── hooks/                     pre-compact-extract.sh, session-end-extract.sh (symlinked to ~/.claude/hooks/)
-├── prompts/                   All prompt files
-├── mcp/                       MCP server package
-├── scripts/                   Import script
-├── venv/                      Python virtual environment (MCP deps)
+Runtime state (~/.claude/cyberbrain/):
 ├── config.json                Global config
 ├── search-index.db            SQLite FTS5 index
 ├── search-index.usearch       HNSW vector index (if hybrid)
 ├── search-index-manifest.json Vector index manifest
+├── .restructure-groups-cache.json  Grouping result cache
 └── logs/
     ├── cb-extract.log         Dedup log (TSV)
     └── cb-runs.jsonl          Structured runs log (JSONL)
+
+Installed locations (plugin mode):
+- Source files live at the path reported by `claude plugin path cyberbrain@devnill-cyberbrain`
+- Dependencies managed by uv — no venv/ directory required
+- Hook registration via hooks.json; hooks activated automatically by the plugin system
+- Config, indexes, and caches remain at ~/.claude/cyberbrain/
 ```

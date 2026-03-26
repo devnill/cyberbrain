@@ -1,0 +1,18 @@
+id: F-012-057
+type: finding
+cycle: 12
+reviewer: code-reviewer
+severity: minor
+title: recall.py retains hardcoded paths for _DEFAULT_DB_PATH and _DEFAULT_MANIFEST_PATH
+description: |
+  - **File**: src/cyberbrain/mcp/tools/recall.py:26-27
+  - **Issue**: These were not migrated to state.py imports during WI-059.
+  - **Suggested fix**: Import SEARCH_DB_PATH and SEARCH_MANIFEST_PATH from state.py.
+file_path: cycles/012/findings/F-012-057.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-012
+verdict: Pass
+content_hash: "2bc8d7e168fcd02f7f541683ff3ede1b19c45c9ae47470b22c9c49c3f7676312"
+token_count: 137

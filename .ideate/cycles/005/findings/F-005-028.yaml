@@ -1,0 +1,17 @@
+id: F-005-028
+type: finding
+cycle: 5
+reviewer: gap-analyst
+severity: minor
+title: `notes/053.md` output format not updated (OQ5 — deferred)
+description: |
+  - **Issue**: Spec shows `- type (3 duplicates → 1)` but script produces `- type (3 → 1)`.
+  - **Status**: Deferred. D10 in decision log explicitly calls for spec update in a housekeeping pass.
+file_path: cycles/005/findings/F-005-028.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-005
+verdict: null
+content_hash: e2879416d4246c28cbe89c2bcb610e8988f8d657402ecc48b9e22a7c5d92315f
+token_count: 125

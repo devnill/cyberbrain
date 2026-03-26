@@ -7,6 +7,7 @@ Global and per-project configuration loading, plus prompt file loading.
 import json
 import sys
 from pathlib import Path
+from typing import TypedDict
 
 from cyberbrain.extractors.state import CONFIG_PATH as GLOBAL_CONFIG_PATH
 
@@ -16,7 +17,42 @@ PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 REQUIRED_GLOBAL_FIELDS = ["vault_path", "inbox"]
 
 
-def load_global_config() -> dict:
+class CyberbrainConfig(TypedDict, total=False):
+    vault_path: str
+    inbox: str
+    backend: str
+    model: str
+    claude_timeout: int
+    autofile: bool
+    daily_journal: bool
+    journal_folder: str
+    journal_name: str
+    proactive_recall: bool
+    working_memory_folder: str
+    working_memory_review_days: int
+    consolidation_log: str
+    consolidation_log_enabled: bool
+    trash_folder: str
+    search_backend: str
+    embedding_model: str
+    desktop_capture_mode: str
+    working_memory_ttl: int
+    quality_gate_enabled: bool
+    restructure_model: str
+    recall_model: str
+    enrich_model: str
+    review_model: str
+    judge_model: str
+    autofile_model: str
+    index_refresh_interval: int
+    uncertain_filing_behavior: str
+    uncertain_filing_threshold: float
+    project_name: str
+    vault_folder: str
+    ollama_url: str
+
+
+def load_global_config() -> CyberbrainConfig:
     if not GLOBAL_CONFIG_PATH.exists():
         print(
             f"[extract_beats] Global config not found at {GLOBAL_CONFIG_PATH}. "
@@ -63,10 +99,10 @@ def load_global_config() -> dict:
         sys.exit(0)
 
     config["vault_path"] = str(vault_path)
-    return config
+    return config  # type: ignore[return-value]
 
 
-def find_project_config(cwd: str) -> dict:
+def find_project_config(cwd: str) -> dict[str, object]:
     """Walk up from cwd looking for .claude/cyberbrain.local.json."""
     current = Path(cwd).resolve()
     for directory in [current, *current.parents]:
@@ -80,10 +116,10 @@ def find_project_config(cwd: str) -> dict:
     return {}
 
 
-def resolve_config(cwd: str) -> dict:
+def resolve_config(cwd: str) -> CyberbrainConfig:
     global_cfg = load_global_config()
     project_cfg = find_project_config(cwd)
-    return {**global_cfg, **project_cfg}
+    return {**global_cfg, **project_cfg}  # type: ignore[return-value]
 
 
 def load_prompt(filename: str) -> str:

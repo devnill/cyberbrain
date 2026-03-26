@@ -1,0 +1,12 @@
+id: J-001-006
+type: journal_entry
+phase: execute
+date: "2026-03-09"
+cycle_created: 1
+title: "Work item 012: Synthesis and context injection"
+content: |
+  Status: complete with rework
+  Rework: 2 significant, 1 minor findings fixed from incremental review.
+  S1: Added security demarcation wrapper to synthesis output (was missing on success path). S2: Added quality_gate_enabled config guard (other tools had it, synthesis did not). M1: Removed unused Verdict import. Created prompts/synthesize-system.md and synthesize-user.md. Refactored _synthesize_recall to use templates, quality gate, token-efficient summaries. Updated test_mcp_server.py synthesis tests for new function signature. 32 recall tests passing.
+content_hash: "033ba640756ad6d5fcf89e59a6c517cbcb043cd527294e59a2eaf2b8cff1fc6b"
+token_count: 181

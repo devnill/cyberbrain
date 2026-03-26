@@ -1,0 +1,14 @@
+id: Q-08
+type: domain_question
+domain: distribution
+status: resolved — verified 2026-03-22. Line 429 now reads `from cyberbrain.extractors.config import resolve_config`. Fixed during a prior cycle (likely WI-036 or WI-037).
+impact: The evaluate dev tool fails with `ModuleNotFoundError` on CLI invocation in any packaged install. Failure is invisible at import time; surfaces only when the tool is actually run.
+source: archive/cycles/002/decision-log.md (OQ7); archive/cycles/002/gap-analysis.md (EC1)
+resolution: null
+resolved_in: 15
+description: `src/cyberbrain/extractors/evaluate.py` line ~407 uses `from config import resolve_config` inside `main()`. Should be `from cyberbrain.extractors.config import resolve_config`. Violates P-3 (all code must use `cyberbrain.*` namespace).
+cycle_created: 1
+cycle_modified: null
+content_hash: "7f8a72e7409acebefc3fac86895ba9016ca540c7019f3b15bb56f1f81d82215b"
+token_count: 222
+file_path: .ideate/questions/Q-08.yaml

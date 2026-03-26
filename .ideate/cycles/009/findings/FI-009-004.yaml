@@ -1,0 +1,18 @@
+id: FI-009-004
+type: finding
+cycle: 9
+reviewer: code-reviewer
+severity: minor
+title: No test for block-sequence tags edge case
+description: |
+  - **File**: `/Users/dan/code/cyberbrain/tests/test_setup_enrich_tools.py`
+  - **Issue**: `TestApplyFrontmatterUpdate` tests comma-separated string tags (via `test_overwrites_comma_string_tags_when_overwrite_true`) but does not test YAML block-sequence tags. The untested path corresponds to the bug described in S1.
+  - **Suggested fix**: Add a test case with a note whose `tags` field uses block-sequence format, assert that after `_apply_frontmatter_update(overwrite=True)` the file contains exactly one `tags:` line and no orphaned `- item` lines.
+file_path: cycles/009/findings/FI-009-004.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-052
+verdict: Fail
+content_hash: "027de59fe923746d35d917aec181cfc6829b71a15c0f8ff8fb195d6b323215c7"
+token_count: 211

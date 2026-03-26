@@ -1,0 +1,18 @@
+id: F-009-045
+type: finding
+cycle: 9
+reviewer: gap-analyst
+severity: minor
+title: Repair script scans dotfolders including `.trash` (OQ2 — carryover)
+description: |
+  - **File**: `scripts/repair_frontmatter.py:201`
+  - **Gap**: `vault_path.rglob("*.md")` includes `.trash`, `.obsidian`, and any other dotfolder contents. Inflates the count and rewrites soft-deleted notes.
+  - **Recommendation**: Defer. Fix: `not any(part.startswith(".") for part in f.relative_to(vault_path).parts)`.
+file_path: cycles/009/findings/F-009-045.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-009
+verdict: null
+content_hash: e05a322c1520a5814253c6a418287919c3b0f6e43e8966cca602324b9916a417
+token_count: 160

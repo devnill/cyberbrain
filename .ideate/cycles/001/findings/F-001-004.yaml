@@ -1,0 +1,19 @@
+id: F-001-004
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: significant
+title: Bare unqualified import in setup.py survives migration
+description: |
+  - **File**: `/Users/dan/code/cyberbrain/src/cyberbrain/mcp/tools/setup.py:18`
+  - **Issue**: `from analyze_vault import analyze_vault` is an unqualified import. This works only if the `extractors/` directory is on `sys.path`. After migration, the correct import is `from cyberbrain.extractors.analyze_vault import analyze_vault`.
+  - **Impact**: `cb_setup` will raise `ModuleNotFoundError: No module named 'analyze_vault'` when called in a properly installed environment where `sys.path` does not include the bare extractors directory.
+  - **Suggested fix**: Change to `from cyberbrain.extractors.analyze_vault import analyze_vault`.
+file_path: cycles/001/findings/F-001-004.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-001
+verdict: Fail
+content_hash: "601708051e3980a057a9783c073a8bb759844cae0a55ca630cc1e6d4db312397"
+token_count: 237

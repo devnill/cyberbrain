@@ -1,0 +1,201 @@
+id: DL-001
+type: decision_log
+cycle: 1
+content: |
+  # Decision Log — Cyberbrain (Cycle 6 Capstone)
+  
+  ## Decision Log (chronological)
+  
+  ### Planning Phase
+  
+  #### DL1: Retroactive planning capture for existing codebase
+  - **When**: Planning — interview Q1
+  - **Decision**: Establish ideate artifact structure retroactively over an existing ~7,200 LOC codebase rather than planning from scratch. Move existing specs to `specs/legacy/` for safekeeping.
+  - **Rationale**: Codebase was mature but lacked a structured planning framework; goal was to enable continued refinement cycles using the ideate process.
+  
+  #### DL2: Two active workstreams defined
+  - **When**: Planning — interview Q2
+  - **Decision**: Scope the plan to (1) vault curation quality improvement and (2) retrieval improvement targeting RAG with automatic invocation.
+  
+  #### DL3–DL13: Earlier decisions preserved in `steering/interview.md` and prior journal entries.
+  
+  ---
+  
+  ### Planning Phase (Cycle 5)
+  
+  #### DL14: Plugin distribution as new requirement
+  - **When**: Refinement cycle 5 — interview 2026-03-10
+  - **Decision**: Replace install.sh distribution with Claude Code plugin system for the Claude Code distribution path
+  - **Rationale**: User releases daily, uses multiple machines (personal + work), wants in-Claude updates without manual install.sh re-runs, and eventual public distribution
+  - **Implications**: Requires research into plugin system capabilities and Python distribution patterns before implementation
+  
+  #### DL15: Research-first approach
+  - **When**: Refinement cycle 5 — interview 2026-03-10
+  - **Decision**: Execute WI-031 (plugin capabilities research) and WI-032 (distribution patterns research) before WI-033 (implementation)
+  - **Rationale**: Plugin system capabilities unknown; need to understand what can and cannot be automated before committing to implementation approach
+  
+  #### DL16: Deferred scope — Claude Desktop distribution
+  - **When**: Refinement cycle 5 — interview 2026-03-10
+  - **Decision**: Focus on Claude Code plugin distribution; defer MCP distribution to Claude Desktop/Cursor/Zed pending separate research
+  
+  ---
+  
+  ### Execution Phase (Cycle 5)
+  
+  #### DL17: uv as dependency manager
+  - **When**: WI-032 research — 2026-03-10
+  - **Decision**: Adopt uv for MCP server launch and dependency resolution
+  - **Rationale**: uvx is the de facto pattern for Python MCP servers in the ecosystem
+  
+  #### DL18: Config path unchanged
+  - **When**: WI-032 research — 2026-03-10
+  - **Decision**: Keep user config at `~/.claude/cyberbrain/config.json` regardless of plugin installation location
+  - **Rationale**: Config is persistent user data, not code; plugin cache location changes on version update
+  
+  #### DL19: ${CLAUDE_PLUGIN_ROOT} for path resolution
+  - **When**: WI-032 research — 2026-03-10
+  - **Decision**: Use ${CLAUDE_PLUGIN_ROOT} environment variable for all hook and MCP server path references
+  - **Rationale**: Plugin files are copied to cache at `~/.claude/plugins/cache/`; hardcoded paths break after installation
+  
+  #### DL20: Keep install.sh for migration and Claude Desktop
+  - **When**: WI-031 research — 2026-03-10
+  - **Decision**: Retain install.sh for config initialization, file migration, and Claude Desktop registration
+  - **Rationale**: Plugin system cannot run post-install scripts
+  
+  #### DL21: Entry point naming — cyberbrain.mcp.server:main
+  - **When**: WI-033 implementation — 2026-03-11
+  - **Decision**: Entry point in pyproject.toml references `cyberbrain.mcp.server:main`
+  - **Rationale**: Follows Python package naming convention
+  - **CRITICAL ISSUE**: Entry point references non-existent module namespace; no `cyberbrain/` namespace package exists
+  
+  ---
+  
+  ### Review Phase (Cycle 5)
+  
+  #### DL22: Code-quality verdict — Fail
+  - **When**: Cycle 5 code-quality review — 2026-03-11
+  - **Decision**: WI-033 implementation is blocked by critical namespace collision with PyPI `mcp` package
+  - **Finding**: Entry point `cyberbrain.mcp.server:main` references non-existent namespace; internal `mcp/` directory collides with PyPI `mcp` package
+  
+  ---
+  
+  ### Planning Phase (Cycle 6)
+  
+  #### DL23: src layout with cyberbrain namespace adopted
+  - **When**: Refinement cycle 6 — 2026-03-11
+  - **Decision**: Move `mcp/`, `extractors/`, `prompts/` under `src/cyberbrain/`. Add `__init__.py` files. Remove all `sys.path` manipulation. Convert all imports to `cyberbrain.*` namespace. Define entry points in `pyproject.toml`. Update hooks to call entry points.
+  - **Rationale**: Cycle 5 capstone identified C1/C2 — entry point references non-existent namespace and internal `mcp/` collides with PyPI `mcp` package. Both prevent packaged distribution. User chose namespace-wrapping approach over minimal `cyberbrain_mcp/` rename.
+  - **Implications**: All import paths change; test files must be updated; hook scripts must be updated; `python -m cyberbrain.mcp.server` becomes the canonical server invocation.
+  
+  #### DL24: WI-034 executed as single sequential task
+  - **When**: Refinement cycle 6 — 2026-03-11
+  - **Decision**: Implement the src layout restructuring as a single work item rather than decomposing into parallel sub-tasks.
+  - **Rationale**: The restructuring touches many files that cannot be independently validated in a partial state.
+  
+  ---
+  
+  ### Review Phase (Cycle 6)
+  
+  #### DL25: Cycle 6 capstone verdict — Fail (incomplete migration)
+  - **When**: Cycle 6 capstone review — 2026-03-11
+  - **Decision**: WI-034 is incomplete. The directory structure and MCP layer imports were updated, but six categories of work were not completed: pyproject.toml packages directive, .mcp.json module path, extractor layer imports, MCP tool imports, hook scripts, and test files.
+  - **Finding**: All three reviewers (code-quality, spec-adherence, gap-analyst) converge on the same gaps with no contradictions.
+  
+  ---
+  
+  ## Open Questions
+  
+  ### OQ1: pyproject.toml packages directive (blocking)
+  - **Question**: `packages = ["mcp", "extractors", "prompts"]` still lists deleted directories. Must be changed to `packages = ["src/cyberbrain"]` or equivalent src layout configuration.
+  - **Source**: Code-quality C1; spec-adherence; gap-analysis MR1
+  - **Impact**: Wheel is empty; `cyberbrain-mcp` fails at runtime with `ModuleNotFoundError`.
+  
+  ### OQ2: .mcp.json module path (blocking)
+  - **Question**: `.mcp.json` still uses `python -m mcp.server`. Must change to `python -m cyberbrain.mcp.server`.
+  - **Source**: Code-quality C2; spec-adherence; gap-analysis MR2
+  - **Impact**: MCP server launches PyPI `mcp` package instead of cyberbrain's server for all plugin users.
+  
+  ### OQ3: Hook extractor path (blocking, silent failure)
+  - **Question**: Both hooks check `$CLAUDE_PLUGIN_ROOT/extractors/extract_beats.py` which no longer exists. Must be updated to use `$CLAUDE_PLUGIN_ROOT/src/cyberbrain/extractors/extract_beats.py` or a `python -m` invocation.
+  - **Source**: Code-quality S4; spec-adherence Principle 8 violation; gap-analysis MR3
+  - **Impact**: Automatic knowledge capture is silently disabled on fresh plugin installs.
+  
+  ### OQ4: MCP tool bare imports (blocking)
+  - **Question**: `restructure.py`, `recall.py`, `enrich.py`, `manage.py`, `setup.py`, `review.py` all use bare imports like `from backends import` and `from tools.recall import`. Must be converted to `cyberbrain.*` namespace.
+  - **Source**: Code-quality S1, S2; gap-analysis MR4
+  - **Impact**: `cb_setup`, `cb_configure`, and `cb_status` crash on server startup with `ModuleNotFoundError`.
+  
+  ### OQ5: Extractor layer bare imports (blocking)
+  - **Question**: All 14 extractor files still use bare imports and `sys.path` injection in `extract_beats.py` lines 26-28. Must be converted to `cyberbrain.extractors.*` namespace.
+  - **Source**: Code-quality S3; gap-analysis MR5
+  - **Impact**: `sys.path` manipulation the restructure was required to remove remains in place.
+  
+  ### OQ6: Test suite fails at collection (blocking CI)
+  - **Question**: All 18 of 20 test modules add deleted directories to `sys.path` and use bare imports. `conftest.py` installs mock at wrong key (`sys.modules["extract_beats"]` instead of `sys.modules["cyberbrain.extractors.extract_beats"]`). Must update all test files.
+  - **Source**: Code-quality C3; gap-analysis IR1, IR2
+  - **Impact**: `python3 -m pytest tests/` produces 18 collection errors; acceptance criterion not met; test isolation silently broken.
+  
+  ### OQ7: No cyberbrain-extract entry point
+  - **Question**: Implementation notes reference `cyberbrain-extract` as a hook invocation pattern but it is not defined in `pyproject.toml`. Hooks need a stable invocation pattern.
+  - **Source**: Gap-analysis MI1
+  - **Impact**: Hooks cannot use an entry point; must use `python -m cyberbrain.extractors.extract_beats` or a file path.
+  
+  ### OQ8: No pytest configuration for src layout
+  - **Question**: No `[tool.pytest.ini_options]` sets `pythonpath = ["src"]`. Without this or `pip install -e .`, `pytest` cannot resolve the `cyberbrain` package.
+  - **Source**: Gap-analysis MI2
+  - **Impact**: Developer onboarding requires undocumented steps.
+  
+  ### OQ9: scripts/import.py still hardcodes legacy extractor path
+  - **Question**: `scripts/import.py` hardcodes `EXTRACTORS_DIR = Path.home() / ".claude" / "cyberbrain" / "extractors"`. Must use `cyberbrain.extractors.*` imports directly.
+  - **Source**: Gap-analysis MR6
+  - **Impact**: Batch import fails for plugin-only installs without a legacy `~/.claude/cyberbrain/` directory.
+  
+  ### OQ10: CLAUDE.md and architecture.md not updated
+  - **Question**: Both documents still reference old flat paths (`mcp/`, `extractors/`) and the old launch command. Were listed as required updates in WI-034 spec.
+  - **Source**: Code-quality M2; spec-adherence architecture section; gap-analysis IR3, IR4
+  - **Impact**: `CLAUDE.md` validation command instructs developers to run a path that no longer exists.
+  
+  ### OQ11: WI-030 manual capture mode re-test still pending user action
+  - **Question**: Has the emphatic prohibition wording added in WI-023 actually changed Claude's behavior in a live Claude Desktop session?
+  - **Source**: Journal WI-030 entry
+  - **Impact**: The WI-023 fix is unvalidated; Claude may still offer to file beats in manual mode.
+  
+  ---
+  
+  ## Cross-References
+  
+  ### CR1: Namespace collision — origin through cycle 6
+  
+  | Stage | Finding | Summary |
+  |-------|---------|---------|
+  | WI-033 incremental | M1 (Minor) | pyproject.toml packages directive "may be incomplete" |
+  | Cycle 5 capstone code-quality | C1, C2 (Critical) | Entry point references non-existent namespace; mcp/ collides with PyPI |
+  | WI-034 implementation | — | Directory moved, MCP layer imports updated; extractor layer, tests, hooks not updated |
+  | Cycle 6 capstone code-quality | C1–C3, S1–S4 | Six categories of incomplete migration |
+  | Cycle 6 spec-adherence | Fail | 7 deviations from WI-034 plan |
+  | Cycle 6 gap-analysis | MR1–MR6 | Six missing requirements, all matching code-quality findings |
+  
+  **Connection**: The collision was introduced when WI-033 declared `cyberbrain.mcp.server:main` before any `cyberbrain` namespace package existed. The incremental reviewer classified the packages directive as minor rather than critical. The cycle 5 capstone correctly identified both root causes. WI-034 addressed the directory structure but completed only the MCP layer; the migration is approximately half-done.
+  
+  ### CR2: Hook silent failure — convergence across reviewers
+  
+  | Reviewer | Finding | Severity classification |
+  |----------|---------|------------------------|
+  | Code-quality | S4 | Significant |
+  | Gap-analysis | MR3 | Critical |
+  | Spec-adherence | Principle 8 violation | N/A (principle, not severity) |
+  
+  **Connection**: All three reviewers identify the same defect (hook checks `$CLAUDE_PLUGIN_ROOT/extractors/extract_beats.py` which no longer exists) but classify severity differently. Combined picture: functionally critical for fresh plugin installs; silence of the failure (no error message) makes it worse, directly contradicting Guiding Principle 1 (Zero Ceremony for the Common Case).
+  
+  ### CR3: Test isolation — two distinct failure modes
+  
+  | Reviewer | Finding | Root cause |
+  |----------|---------|------------|
+  | Code-quality | C3 | sys.path adds deleted directories → 18 collection errors |
+  | Code-quality | C3 | conftest mock at wrong key → silent isolation failure |
+  | Gap-analysis | IR1 | Identical to code-quality C3 collection failure |
+  | Gap-analysis | IR2 | Identical to code-quality C3 mock key issue |
+  
+  **Connection**: The test suite has two separate problems. The first (deleted directories in sys.path) is loud and immediate. The second (conftest mock key wrong) is silent — tests may appear to pass while making real LLM calls. Both require independent fixes. No reviewer contradictions; all assessments align.
+content_hash: "44e303b6717e4b27caf02f499484610adf23196605e2689569feea5c89ab75ba"
+token_count: 3220

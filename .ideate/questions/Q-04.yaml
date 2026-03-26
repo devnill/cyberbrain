@@ -1,0 +1,14 @@
+id: Q-04
+type: domain_question
+domain: retrieval
+status: open
+impact: Users must manually run `cb_reindex` to keep search index current after vault changes. Stale index produces degraded recall results without any warning.
+source: archive/cycles/002/decision-log.md (OQ3); archive/cycles/002/summary.md (Proposed Refinement Plan)
+resolution: null
+resolved_in: null
+description: Has the lazy reindex on `cb_recall` plus SessionEnd hook approach (D-6) been implemented?
+cycle_created: 1
+cycle_modified: null
+content_hash: "6877fbcfc0be836a3164b88d4afd95d0300626a48c5f59772c1099d4790f49ed"
+token_count: 143
+file_path: .ideate/questions/Q-04.yaml

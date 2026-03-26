@@ -1,0 +1,18 @@
+id: FI-001-004
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: significant
+title: Gate verdicts not surfaced in normal-mode execute path (FIXED)
+description: |
+  - **File**: `mcp/tools/restructure.py`
+  - **Issue**: Gate results only shown in preview mode, not execute mode.
+  - **Fix**: Added `_format_gate_verdicts` call in execute path output.
+file_path: cycles/001/findings/FI-001-004.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-010
+verdict: Pass
+content_hash: dda5934a04d3a02e3ae2c4596b98c1ff87bbb8567e1e8e3b5b6c3a9bf69282bd
+token_count: 127

@@ -1,0 +1,21 @@
+id: F-004-024
+type: finding
+cycle: 4
+reviewer: code-reviewer
+severity: minor
+title: `skip_continuations` blanks-as-continuation semantics
+description: |
+  - **File**: `src/cyberbrain/mcp/tools/enrich.py:181`
+  - **Issue**: The guard `line == ""` causes blank lines immediately following a removed managed key to be consumed as if they were continuation lines. A blank line between frontmatter keys (e.g., `type: decision\n\nsummary: ...`) after a removed key would be swallowed. The next non-blank line correctly resets `skip_continuations = False` and is appended normally.
+  - **Impact**: None in practice — the managed fields (`type`, `summary`, `tags`, `cb_modified`) written by `_format_fm_fields` never produce blank-line-separated sequences. Hand-edited notes with blank lines between frontmatter keys would have those blank lines quietly removed after enrichment. Frontmatter remains valid.
+  - **Suggested fix**: Low priority. Accept the current behavior; blank lines within YAML frontmatter are non-standard.
+  
+  ---
+file_path: cycles/004/findings/F-004-024.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-004
+verdict: Pass
+content_hash: f3316207620ef2e36f00c80bb184786f8325008a8d56b443437183a0baf73df5
+token_count: 295

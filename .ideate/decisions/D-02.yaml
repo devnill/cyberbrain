@@ -1,0 +1,13 @@
+id: D-02
+type: domain_decision
+domain: retrieval
+status: settled (may revisit for hosted deployment)
+cycle: 1
+supersedes: null
+description: FTS5 index, vector storage, and relation table all live in `search-index.db` (SQLite). No external database server.
+rationale: "\"SQLite over Postgres. Flat files over daemons.\" (GP-6 / Constraint C4). Precomputed vectors into SQLite is an acceptable compromise for single-user scale."
+cycle_created: 1
+cycle_modified: null
+content_hash: c265e362d5456b5cc2dcbd38e9a974864550a98534bd5143ef35ea9e9d4eb395
+token_count: 132
+file_path: .ideate/decisions/D-02.yaml

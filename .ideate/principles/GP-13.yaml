@@ -1,0 +1,11 @@
+id: GP-13
+type: guiding_principle
+name: Works Everywhere the User Works
+status: active
+description: Claude Code is the primary interface, but Claude Desktop and mobile are equally important. Knowledge should be capturable from any interface and retrievable from any interface. Automatic invocation (proactive recall) should work without the user knowing which tools exist or how they're named.
+amendment_history: []
+cycle_created: 1
+cycle_modified: null
+content_hash: "94abf96cab574e3f01094b020b1a32ac340a73dc21858dee99e263a62003b03f"
+token_count: 129
+file_path: .ideate/principles/GP-13.yaml

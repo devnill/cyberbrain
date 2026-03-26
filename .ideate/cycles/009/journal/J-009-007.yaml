@@ -1,0 +1,11 @@
+id: J-009-007
+type: journal_entry
+phase: execute
+date: "2026-03-16"
+cycle_created: 9
+title: "Work item 045: Automatic indexing"
+content: |
+  Status: complete
+  `incremental_refresh()` implemented with mtime-based filtering. Marker file at `~/.claude/cyberbrain/.index-scan-ts`. Default threshold 3600 seconds, configurable via `index_refresh_interval`. `cb_recall` calls `incremental_refresh()` before search (lazy reindex). SessionEnd hook updated to trigger background reindex. `cb_reindex(rebuild=True)` bug fixed. All acceptance criteria met. 1287 tests passing.
+content_hash: "63c9905e05e1a570c2c1ad51c07ece07aeed2c990cecfef6469b1dcbe373bacb"
+token_count: 144

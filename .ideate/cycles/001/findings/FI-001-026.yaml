@@ -1,0 +1,18 @@
+id: FI-001-026
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: minor
+title: No-args display tests rely on silent exception swallow in `_read_index_stats`
+description: |
+  - **File**: `tests/test_manage_tool.py:438-448`
+  - **Issue**: Tests pass a real `tmp_path` as `vault_path` without mocking `_read_index_stats`, relying on silent exception handling inside that helper.
+  - **Suggested fix**: Mock `_read_index_stats` to return `{}`.
+file_path: cycles/001/findings/FI-001-026.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-022
+verdict: Pass
+content_hash: "430027d47aafde6514251a6dc9730fffeb74dae366ebd87388c606a670c61e42"
+token_count: 149

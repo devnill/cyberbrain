@@ -1,0 +1,14 @@
+id: P-02
+type: domain_policy
+domain: retrieval
+status: active
+derived_from:
+  - GP-8 (Graceful Degradation Over Hard Failure)
+established: planning phase
+amended: null
+description: "Backend selection cascades: hybrid (fastembed + usearch) → fts5 (SQLite BM25) → grep (no dependencies). The system works at reduced capability when optional dependencies are absent; it never hard-fails on a missing search backend."
+cycle_created: 1
+cycle_modified: null
+content_hash: "307d8ef2ca59c07c9cb2b7b905d0fac26c6d9971df3c9b020133fe3a85f19f60"
+token_count: 128
+file_path: .ideate/policies/P-02.yaml

@@ -1,0 +1,15 @@
+id: F-006-036
+type: finding
+cycle: 6
+reviewer: gap-analyst
+severity: minor
+title: `deduplicate_frontmatter` positional ordering untested (G2 — still deferred)
+description: ""
+file_path: cycles/006/findings/F-006-036.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-006
+verdict: null
+content_hash: "5e248f5965eb28bd0aef65489e1e914181d1440c68c6276e1ab81321f30d36d0"
+token_count: 82

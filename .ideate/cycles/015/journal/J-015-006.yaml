@@ -1,0 +1,13 @@
+id: J-015-006
+type: journal_entry
+phase: execute
+date: "2026-03-22"
+cycle_created: 15
+title: Metrics summary
+content: |
+  Agents spawned: 8 (4 workers, 4 code-reviewers)
+  Total wall-clock: workers 466576ms, reviewers 275490ms
+  Models used: sonnet (all agents)
+  Slowest agent: worker-076 (autofile fix) — 138844ms
+content_hash: "486a499ed2141c740f256c5e72788d78bd6a9f70692e881b47b9de21e707296f"
+token_count: 81

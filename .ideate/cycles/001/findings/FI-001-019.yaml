@@ -1,0 +1,15 @@
+id: FI-001-019
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: minor
+title: test_backends.py uses extract_beats re-export path inconsistently
+description: "- **Issue**: Some backend function tests use `eb._call_claude_code` (via extract_beats re-export) while `get_model_for_tool` tests use the direct `backends` import. Inconsistent but not broken."
+file_path: cycles/001/findings/FI-001-019.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-013
+verdict: Pass
+content_hash: eaf06f7108af76dd04772c0d01ed2bf07051b49a4d6449142318720ebc14f255
+token_count: 129

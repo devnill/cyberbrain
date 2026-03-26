@@ -1,0 +1,19 @@
+id: F-001-006
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: significant
+title: extract_beats.py retains sys.path manipulation that defeats the migration
+description: |
+  - **File**: `/Users/dan/code/cyberbrain/src/cyberbrain/extractors/extract_beats.py:26-28`
+  - **Issue**: Lines 26-28 add `Path(__file__).parent` (i.e., `src/cyberbrain/extractors/`) to `sys.path`. All internal imports in `extract_beats.py` and all other extractor files still use bare unqualified names (`from config import ...`, `from backends import ...`, `from vault import ...`, etc.). This works at runtime when the file is run as a script or imported as a module — because `sys.path` manipulation puts the extractors directory in scope — but it bypasses the `cyberbrain.*` namespace entirely and would not work if the `sys.path` hack were removed.
+  - **Impact**: The architecture goal of "all imports use `cyberbrain.*` namespace" is not met for the entire extractor layer. The 14 extractor Python files all import each other by bare names (`from config import`, `from backends import`, `from vault import`, `from frontmatter import`, etc.), making them dependent on the `sys.path` hack to function.
+  - **Suggested fix**: All intra-extractor imports must be changed to `from cyberbrain.extractors.X import Y`. The `sys.path` manipulation block in `extract_beats.py` must be removed. This is the bulk of the work in WI-034 that was not completed.
+file_path: cycles/001/findings/F-001-006.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-001
+verdict: Fail
+content_hash: b5967c36d1a129234bb5eb85f7d3f5dc54f7a583dce913d8100eb8e8c8095d0d
+token_count: 397

@@ -1,0 +1,18 @@
+id: F-015-064
+type: finding
+cycle: 15
+reviewer: code-reviewer
+severity: minor
+title: No CI/CD pipeline
+description: |
+  - **File**: N/A
+  - **Issue**: Quality gates (ruff, basedpyright, pre-commit) are enforced locally only. No GitHub Actions or equivalent CI. This is a pre-existing gap documented in distribution Q-11.
+  - **Impact**: PRs or direct pushes can bypass quality enforcement.
+file_path: cycles/015/findings/F-015-064.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-015
+verdict: Pass
+content_hash: "9f245fa27257bad2e5346799edbcddf64816d0da6d3f01326784d1a7f18fdb97"
+token_count: 136

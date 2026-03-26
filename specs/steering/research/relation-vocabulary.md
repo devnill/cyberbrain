@@ -1,0 +1,205 @@
+# Relation Vocabulary Research
+
+**Date:** 2026-03-22
+**Status:** Research complete
+**Question:** Which relation vocabulary is more useful for a personal knowledge management graph of decisions, insights, problems, and references?
+
+---
+
+## Summary
+
+Two vocabularies are in play: the current code vocabulary (SKOS-derived: `related`, `references`, `broader`, `narrower`, `supersedes`, `wasDerivedFrom`) and the legacy spec vocabulary (domain-specific: `related-to`, `causes`, `caused-by`, `supersedes`, `implements`, `contradicts`). These were designed for different purposes. The SKOS vocabulary is designed for controlled taxonomic vocabularies; the domain-specific vocabulary is designed for episodic knowledge about software work. For Cyberbrain's beat types (decision, insight, problem, reference), the domain-specific vocabulary is a better fit — but neither vocabulary as-is is optimal. A merged vocabulary of 6 predicates is recommended, combining the best from both.
+
+There is also a concrete inconsistency in the codebase: the extraction prompt (`extract-beats-system.md`) uses the SKOS vocabulary, while the legacy spec (`knowledge-graph-enhancement.md`) defined the domain-specific vocabulary and includes the rationale for it. The code (`vault.py VALID_PREDICATES`) enforces the SKOS vocabulary at write time and silently normalizes any prompt-defined domain-specific predicates to `related`. This means the domain-specific predicates in the spec are not currently enforced or usable.
+
+---
+
+## Key Facts
+
+### Current code state
+
+- `VALID_PREDICATES` in `src/cyberbrain/extractors/vault.py` (line 164) contains: `related`, `references`, `broader`, `narrower`, `supersedes`, `wasderivedfrom` (lowercased at validation time)
+- The extraction prompt (`prompts/extract-beats-system.md`) documents the same SKOS vocabulary with the same 6 predicates
+- The legacy spec `specs/legacy/knowledge-graph-enhancement.md` defined a different 6-predicate domain-specific vocabulary that was never implemented: `related-to`, `causes`, `caused-by`, `supersedes`, `implements`, `contradicts`
+- The ML research doc (`specs/steering/research/knowledge-graph-ml-approaches.md`) assessed the current code vocabulary as "sufficient for traversal-based methods" and noted the vocabulary should only be expanded when the LLM naturally produces more nuanced relations that users find valuable for navigation
+
+### SKOS predicates (`broader`/`narrower`) in episodic context
+
+- SKOS `broader`/`narrower` are designed for taxonomic hierarchies of concepts (e.g., "dog" is narrower than "mammal")
+- Cyberbrain beats are episodic, not taxonomic — they are observations extracted from specific work sessions, not concept definitions
+- A decision beat is not "a specific instance of" a broader concept beat — it is a record of a choice made at a point in time
+- The ML research doc found that SKOS hierarchical predicates are useful for topic hierarchy traversal but that they are "less useful for retrieval expansion" than associative predicates for an episodic vault
+- In practice, the LLM generating beats from a software session is unlikely to correctly identify meaningful `broader`/`narrower` relationships between episodic notes (e.g., "this bug fix note is narrower than this architectural decision note") — the relationship is causal, not taxonomic
+
+### `wasDerivedFrom` (PROV-O)
+
+- `wasDerivedFrom` is a provenance predicate from PROV-O meaning "entity X was derived from entity Y as a source"
+- In a personal vault, this maps approximately to "I built on this prior note" — similar to `references` but implying more direct influence
+- The distinction between `references` (cites or depends on) and `wasDerivedFrom` (built on) is subtle and the LLM cannot reliably distinguish them in practice
+- The camelCase format (`wasDerivedFrom`) is inconsistent with the other lowercase predicates and breaks predictable rendering in the body section (`- wasDerivedFrom [[Note]]`)
+
+### Domain-specific predicates: usefulness analysis
+
+**`causes` / `caused-by`**
+- Directly relevant for tracing decision chains: a problem `causes` a decision; a decision `caused-by` a constraint
+- ADR (Architecture Decision Record) practices explicitly document this relationship — many teams track "what problem does this decision address"
+- The Zettelkasten community identifies causal relationships as one of the most semantically rich link types, more specific than general association
+- For Cyberbrain's beat types, problem → decision is the archetypal causal chain
+- `caused-by` is the inverse of `causes` — both are needed because Cyberbrain does not maintain bidirectional relations automatically (confirmed in the spec: "Bidirectional maintenance would require reading and editing existing vault notes on every write — too invasive")
+
+**`implements`**
+- Useful for connecting a reference or insight note to a decision that put it into practice
+- The ADR community uses "implements" to connect decisions to their realizations
+- Distinct from `causes` — a reference note doesn't cause a decision, but a subsequent note might implement a prior decision
+- Enables queries like "show me everything that implemented this architectural decision"
+
+**`contradicts`**
+- Useful for identifying conflicting knowledge, especially when new understanding revises old assumptions
+- The Zettelkasten community identifies contradiction as one of the most valuable link types for intellectual work — it marks where understanding has evolved
+- More specific than `supersedes`: `supersedes` means "replaces the old version"; `contradicts` means "conflicts with, but may coexist"
+- For an AI assistant injecting context, knowing that two notes contradict each other is qualitatively different from knowing they are related
+
+**`references`**
+- Retained from SKOS vocabulary
+- Directly useful for reference beats that cite commands, APIs, or documented behaviors from another note
+- More specific than `related` — implies the note explicitly depends on the target as a source
+
+**`supersedes`**
+- Shared between both vocabularies; retained
+- Directly useful for decision evolution, corrected configs, or updated facts
+- Has a clear, unambiguous meaning that both LLMs and humans will apply consistently
+
+**`related` / `related-to`**
+- Both vocabularies include a catch-all associative predicate
+- `related-to` (hyphenated) is the legacy spec version; `related` is the SKOS version
+- For retrieval and graph traversal, these are functionally identical
+- `related` is shorter; `related-to` is grammatically a verb phrase that reads naturally in the body section (`- related-to [[Note]]` reads as a sentence fragment, `- related [[Note]]` is awkward)
+- Neither is clearly superior; `related` is chosen for brevity and consistency with the code
+
+### Obsidian PKM community practice
+
+- The Obsidian community does not have a dominant standard relation vocabulary for typed links; native Obsidian only supports untyped wikilinks
+- Community plugins (Graph Link Types, Semantic Canvas) enable typed links but are optional and not widely adopted
+- The Dataview plugin can query frontmatter properties but treats all relation types as user-defined strings — no built-in vocabulary exists
+- The Zettelkasten method tradition emphasizes four relation archetypes: similarity, difference, support, and contradiction — these map approximately to `related`, (none), `references`/`implements`, and `contradicts`
+- ADR practice explicitly formalizes `supersedes` and causal relations; this is the closest existing standard to Cyberbrain's use case
+- Research on typed link adoption in PKM systems (cited in the legacy spec) found that "lean vocabularies (4–8 types) are adopted; larger ones collapse to informal use"
+
+### LLM predicate generation reliability
+
+- The LLM generating beats has strongest signal for: `supersedes` (clear temporal replacement), `causes`/`caused-by` (explicit problem-decision chains in the transcript), and `implements` (explicit "we implemented the decision from X")
+- The LLM has weakest signal for: `broader`/`narrower` (requires taxonomic reasoning not grounded in the transcript), `wasDerivedFrom` (ambiguous; overlaps with `references`)
+- Causal predicates (`causes`, `caused-by`) are more likely to be correctly generated because problem → decision chains are explicit in software transcripts
+- The LLM is instructed to only emit relations when "very likely" targets exist in the vault — this conservatism already limits relation density; a precise vocabulary reduces false positives
+
+### Retrieval and graph traversal implications
+
+- For SQL-based typed traversal (the recommended graph approach per the ML research doc), predicate type affects which traversal directions are useful:
+  - `causes`/`caused-by`: follow in both directions to trace decision chains
+  - `implements`: follow from decision to realization; follow backward to find what a reference implements
+  - `contradicts`: surface conflicts, do not traverse (contradicting notes are not topically adjacent)
+  - `supersedes`: follow forward to find latest version; do not expand (a superseded note is explicitly outdated)
+  - `references`: expand to find related source material
+  - `related`: expand in both directions for topic exploration
+- The ML research doc explicitly called out that `supersedes` and `wasDerivedFrom` are "less useful for retrieval expansion and more useful for provenance tracking" — reinforcing that the retrieval-optimized vocabulary should center on the other predicates
+
+---
+
+## Recommendations
+
+**Option 1: Merged 6-predicate vocabulary (recommended)**
+
+Replace the current SKOS vocabulary with a merged vocabulary that retains the most useful predicates from both sources. This is the minimum size that covers the semantically distinct relationships between Cyberbrain's beat types.
+
+| Predicate | Meaning | Beat type pairs |
+|---|---|---|
+| `related` | General associative link; same topic or domain. Default when relationship type is unclear. | Any → Any |
+| `references` | This note explicitly cites, depends on, or uses information from the target note. | reference → reference, insight → insight |
+| `causes` | This note's subject directly leads to or explains the situation described in the target note. | problem → decision, insight → decision |
+| `caused-by` | Inverse of causes. The target note caused or explains this note's subject. | decision → problem, decision → insight |
+| `supersedes` | This note replaces or obsoletes the target note (newer decision, corrected config, revised understanding). | decision → decision, reference → reference |
+| `implements` | This note puts the concept or decision described in the target note into practice. | reference → decision, insight → decision |
+| `contradicts` | This note challenges, qualifies, or conflicts with the target note. Both may still be valid. | insight → insight, problem → reference |
+
+Pros:
+- Covers all semantically distinct relationships between beat types (problem, decision, insight, reference)
+- `causes`/`caused-by` directly model the problem → decision chain, the most common relationship in software session beats
+- `implements` connects decisions to their realizations, enabling forward-tracing from architectural choices
+- `contradicts` surfaces evolved or conflicting knowledge, which is qualitatively different from supersession
+- `related` and `references` cover the catch-all and citation cases
+- Drops `broader`/`narrower` (taxonomic, not episodic) and `wasDerivedFrom` (ambiguous, camelCase inconsistency)
+- 6 predicates is within the 4–8 range that PKM research identifies as the adoption-viable range
+- The LLM can reliably distinguish all six: causes/caused-by are grounded in transcript narrative; supersedes is grounded in explicit replacement language; implements is grounded in "we implemented X from Y"; references is grounded in explicit citations; contradicts is grounded in explicit conflict language
+- Consistent with the legacy spec's intent (`knowledge-graph-enhancement.md`) which was designed for this exact use case
+
+Cons:
+- Requires updating `VALID_PREDICATES` in `vault.py`, the extraction prompt, and any documentation
+- Introduces `caused-by` as an inverse predicate that the LLM must manage (Cyberbrain does not auto-maintain bidirectional relations)
+- Slightly increases prompt token count (one additional row in the predicate table)
+
+When to use: This vocabulary is appropriate for all current Cyberbrain vaults. It should be the default in the vault CLAUDE.md template generated by `cb_setup`.
+
+---
+
+**Option 2: Retain current SKOS vocabulary with fixes**
+
+Keep `related`, `references`, `broader`, `narrower`, `supersedes`, `wasDerivedFrom` but fix the camelCase inconsistency in `wasDerivedFrom` and add `contradicts`.
+
+Pros:
+- No breaking change to existing vault notes
+- SKOS vocabulary is formally grounded and recognizable to knowledge engineers
+
+Cons:
+- `broader`/`narrower` are not meaningful for episodic beats — the LLM will generate them rarely and incorrectly
+- `wasDerivedFrom` is ambiguous relative to `references` and has inconsistent casing
+- Does not capture causal chains (`causes`/`caused-by`) or implementation relationships (`implements`), which are the most common semantic connections in software work
+- The ML research doc explicitly found that `broader`/`narrower` are useful for topic hierarchy but notes are episodic, not hierarchical
+
+When to use: Only if strict SKOS/linked-data alignment is a requirement (it is not for Cyberbrain).
+
+---
+
+**Option 3: Minimal vocabulary (3 predicates)**
+
+Use only `related`, `supersedes`, `references`. Drop all causal and hierarchical predicates.
+
+Pros:
+- Maximum simplicity; unambiguous application
+- Lowest LLM false-positive rate
+- No maintenance of inverse predicates
+
+Cons:
+- Loses all causal chain information — the problem → decision chain is the most valuable navigation path in a software knowledge graph
+- `contradicts` and `implements` are qualitatively distinct from `related` and would be flattened to it, losing information
+- Graph traversal has fewer useful filter dimensions
+
+When to use: If relation density is very low and the graph is used only for weak associative discovery, not chain tracing.
+
+---
+
+## Risks
+
+**Vocabulary-code mismatch (active):** The current extraction prompt documents the SKOS vocabulary, but the legacy spec defined the domain-specific vocabulary. Any prompt editing that references the legacy spec vocabulary will produce predicates (`causes`, `implements`, `contradicts`) that `resolve_relations()` in `vault.py` silently normalizes to `related`. This means typed relations would be written to the body section but stored as `related` in `VALID_PREDICATES`. This discrepancy should be resolved before expanding relation functionality.
+
+**Inverse predicate maintenance:** `causes`/`caused-by` requires the LLM to emit both directions when appropriate. Cyberbrain does not auto-maintain bidirectional relations (confirmed design decision). If the LLM emits `causes [[Note B]]` on Note A but does not emit `caused-by [[Note A]]` on Note B, the graph is asymmetric. This is acceptable — Obsidian's backlinks panel provides reverse direction visibility — but users who expect symmetry may be surprised.
+
+**LLM hallucination of targets:** The extraction prompt already guards against this ("only name notes that very likely already exist in the vault"), and `resolve_relations()` drops any target not in `vault_titles`. This risk applies regardless of vocabulary choice.
+
+**Predicate collapse over time:** If the vocabulary grows beyond 8 predicates, LLMs tend to default to the generic predicate (`related`) for cases where the specific predicate applies but is harder to classify. The 6-predicate recommendation stays within the empirically observed adoption-viable range.
+
+**Graph density:** Even with an ideal vocabulary, the graph is sparse (~1.5 relations per note on average per the ML research doc). This limits graph traversal value regardless of predicate quality. The vocabulary is a precondition for useful graph traversal, not a solution to the density problem.
+
+---
+
+## Sources
+
+- `/Users/dan/code/cyberbrain/src/cyberbrain/extractors/vault.py` — `VALID_PREDICATES` definition (line 164)
+- `/Users/dan/code/cyberbrain/src/cyberbrain/prompts/extract-beats-system.md` — Current predicate vocabulary in extraction prompt (lines 88–104)
+- `/Users/dan/code/cyberbrain/specs/legacy/knowledge-graph-enhancement.md` — Legacy spec defining the domain-specific vocabulary and dual-encoding strategy
+- `/Users/dan/code/cyberbrain/specs/steering/research/knowledge-graph-ml-approaches.md` — ML research doc; assessed current SKOS vocabulary for traversal; Section 8 specifically evaluates current encoding
+- [SKOS Simple Knowledge Organization System Reference — W3C](https://www.w3.org/TR/skos-reference/) — SKOS predicate definitions
+- [Different Kinds of Ties Between Notes — Zettelkasten Method](https://zettelkasten.de/posts/kinds-of-ties/) — PKM relation type taxonomy
+- [Architecture Decision Records — adr.github.io](https://adr.github.io/) — ADR relation practice including supersedes and causal relations
+- [Add support for link types — Obsidian Forum](https://forum.obsidian.md/t/add-support-for-link-types/6994) — Obsidian community discussion on typed links
+- [Personal Knowledge Graphs in Obsidian — Medium](https://volodymyrpavlyshyn.medium.com/personal-knowledge-graphs-in-obsidian-528a0f4584b9) — Community practice for relation types in Obsidian vaults
+- Training knowledge — predicate adoption rates in PKM systems (no live source; based on training knowledge from PKM research literature)

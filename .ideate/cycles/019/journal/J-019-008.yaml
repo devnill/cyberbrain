@@ -1,0 +1,11 @@
+id: J-019-008
+type: journal_entry
+phase: execute
+date: "2026-03-23"
+cycle_created: 19
+title: "Work item 089: Fix --affected-only import detection bug"
+content: |
+  Status: complete
+  ast.Import handling added. 8 new tests verify plain import detection and known source-to-test mappings.
+content_hash: edebd714397bcddf759c3f5d382255fb9a27021db25cf15e04a8344e36598529
+token_count: 74

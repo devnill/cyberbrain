@@ -1,0 +1,18 @@
+id: F-015-063
+type: finding
+cycle: 15
+reviewer: code-reviewer
+severity: minor
+title: ARCHITECTURE.md still contains stale documentation
+description: |
+  - **File**: `ARCHITECTURE.md`
+  - **Issue**: Several sections reference pre-src-layout paths (e.g., `~/.claude/cyberbrain/extractors/`). While WI-079 updated README.md, ARCHITECTURE.md was only updated to remove the build.sh reference (WI-078 rework). The broader staleness predates this cycle.
+  - **Impact**: Documentation inconsistency. ARCHITECTURE.md is a secondary reference (specs/plan/architecture.md is authoritative), so impact is limited.
+file_path: cycles/015/findings/F-015-063.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-015
+verdict: Pass
+content_hash: c4defdc3ce6db4dce7533dc7e273fa83e73cfd0529f491c1fe596135724efe72
+token_count: 189

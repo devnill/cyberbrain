@@ -1,0 +1,13 @@
+id: D-10
+type: domain_decision
+domain: distribution
+status: settled
+cycle: 10
+supersedes: null
+description: ruff (linter + formatter) and basedpyright (type checker) are the enforced quality tools. Both configured in pyproject.toml with targeted ignores. ruff was chosen as the de facto standard; basedpyright over mypy for speed, stricter defaults, and pyproject.toml-native config.
+rationale: Cycles 10-11 evaluated alternatives; ruff + basedpyright combination reaches 0 type errors on the codebase in basic mode.
+cycle_created: 1
+cycle_modified: null
+content_hash: "7c706d80d1dbcff849957d6c1d67ba6ad9132d20a37c1f082296e99a88ba21d1"
+token_count: 155
+file_path: .ideate/decisions/D-10.yaml

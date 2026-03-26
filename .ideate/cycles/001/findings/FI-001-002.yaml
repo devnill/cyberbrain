@@ -1,0 +1,18 @@
+id: FI-001-002
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: significant
+title: `get_judge_model` was duplicated (FIXED)
+description: |
+  - **File**: `extractors/quality_gate.py` and `extractors/backends.py`
+  - **Issue**: Function defined in both files. Spec assigns ownership to backends.py.
+  - **Fix**: Removed from quality_gate.py, imported from backends.
+file_path: cycles/001/findings/FI-001-002.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-009
+verdict: Pass
+content_hash: "37648247a8263823d58fe8dbd9bb9f131ac3a32f032b1299338da9af1e76d000"
+token_count: 131

@@ -1,0 +1,17 @@
+id: F-012-058
+type: finding
+cycle: 12
+reviewer: code-reviewer
+severity: minor
+title: ruff ignore list has 18 rules
+description: |
+  - **Issue**: Broad ignore list reduces ruff's value. Each rule is documented but the aggregate breadth is notable.
+  - **Suggested fix**: Review periodically. No action needed now.
+file_path: cycles/012/findings/F-012-058.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-012
+verdict: Pass
+content_hash: "2d8dc37315b3a69cc400fb61eb5d889ea9c23559996bca415c041a2cb4296177"
+token_count: 117

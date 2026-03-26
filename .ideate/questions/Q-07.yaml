@@ -1,0 +1,14 @@
+id: Q-07
+type: domain_question
+domain: distribution
+status: resolved (import path) / deferred (dead constant) — `scripts/import.py` now imports via `cyberbrain.extractors.extract_beats` directly (line 48). The `EXTRACTORS_DIR` constant at line 33 is now dead code — never referenced. Removing it is a minor cleanup deferred to a future housekeeping pass; it has no functional impact.
+impact: Batch import fails for plugin-only installs with no legacy `~/.claude/cyberbrain/` directory.
+source: archive/cycles/001/decision-log.md (OQ9); archive/cycles/001/gap-analysis.md (MR6)
+resolution: null
+resolved_in: null
+description: `scripts/import.py` hardcodes `EXTRACTORS_DIR = Path.home() / ".claude" / "cyberbrain" / "extractors"`. Must use `cyberbrain.extractors.*` imports directly.
+cycle_created: 1
+cycle_modified: null
+content_hash: "52035bc2a6085c6f88c5a43d88483d1075a72943081561120f0ff2adf5271ea9"
+token_count: 223
+file_path: .ideate/questions/Q-07.yaml

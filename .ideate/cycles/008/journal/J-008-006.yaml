@@ -1,0 +1,11 @@
+id: J-008-006
+type: journal_entry
+phase: execute
+date: "2026-03-12"
+cycle_created: 8
+title: "Work item 037: Post-migration docs and cleanup"
+content: |
+  Status: complete with rework
+  Rework: 2 significant, 1 minor findings fixed from incremental review. S1: Added deprecation notice to build.sh (script packages pre-WI-034 flat layout, no longer correct). S2: Merged duplicate Distribution section in architecture.md into single section. M1: Updated stale comment in test_mcp_server.py. All domain questions Q-1 through Q-7 resolved. Tool count in CLAUDE.md updated to 11.
+content_hash: "4ba75bc5f09e8a1eeab597a19da52316ad7ac034af68161f9c85ef33212e6da4"
+token_count: 146

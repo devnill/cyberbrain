@@ -1,0 +1,18 @@
+id: F-001-012
+type: finding
+cycle: 1
+reviewer: gap-analyst
+severity: minor
+title: `.obsidian/` marker directories present (resolved in prior cycle)
+description: |
+  The gap from cycle 3 (missing `.obsidian/` directories in test vaults) was resolved in the post-review fixes. All 5 vault variants now have `.obsidian/.gitkeep`. No new gaps introduced.
+  
+  ---
+file_path: cycles/001/findings/F-001-012.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-001
+verdict: null
+content_hash: "92a4cfed31135dd0102822549eb419bcb2f37e1fc7f65815eb02ef712534f772"
+token_count: 128

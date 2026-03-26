@@ -1,0 +1,13 @@
+id: D-15
+type: domain_decision
+domain: distribution
+status: provisional (consolidated; full elimination deferred)
+cycle: 1
+supersedes: null
+description: sys.modules injection patterns in 10 test files were refactored to use a shared helper function with consistent structure, but not fully eliminated. Full elimination is deferred.
+rationale: Full rewrite would be high risk with low immediate benefit. The consolidation reduces inconsistency without touching behavior. Deferred per GP-10 (YAGNI).
+cycle_created: 1
+cycle_modified: null
+content_hash: cfec4fdf17132e093faaabccb6b70d592668d09cfd6c0e8e67e687a00c6df0fc
+token_count: 150
+file_path: .ideate/decisions/D-15.yaml

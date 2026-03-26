@@ -1,0 +1,18 @@
+id: F-008-040
+type: finding
+cycle: 8
+reviewer: code-reviewer
+severity: minor
+title: `PytestCollectionWarning` from `TestMapper` name (pre-existing, deferred)
+description: |
+  - **File**: `tests/_dependency_map.py:9`
+  - **Issue**: Pytest warns that it cannot collect `TestMapper` because it has an `__init__`. Pre-existing issue; fixing requires renaming the class across multiple files.
+  - **Status**: Deferred — out of scope for this cycle.
+file_path: cycles/008/findings/F-008-040.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-008
+verdict: Pass
+content_hash: d714533da8bcef7487c8d30cfb7344ce32df11a1dfcd60e76112d538adb9687c
+token_count: 149

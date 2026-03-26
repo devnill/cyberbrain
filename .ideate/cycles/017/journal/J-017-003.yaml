@@ -1,0 +1,12 @@
+id: J-017-003
+type: journal_entry
+phase: execute
+date: "2026-03-22"
+cycle_created: 17
+title: "Work item 081: Clarify README MCP JSON for both install paths"
+content: |
+  Status: complete with rework
+  Rework: 2 minor findings fixed from incremental review. M1: Reworded plugin block label to bridging sentence. M2: Added clarifying note about auto-substituted plugin path.
+  Two labeled JSON blocks: plugin (automatic) and manual (mcp/start.sh). No deviations from plan.
+content_hash: fb1d7616ef1092ff21a9020251ffe4e8496e31e3b8cb8d4ff45b6026c8fad2a7
+token_count: 120

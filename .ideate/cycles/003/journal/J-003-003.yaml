@@ -1,0 +1,11 @@
+id: J-003-003
+type: journal_entry
+phase: execute
+date: "2026-03-09"
+cycle_created: 3
+title: "Work item 015: Fix gate criteria dispatch"
+content: |
+  Status: complete
+  Fixed _gate_decisions to dispatch split→restructure_split, hub-spoke/subfolder→restructure_hub (was always restructure_merge). Fixed _gate_generated_content hub-spoke/subfolder dispatch to restructure_hub. Added ### restructure_hub criteria to quality-gate-system.md. Added 8 dispatch tests. 1202 tests passing. No deviations from plan.
+content_hash: f2a40a983cc1d4c5919103dbd2d6eb1c46f3e44a498491f155c42a2f61d3187f
+token_count: 129

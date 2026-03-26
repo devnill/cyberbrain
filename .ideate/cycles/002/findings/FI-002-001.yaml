@@ -1,0 +1,19 @@
+id: FI-002-001
+type: finding
+cycle: 2
+reviewer: code-reviewer
+severity: significant
+title: "\"ask\" behavior caused silent data loss in non-interactive paths"
+description: |
+  - **File**: `src/cyberbrain/extractors/autofile.py:321-328`
+  - **Issue**: `autofile_beat` returned `None` with `_autofile_ask` when `uncertain_filing_behavior="ask"`, but hook and `cb_extract` callers did not check for this — beats were silently dropped.
+  - **Impact**: Any beat with low confidence and ask-mode config would disappear without trace in hook/extract paths.
+  - **Fix applied**: Added `can_ask: bool = False` parameter to `autofile_beat`. When `can_ask=False` (default), ask behavior falls back to inbox routing. Only `cb_file` passes `can_ask=True`.
+file_path: cycles/002/findings/FI-002-001.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-043
+verdict: Pass
+content_hash: "34a0f4407ef491187a657077cb519bf36ab35e361fdda9ad3391b2f32ce59a19"
+token_count: 223

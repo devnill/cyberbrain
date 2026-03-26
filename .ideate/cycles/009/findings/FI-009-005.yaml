@@ -1,0 +1,18 @@
+id: FI-009-005
+type: finding
+cycle: 9
+reviewer: code-reviewer
+severity: minor
+title: Closing-delimiter scan matches any line starting with `---`, not only a bare `---` line
+description: |
+  - **File**: `/Users/dan/code/cyberbrain/scripts/repair_frontmatter.py:58`
+  - **Issue**: `rest.find("\n---")` matches the first newline followed by three dashes anywhere in the file — including lines like `--- old heading`, `---broken`, or a Markdown setext-style horizontal rule `---`. It does not require that the three dashes are followed by `\n` or end-of-file. For a note whose body happens to contain such a line, `parse_frontmatter` would misidentify that body line as the frontmatter closing delimiter, causing the real closing `---` to be treated as body content and the note to be reported as having no frontmatter (because the apparent "frontmatter block" would likely contain no duplicate keys). No incorrect write would occur, but affected files would be silently skipped rather than repaired.
+  - **Suggested fix**: Change the scan to require the dashes to be followed by `\n` or end-of-string: `closing_idx = rest.find("\n---\n")`. If end-of-file is also a valid terminator, scan for both: find the first of `\n---\n` and `\n---` at end of string, taking the smaller positive index.
+file_path: cycles/009/findings/FI-009-005.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-053
+verdict: Pass
+content_hash: "963d996ed6c802ebf340cfebcc10df3f13c2af3a2edc774ff6e8b0ac7ff6502e"
+token_count: 363

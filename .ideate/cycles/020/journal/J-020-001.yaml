@@ -1,0 +1,13 @@
+id: J-020-001
+type: journal_entry
+phase: refine
+date: "2026-03-23"
+cycle_created: 20
+title: Refinement planning completed
+content: |
+  Trigger: Cycle 017 review findings (2 significant, 3 minor)
+  Principles changed: none
+  New work items: 090-091
+  Two items: fix run_extraction config param + merge _write_beats_and_log (090), mark architecture tensions T5/T6/T7 resolved (091). CLAUDE.md vocabulary update verified not needed. Config doc pass deferred.
+content_hash: e25cd5236d8297b7fcd44806e66df6567f837baa21d0ca04e6ea6d8c6c721a8b
+token_count: 116

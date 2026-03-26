@@ -1,0 +1,19 @@
+id: F-002-017
+type: finding
+cycle: 2
+reviewer: code-reviewer
+severity: critical
+title: install.sh copies from non-existent source directories
+description: |
+  - **File**: `install.sh:75–144`
+  - **Issue**: `install.sh` copies files from `$REPO_DIR/extractors/`, `$REPO_DIR/mcp/`, and `$REPO_DIR/prompts/`. After WI-034, none of these directories exist at the repo root — they are now at `src/cyberbrain/extractors/`, `src/cyberbrain/mcp/`, and `src/cyberbrain/prompts/`. Every `cp` command in the file installation section (lines 75–145) fails with a path-not-found error. Running `bash install.sh` installs nothing.
+  - **Impact**: Manual installation (for Claude Desktop users) is completely broken. `set -euo pipefail` exits on the first failed `cp`, leaving the target directory empty.
+  - **Suggested fix**: Update all source paths to reference `$REPO_DIR/src/cyberbrain/`.
+file_path: cycles/002/findings/F-002-017.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-002
+verdict: Fail
+content_hash: "71adab5e8faeb343a449a07d80c9ca3bcd351f3e813e3ba7aa851497fc197624"
+token_count: 258

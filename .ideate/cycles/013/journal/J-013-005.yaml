@@ -1,0 +1,11 @@
+id: J-013-005
+type: journal_entry
+phase: brrr
+date: "2026-03-22"
+cycle_created: 13
+title: "Cycle 1 — Work item 075: Eliminate extract_beats.py re-export hub"
+content: |
+  Status: complete
+  Removed 25 re-export lines from extract_beats.py. Updated scripts/import.py (replaced eb module pattern with direct imports), test_extract_beats.py, test_backends.py, test_import.py to use direct source module imports. extract_beats.py now contains only main() and its direct dependencies. 1300 passed (6 more from test_dependency_map.py now collected).
+content_hash: cb84bf220e614de11fd4ea63750c39cb1ea432f630d2e8397e443116e732579f
+token_count: 138

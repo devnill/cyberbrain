@@ -1,0 +1,12 @@
+id: J-009-002
+type: journal_entry
+phase: execute
+date: "2026-03-13"
+cycle_created: 9
+title: "Work item 043: Filing confidence and uncertainty handling"
+content: |
+  Status: complete with rework
+  Rework: 3 significant, 1 minor findings fixed from incremental review.
+  S1: Added `can_ask: bool = False` parameter to `autofile_beat` — prevents silent beat loss in non-interactive paths (hooks, cb_extract) when `uncertain_filing_behavior="ask"`. Only `cb_file` passes `can_ask=True`. S2: Added `TestCbFileAutofileAsk` test class covering the `_autofile_ask` → clarification message path in `file.py`. S3: Removed hardcoded `elif confidence < 0.7` unreachable branch (not in spec, YAGNI). M1: Changed `cb_uncertain_routing: true` to include confidence score (`cb_uncertain_routing: {confidence:.2f}`).
+content_hash: aaf89aa9b34d5a0c800e72050d5f646c8750cbf84bc863e2346cf3455e0a826a
+token_count: 203

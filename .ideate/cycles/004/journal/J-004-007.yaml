@@ -1,0 +1,12 @@
+id: J-004-007
+type: journal_entry
+phase: execute
+date: "2026-03-09"
+cycle_created: 4
+title: "Work item 026: Mock vault testing infrastructure"
+content: |
+  Status: complete with rework
+  Rework: 3 significant, 2 minor findings fixed from incremental review. S1: wm-recall.jsonl now deployed to ~/.claude/cyberbrain/ instead of vault directory. S2: All Python-invoking helpers in test-vault.sh now use environment variables instead of string interpolation to prevent quote injection. S3: Status modification detection replaced file count comparison with SHA-256 checksums. M1: Removed duplicate relations body section from Rate Limiting Strategy note. M2: Added sample journal files to mature vault's AI/Journal/ directory. M3 (dead _WM_RECALL_LOG in review.py) noted but out of scope.
+  Created 5 vault variants (empty, para, zettelkasten, mature, working-memory) in tests/vaults/ with deploy/reset/status/teardown scripts and documentation. No deviations from plan.
+content_hash: f3624bf5ff14636c5796513e33a9874d49bf81141a811a0553e4ac4656b8f738
+token_count: 244

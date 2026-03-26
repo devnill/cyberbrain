@@ -1004,7 +1004,7 @@ class TestResolveRelations:
     def test_unknown_predicate_normalized_to_related(self):
         """An unknown predicate is normalised to 'related'."""
         vault_titles = {"JWT Authentication"}
-        relations = [{"type": "causes", "target": "JWT Authentication"}]
+        relations = [{"type": "invented-predicate", "target": "JWT Authentication"}]
         result = resolve_relations(relations, vault_titles)
         assert result[0]["type"] == "related"
 
@@ -1046,7 +1046,15 @@ class TestResolveRelations:
     def test_all_lowercase_valid_predicates_accepted(self):
         """All lowercase valid predicates pass through without normalisation."""
         vault_titles = {"Target Note"}
-        for predicate in ("related", "references", "broader", "narrower", "supersedes"):
+        for predicate in (
+            "related",
+            "references",
+            "causes",
+            "caused-by",
+            "supersedes",
+            "implements",
+            "contradicts",
+        ):
             relations = [{"type": predicate, "target": "Target Note"}]
             result = resolve_relations(relations, vault_titles)
             assert result[0]["type"] == predicate

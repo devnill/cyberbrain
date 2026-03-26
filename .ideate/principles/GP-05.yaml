@@ -1,0 +1,11 @@
+id: GP-05
+type: guiding_principle
+name: Vault-Adaptive, Not Vault-Prescriptive
+status: active
+description: The system observes and works with the vault structure that already exists rather than imposing its own. The vault's CLAUDE.md is the single source of truth for types, tags, folders, and conventions. The system works whether the vault uses PARA, Zettelkasten, Johnny Decimal, or something idiosyncratic.
+amendment_history: []
+cycle_created: 1
+cycle_modified: null
+content_hash: cb3a536bece1a0c4159904bc6411f46a408772062b91a2941c884c22fe145df7
+token_count: 133
+file_path: .ideate/principles/GP-05.yaml

@@ -1,0 +1,11 @@
+id: J-013-004
+type: journal_entry
+phase: brrr
+date: "2026-03-22"
+cycle_created: 13
+title: "Cycle 1 — Work item 074: Fix test_dependency_map.py"
+content: |
+  Status: complete
+  Re-implemented _REPO_ROOT, _TESTS_DIR, scripts/ fallback, and absolute path normalization in _dependency_map.py (features from WI-055/056 that were reverted by worker overwrite). All 6 tests pass.
+content_hash: "350857f88c9cd7335ea0dd2ed558829b7d934bfe15366c7c168d52951b86ed5b"
+token_count: 96

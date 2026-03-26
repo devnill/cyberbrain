@@ -1,0 +1,18 @@
+id: FI-001-029
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: significant
+title: No tests assert guidance is present in Phase 2 return paths (FIXED)
+description: |
+  - **File**: `tests/test_setup_enrich_tools.py:339,354`
+  - **Issue**: Neither Phase 2 test asserted the new guidance content was present.
+  - **Fix**: Added assertions for orient prompt path and cb_recall mention to both tests.
+file_path: cycles/001/findings/FI-001-029.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-024
+verdict: Pass
+content_hash: c5273f48716ff2029441c659921688676a83b37128c565ce8661ed11bc37436a
+token_count: 139

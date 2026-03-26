@@ -1,0 +1,14 @@
+id: Q-05
+type: domain_question
+domain: retrieval
+status: open
+impact: The design-approved retrieval interface remains a design document only. The current `cb_read` does not support multi-note reads or synthesis.
+source: archive/cycles/002/decision-log.md (OQ4); archive/cycles/002/summary.md (Proposed Refinement Plan)
+resolution: null
+resolved_in: null
+description: Has the `cb_read` multi-identifier, `synthesize`, and `max_chars_per_note` interface (D-7) been implemented?
+cycle_created: 1
+cycle_modified: null
+content_hash: "292e25c4808364f28da267d542868807a6c56286779cda94ffc1f417a303a86e"
+token_count: 145
+file_path: .ideate/questions/Q-05.yaml

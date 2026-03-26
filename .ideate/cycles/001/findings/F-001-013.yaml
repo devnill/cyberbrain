@@ -1,0 +1,15 @@
+id: F-001-013
+type: finding
+cycle: 1
+reviewer: spec-reviewer
+severity: critical
+title: Hook exit codes
+description: No changes to hooks in cycles 4-5. Existing hooks continue to exit 0 regardless of internal errors.
+file_path: cycles/001/findings/F-001-013.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-001
+verdict: Fail
+content_hash: ccf8a03b7e3abed12fce1605fcc14ed07bc00e6da25cf1770293865efa16fb87
+token_count: 94

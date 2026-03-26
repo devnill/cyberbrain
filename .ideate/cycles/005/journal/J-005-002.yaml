@@ -1,0 +1,12 @@
+id: J-005-002
+type: journal_entry
+phase: execute
+date: "2026-03-09"
+cycle_created: 5
+title: "Work item 027: Dead code removal and utility consolidation"
+content: |
+  Status: complete with rework
+  Rework: 1 significant, 1 minor finding fixed from incremental review. S1: README still documented removed similarity_threshold parameter at two locations — removed example line and updated tool signature. M1: Moved mid-file frontmatter import in shared.py to top-level import block.
+  Removed _WM_RECALL_LOG, _title_concept_clusters(), similarity_threshold parameter. Consolidated _is_within_vault to shared.py, frontmatter parsing to frontmatter.py imports. Deleted 6 stale .skill bundles and 4 .py,cover files. No deviations from plan.
+content_hash: a202c3e70d649e6d83b87573b30693cd4719a8b3de4e17146114440e3aed4fc9
+token_count: 186

@@ -1,0 +1,22 @@
+id: F-009-043
+type: finding
+cycle: 9
+reviewer: code-reviewer
+severity: minor
+title: `parse_frontmatter()` duplicated between `repair_frontmatter.py` and canonical `frontmatter.py`
+description: |
+  - **Files**: `scripts/repair_frontmatter.py:40–68`, `src/cyberbrain/extractors/frontmatter.py`
+  - **Gap**: Two independent implementations of frontmatter parsing exist. The repair script's version is intentionally standalone (D7: stdlib-only, no MCP imports).
+  - **Impact**: Future changes to frontmatter parsing conventions must be applied in both locations. This is a maintenance burden, not a correctness issue.
+  - **Per design decision D7**: This duplication is explicitly accepted. The repair script is a one-time maintenance utility that must run without the cyberbrain package on the path.
+  - **Recommendation**: Document the duplication in a comment in repair_frontmatter.py. Defer.
+  
+  ---
+file_path: cycles/009/findings/F-009-043.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-009
+verdict: Pass
+content_hash: "7fe528dd7836817cb007292bfabf56221db873a06bbc939d5db7b99d0dd8c25a"
+token_count: 262

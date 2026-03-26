@@ -1,0 +1,15 @@
+id: P-04
+type: domain_policy
+domain: retrieval
+status: active
+derived_from:
+  - GP-4 (Feels Like Memory
+  - Not a Filing Cabinet) + GP-13 (Works Everywhere the User Works)
+established: planning phase
+amended: null
+description: The automatic invocation model must work from any interface (Claude Code, Claude Desktop, mobile) without the user needing to invoke a tool by name. The experience must feel like remembering, not like searching.
+cycle_created: 1
+cycle_modified: null
+content_hash: "3c30d262c22d132e8e52aa7ec4be09ffbd572742e2490ee64620f4f7c68ecc74"
+token_count: 134
+file_path: .ideate/policies/P-04.yaml

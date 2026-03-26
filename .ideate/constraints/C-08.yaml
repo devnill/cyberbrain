@@ -1,0 +1,10 @@
+id: C-08
+type: constraint
+category: design
+status: active
+description: Subprocess env var stripping. When spawning `claude -p`, strip `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, `CLAUDE_CODE_SESSION_ACCESS_TOKEN` to prevent subprocess hangs.
+cycle_created: 1
+cycle_modified: null
+content_hash: "0981e57c8a152c05d9f34861d13032e3770151fb3f6cd408899ec19df0dfb143"
+token_count: 105
+file_path: .ideate/constraints/C-08.yaml

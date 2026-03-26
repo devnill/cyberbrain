@@ -1,0 +1,18 @@
+id: FI-012-002
+type: finding
+cycle: 12
+reviewer: code-reviewer
+severity: minor
+title: utils.py not in original spec
+description: |
+  - **File**: src/cyberbrain/mcp/tools/restructure/utils.py
+  - **Issue**: Worker created a utils.py not in the original decomposition spec. Contains _repair_json helper.
+  - **Impact**: None — reasonable addition for shared utility.
+file_path: cycles/012/findings/FI-012-002.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-062
+verdict: Pass
+content_hash: "47a09c1cbf20081d2ac5ea9ca42591bf4489bd66a1c1ef191235fa6b392677a1"
+token_count: 129

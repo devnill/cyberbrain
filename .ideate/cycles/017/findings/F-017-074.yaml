@@ -1,0 +1,18 @@
+id: F-017-074
+type: finding
+cycle: 17
+reviewer: spec-reviewer
+severity: minor
+title: CLAUDE.md relation vocabulary section not updated
+description: |
+  - **File**: `CLAUDE.md`
+  - **Issue**: CLAUDE.md still describes the old SKOS predicates in the Architecture section. The new 7-predicate set from WI-086 is not reflected.
+  - **Impact**: Developers reading CLAUDE.md get stale relation vocabulary information.
+file_path: cycles/017/findings/F-017-074.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-017
+verdict: Pass
+content_hash: "22addab1801eba539b397e66b6d43ca35dd67ddc61a032e0e0b900f736b7ca5f"
+token_count: 141

@@ -1,0 +1,18 @@
+id: FI-001-014
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: significant
+title: Quality gate not guarded by quality_gate_enabled config flag (FIXED)
+description: |
+  - **File**: `mcp/tools/recall.py`
+  - **Issue**: Other tools check `config.get("quality_gate_enabled", True)` before invoking the gate; synthesis did not.
+  - **Fix**: Added config guard around quality gate invocation.
+file_path: cycles/001/findings/FI-001-014.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-012
+verdict: Pass
+content_hash: d75fc7a988bdc4f69ce8561642d5ba3d5ad37f1d18a1def5af277167a947c94e
+token_count: 137

@@ -1,0 +1,11 @@
+id: GP-04
+type: guiding_principle
+name: Feels Like Memory, Not a Filing Cabinet
+status: active
+description: "The experience goal is extended cognition — using this feels like having an excellent memory, not like managing a system. The interaction model, recall UX, and how beats are surfaced should feel like remembering, not searching a database. This applies especially to automatic invocation: the system should surface relevant knowledge without being asked."
+amendment_history: []
+cycle_created: 1
+cycle_modified: null
+content_hash: "4e8fcbdbc50af668ef36b689a90d4bd396607b380883e2ea0065c374b767e76e"
+token_count: 146
+file_path: .ideate/principles/GP-04.yaml

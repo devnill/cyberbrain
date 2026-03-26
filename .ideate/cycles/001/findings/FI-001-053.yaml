@@ -1,0 +1,18 @@
+id: FI-001-053
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: minor
+title: `tags` parameter type inconsistency with search index schema
+description: |
+  - **File**: `/Users/dan/code/cyberbrain/specs/plan/intake-interface-design.md:112`
+  - **Issue**: The `tags` parameter is typed `str | None` with comma-separated values. The architecture's search index schema stores tags as a list (from frontmatter). The implementation concern at line 211 describes the normalization but this is buried six sections later. The parameter table itself does not mention the comma-separated format requirement, which is the information an implementer needs at the point of the parameter definition.
+  - **Suggested fix**: Add the format description to the parameter table row: `str | None` — comma-separated (e.g. `"python, async"`). This is self-documenting without requiring a separate implementation concern entry.
+file_path: cycles/001/findings/FI-001-053.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-040
+verdict: Pass
+content_hash: dad526b859704721a509239160596354ff18d175f16d299119e9908108f453d4
+token_count: 266

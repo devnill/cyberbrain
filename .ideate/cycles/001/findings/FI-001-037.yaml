@@ -1,0 +1,17 @@
+id: FI-001-037
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: minor
+title: Dead _WM_RECALL_LOG constant in review.py
+description: |
+  - **File**: `mcp/tools/review.py:15`
+  - **Issue**: Unused constant. Out of scope for WI-026 — flagged for future cleanup.
+file_path: cycles/001/findings/FI-001-037.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-026
+verdict: Pass
+content_hash: "7e985c46a58eb7d20c4c9b014a8c6705163d7ddff4b740828aaaacc0bffe52b2"
+token_count: 105

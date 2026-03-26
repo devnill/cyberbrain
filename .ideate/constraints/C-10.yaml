@@ -1,0 +1,10 @@
+id: C-10
+type: constraint
+category: design
+status: active
+description: Soft delete only. All vault note deletions go through `_move_to_trash()`. Notes are moved to the trash folder, never permanently deleted. Vault-relative structure is preserved in trash.
+cycle_created: 1
+cycle_modified: null
+content_hash: "84a274ca5c8b6c3dd36a1ed54bc126ba7e30af1632a489e111e93fd2d3aa235c"
+token_count: 89
+file_path: .ideate/constraints/C-10.yaml

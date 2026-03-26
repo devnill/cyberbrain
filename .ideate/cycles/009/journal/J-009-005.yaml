@@ -1,0 +1,11 @@
+id: J-009-005
+type: journal_entry
+phase: execute
+date: "2026-03-16"
+cycle_created: 9
+title: "Work item 042: Implement intake interface"
+content: |
+  Status: complete
+  Implemented document intake mode in `cb_file` via `title` parameter as mode switch. `type_override` renamed to `type`. New parameters: `title`, `tags`, `durability`. Document intake bypasses LLM extraction; single-beat capture unchanged when `title` omitted. Summary auto-generated from first sentence or first 200 chars. All acceptance criteria met. 1287 tests passing.
+content_hash: f3a5ce2cc6dc6643f7e4c56f2c6b1e5ddbad20806887b69a4a35f13ccbee874e
+token_count: 137

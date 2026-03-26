@@ -1,0 +1,11 @@
+id: J-008-008
+type: journal_entry
+phase: execute
+date: "2026-03-12"
+cycle_created: 8
+title: "Work item 039: Research — auto-indexing strategy"
+content: |
+  Status: complete with rework
+  Rework: 2 significant, 3 minor findings fixed from incremental review. S1: Fixed reindex.py bug description (build_full_index is module-level function in search_index.py, not a backend method). S2: Removed "guarantees fresh results" overstatement; now accurately describes 1-hour threshold as configurable trade-off. Minor fixes: first-run behavior documented, dependency ordering note between Part A and Part B, cron ~ → $HOME. Recommendation: lazy reindex on cb_recall (primary) + SessionEnd hook (complement). Report at specs/steering/research/auto-indexing-strategy.md.
+content_hash: "05a37c716fd982c023bd50dd4d5da62ebd65cd4edbed0532538266d1438d8ed8"
+token_count: 193

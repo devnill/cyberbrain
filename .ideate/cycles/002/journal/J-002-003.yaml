@@ -1,0 +1,16 @@
+id: J-002-003
+type: journal_entry
+phase: review
+date: "2026-03-16"
+cycle_created: 2
+title: Metrics summary
+content: |
+  Agents spawned: 4 (code-reviewer, spec-reviewer, gap-analyst, journal-keeper)
+  Total wall-clock: N/A (sequential review)
+  Models used: N/A
+  Review files: code-quality.md, spec-adherence.md, gap-analysis.md, decision-log.md, summary.md
+  Principles changed: none
+  New work items: 048-051
+  Key changes: Implement targeted testing to reduce token consumption. Add pytest markers (core/extended/slow), import-based test mapping via --affected-only flag, quiet default output (pass/fail only), and two-pass execution wrapper. Expected reduction: 95%+ fewer tests per change, 99% less output volume, full quality preservation.
+content_hash: cb4347e781c4b4b089bd260d7322f3f41e4f427c45b44fdceaf52897ceaa8825
+token_count: 188

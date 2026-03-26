@@ -1,0 +1,13 @@
+id: J-018-001
+type: journal_entry
+phase: refine
+date: "2026-03-22"
+cycle_created: 18
+title: Refinement planning completed
+content: |
+  Trigger: Remaining tech debt + deferred design decisions + critical test bug
+  Principles changed: none
+  New work items: 083-089
+  Seven items in two groups. Group 1 (independent): recreate CyberbrainConfig TypedDict (083), clean README install.sh refs (084), fix ARCHITECTURE.md prompt count (085), fix --affected-only import bug (089). Group 2 (design decisions): migrate relation vocabulary to 7-predicate set (086), add search backend cache invalidation (087), refactor cb_extract shared orchestration (088). Research: relation vocabulary analysis recommended merged set over SKOS. Investigation: --affected-only has critical ast.Import detection bug causing ~30% false negatives.
+content_hash: a7fa27b16930924021269a778f8d6a4d318cbc51fcf54a4fb71b087246e4515e
+token_count: 208

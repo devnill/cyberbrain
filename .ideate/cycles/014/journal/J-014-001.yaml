@@ -1,0 +1,13 @@
+id: J-014-001
+type: journal_entry
+phase: refine
+date: "2026-03-22"
+cycle_created: 14
+title: Refinement planning completed
+content: |
+  Trigger: Post-release tech debt cleanup (cycle 014 findings + architect survey bugs)
+  Principles changed: none
+  New work items: 076-079
+  Four items: fix autofile.py bare import (silent index failure), fix search_backends.py dead branch (GrepBackend unreachable), delete stale build artifacts (build.sh, dist/, requirements.txt), update README for current architecture. evaluate.py Q-8 confirmed already fixed. Design-decision items deferred (relation vocabulary, search cache invalidation, hook/MCP divergence).
+content_hash: "40427153dc6ad6d027e68959a72c59d6e6a216b8550b4a98dd82662b5bf65c22"
+token_count: 165

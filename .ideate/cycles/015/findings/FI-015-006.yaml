@@ -1,0 +1,19 @@
+id: FI-015-006
+type: finding
+cycle: 15
+reviewer: code-reviewer
+severity: significant
+title: Manual MCP setup JSON used pre-src-layout paths
+description: |
+  - **File**: `README.md:441-442`
+  - **Issue**: MCP JSON example referenced `~/.claude/cyberbrain/venv/bin/python` and `~/.claude/cyberbrain/mcp/server.py`.
+  - **Impact**: Broken instructions for Claude Desktop users.
+  - **Suggested fix**: Updated to `uv run` pattern. **Applied.**
+file_path: cycles/015/findings/FI-015-006.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-079
+verdict: Pass
+content_hash: db81b181c866d7aeb05cfbb070078c0d28ebab7fb04b64d70ba96259052e6f01
+token_count: 147

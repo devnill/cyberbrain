@@ -1,0 +1,17 @@
+id: F-002-021
+type: finding
+cycle: 2
+reviewer: code-reviewer
+severity: minor
+title: "Stale `# sys.path setup` comment blocks in test files"
+description: |
+  - **Files**: Multiple test files
+  - **Issue**: Section header comments reading `# sys.path setup` remain but no `sys.path` manipulation follows. Leftover stubs from the pre-src-layout era.
+file_path: cycles/002/findings/F-002-021.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-002
+verdict: Fail
+content_hash: "34ce7f1c6d476b6c9464e1e90fd93d3477d2734802b2b36d94be1ca4b8cbaeec"
+token_count: 125

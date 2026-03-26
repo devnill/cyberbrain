@@ -1,0 +1,18 @@
+id: F-007-038
+type: finding
+cycle: 7
+reviewer: spec-reviewer
+severity: significant
+title: AC1 "from any working directory" has no automated test
+description: |
+  The acceptance criterion explicitly states "from any working directory". The implementation is logically correct (paths anchored to `_REPO_ROOT = Path(__file__).parent.parent`). However, no test exercises the mapper after changing the process working directory. The criterion is unverified. WI-057 addresses this.
+  
+  ---
+file_path: cycles/007/findings/F-007-038.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-007
+verdict: Pass
+content_hash: "1e4bf571815dfbc30232a54bfbc6e65dc17a998120b7839828c4da523dd0fb0c"
+token_count: 160

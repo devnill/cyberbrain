@@ -1,0 +1,13 @@
+id: J-008-001
+type: journal_entry
+phase: refine
+date: "2026-03-11"
+cycle_created: 8
+title: Refinement cycle 6 planning completed
+content: |
+  Trigger: Cycle 5 capstone review found critical namespace collision blocking plugin distribution
+  Principles changed: none
+  New work items: 034
+  User decision: Adopt src layout with cyberbrain namespace package. Move `mcp/`, `extractors/`, `prompts/` under `src/cybrain/`. Add `__init__.py` files for proper packages. Define entry points in pyproject.toml. Update hooks to call entry points. Remove sys.path manipulation. Sequential execution — single cohesive restructuring task.
+content_hash: a39e0bd9539a18ef4915a09d89ef2257f3f2fcca0929499d5b68597453a3a034
+token_count: 159

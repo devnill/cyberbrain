@@ -1,0 +1,19 @@
+id: F-015-065
+type: finding
+cycle: 15
+reviewer: spec-reviewer
+severity: minor
+title: README MCP JSON example diverges from install.sh behavior
+description: |
+  - **File**: `README.md:441`
+  - **Issue**: The MCP JSON example now uses `uv run --directory /path/to/cyberbrain` which is the plugin-mode pattern. For Claude Desktop manual install via `install.sh`, the actual installed path and command may differ. The README does not clarify which installation path this example serves.
+  - **Principle**: GP-13 (Works Everywhere the User Works) — both plugin and manual install paths should have clear, accurate examples.
+  - **Impact**: Claude Desktop users following the manual install path may use the wrong command.
+file_path: cycles/015/findings/F-015-065.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-015
+verdict: Pass
+content_hash: a411fa0db6d49eada3fa71d5ff2594120e326d60ad09687d83c5edd9ea33f88b
+token_count: 217

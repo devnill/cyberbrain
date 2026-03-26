@@ -1,0 +1,15 @@
+id: F-011-055
+type: finding
+cycle: 11
+reviewer: code-reviewer
+severity: minor
+title: "basedpyright suppressions use type: ignore — not pyright: ignore"
+description: "basedpyright supports both forms. `# type: ignore[rule]` is the standard form recognized by all type checkers. Correct choice."
+file_path: cycles/011/findings/F-011-055.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-011
+verdict: Pass
+content_hash: "067d967142b5b79dfd91c4c399fe7b64d6ee731dec954bed5b15b51cbd45bb27"
+token_count: 112

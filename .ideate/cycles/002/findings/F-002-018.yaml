@@ -1,0 +1,21 @@
+id: F-002-018
+type: finding
+cycle: 2
+reviewer: code-reviewer
+severity: critical
+title: Multiple test files contain bare module imports not updated to cyberbrain.* namespace
+description: |
+  - **Files**: `tests/test_search_backends.py` (30+ occurrences), `tests/test_search_index.py` (lines 53, 68, 77), `tests/test_mcp_server.py`, `tests/test_recall_read_tools.py`
+  - **Issue**: These test files use bare imports inside test methods: `from search_backends import HybridBackend`, `from search_backends import SearchResult`, `from search_backends import get_search_backend, FTS5Backend`, and bare patch targets `patch("search_backends.get_search_backend", ...)`. In the src layout there is no top-level `search_backends` module. These fail at runtime with `ModuleNotFoundError: No module named 'search_backends'`. The incremental WI-034 review missed this class of bare imports inside test method bodies.
+  - **Impact**: Tests pass collection but fail at runtime. The WI-034 acceptance criterion `python3 -m pytest tests/` passes is not met.
+  - **Suggested fix**: Replace all `from search_backends import X` with `from cyberbrain.extractors.search_backends import X`. Replace `patch("search_backends.X", ...)` with `patch("cyberbrain.extractors.search_backends.X", ...)`.
+  
+  ---
+file_path: cycles/002/findings/F-002-018.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-002
+verdict: Fail
+content_hash: d91d783a394187dd705d742bda669372172f340eac8a7a8da34672fb72c914b4
+token_count: 359

@@ -1,0 +1,19 @@
+id: FI-001-050
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: significant
+title: `durability` parameter missing from cb_file expanded interface
+description: |
+  - **File**: `/Users/dan/code/cyberbrain/specs/plan/intake-interface-design.md:106-114`
+  - **Issue**: The proposed parameter table for `cb_file` has no `durability` parameter. The implementation concern at line 179 hard-codes `"durability": "durable"` in the beat dict for document intake. But UC2 (single-beat capture) may also legitimately produce working-memory beats — the current `_extract_beats()` pipeline returns beats with `durability` already set. If the user wants to manually file a working-memory note, there is no way to express that. The interface locks UC3 to durable-only and silently ignores durability for UC2.
+  - **Impact**: Any document filed via the expanded `cb_file` with `title` provided is always routed as durable, even if the user intends it as working memory. This deviates from the routing model where durability determines folder (Working Memory vs inbox/project) and is not flagged as a deliberate tradeoff anywhere in the design.
+  - **Suggested fix**: Add `durability: str | None = None` to the proposed parameter table. For UC3 default to `"durable"` (consistent with the recommendation at line 164), but allow override. Document the default explicitly. For UC2 the parameter is ignored (LLM decides), which should also be documented.
+file_path: cycles/001/findings/FI-001-050.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-040
+verdict: Pass
+content_hash: "8fd8273815bf951c96c5b76e0c06a27f027d0d7eb9dee9658f0909edbd0aff7e"
+token_count: 399

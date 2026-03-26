@@ -1,0 +1,17 @@
+id: FI-001-007
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: minor
+title: `dir()` anti-pattern for variable existence check
+description: |
+  - **File**: `mcp/tools/restructure.py`
+  - **Issue**: Uses `"flag_decisions_hub" in dir()` instead of direct reference. Variable is always assigned in the same scope.
+file_path: cycles/001/findings/FI-001-007.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-010
+verdict: Pass
+content_hash: "1abf32317bdfe1fcdeac379b5f0d08bc36415d63ebdd89a0e4e961134daabbcf"
+token_count: 118

@@ -1,0 +1,12 @@
+id: J-001-007
+type: journal_entry
+phase: execute
+date: "2026-03-09"
+cycle_created: 1
+title: "Work item 013: Per-tool model selection"
+content: |
+  Status: complete with rework
+  Rework: 2 minor findings fixed from incremental review.
+  M1: Removed unused `get_model_for_tool` import from quality_gate.py. M2: Incorporated `total_notes` into cb_status output string (was queried but discarded). Added `get_model_for_tool(config, tool)` to backends.py. Updated `get_judge_model` to delegate. Each curation tool (restructure, recall, enrich, review) now resolves its model via the helper. cb_configure accepts per-tool model keys; cb_status reports them. Added tests in test_backends.py and test_manage_tool.py. Fixed test suite sys.modules contamination in test_quality_gate.py and test_evaluate.py (stubs leaked into subsequent test files). 1196 tests passing.
+content_hash: "7cbc78f8ae274fcc068024ae3714f29af7fdb863ba2832e5eb07f9e2665cf233"
+token_count: 217

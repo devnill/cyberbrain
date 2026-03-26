@@ -1,15 +1,15 @@
-# Execution Strategy — Refinement Cycle 13
+# Execution Strategy — Refinement Cycle 18
 
 ## Mode
-Batched parallel
+Full parallel
 
 ## Parallelism
-- Max concurrent agents: 4
-- Worktree isolation: yes
+- Max concurrent agents: 2
+- Worktree isolation: no
 - Model: sonnet for implementation
 
 ## Review Cadence
-Incremental review after each work item. Comprehensive review after all items complete.
+Incremental review after each work item.
 
 ## Work Item Groups
 
@@ -17,28 +17,21 @@ Incremental review after each work item. Comprehensive review after all items co
 
 | WI | Title | Complexity |
 |----|-------|-----------|
-| 072 | Migrate remaining hardcoded paths to state.py | trivial |
-| 073 | Update CLAUDE.md for restructure decomposition | trivial |
-| 074 | Fix test_dependency_map.py collection error | trivial |
-| 075 | Eliminate extract_beats.py re-export hub | small |
+| 090 | Fix run_extraction config param and merge _write_beats_and_log | small |
+| 091 | Mark architecture doc tensions T5/T6/T7 resolved | trivial |
 
-All four run in parallel. Non-overlapping primary file scope:
-- WI-072: config.py, recall.py
-- WI-073: CLAUDE.md only
-- WI-074: tests/test_dependency_map.py only
-- WI-075: extract_beats.py, scripts/import.py, test files
+Non-overlapping file scope:
+- WI-090: extract_beats.py, test_extract_beats.py
+- WI-091: specs/plan/architecture.md
 
 ## Dependency Graph
 
 ```
-072
-073    (all independent)
-074
-075
+090
+091    (independent)
 ```
 
 ## Agent Configuration
 
 - Implementation agents: sonnet
 - Review agents: sonnet
-- Worktree isolation: all items

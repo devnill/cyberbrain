@@ -1,0 +1,18 @@
+id: FI-001-016
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: minor
+title: `get_model_for_tool` imported but unused in quality_gate.py (FIXED)
+description: |
+  - **File**: `extractors/quality_gate.py:14`
+  - **Issue**: Dead import — only `get_judge_model` is used.
+  - **Fix**: Removed `get_model_for_tool` from import statement.
+file_path: cycles/001/findings/FI-001-016.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-013
+verdict: Pass
+content_hash: "65ba1928311dd8762f6714a50cb3d009e86620a3ce6b82fc6f4b7ce2e1e76b12"
+token_count: 123

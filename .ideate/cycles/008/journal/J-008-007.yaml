@@ -1,0 +1,11 @@
+id: J-008-007
+type: journal_entry
+phase: execute
+date: "2026-03-12"
+cycle_created: 8
+title: "Work item 038: Research — filing accuracy and clustering"
+content: |
+  Status: complete with rework
+  Rework: 2 significant, 3 minor findings fixed from incremental review. S1: Fixed imprecise line number citation (function at 543, OR logic at 596-600). S2: Qualified embedding model assumption (TaylorAI/bge-micro-v2 is default, user-configurable; threshold formula needs validation per corpus). Minor fixes: moved import random outside loop, corrected confidence=0.5 prose, added seeding to random sampling snippet. Report at specs/steering/research/filing-accuracy-clustering.md.
+content_hash: "135304e56e25b63f56d8819b5b516407eca00de505f595fbe8dee0b45e602986"
+token_count: 171

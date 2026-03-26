@@ -8,7 +8,11 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from cyberbrain.mcp.shared import RUNS_LOG_PATH, _load_config
+from cyberbrain.mcp.shared import (
+    RUNS_LOG_PATH,
+    _invalidate_search_backend,
+    _load_config,
+)
 from cyberbrain.mcp.tools.recall import _DEFAULT_DB_PATH, _DEFAULT_MANIFEST_PATH
 
 
@@ -330,6 +334,8 @@ def register(mcp: FastMCP) -> None:
             or uncertain_filing_threshold is not None
         ):
             cfg = _load_raw()
+            _BACKEND_CACHE_KEYS = {"search_backend", "embedding_model"}
+            _old_backend_values = {k: cfg.get(k) for k in _BACKEND_CACHE_KEYS}
 
             if vault_path is not None:
                 resolved = Path(vault_path).expanduser().resolve()
@@ -443,6 +449,11 @@ def register(mcp: FastMCP) -> None:
                 )
 
             _save_raw(cfg)
+            # Invalidate cached search backend if relevant keys changed
+            if any(
+                cfg.get(k) != _old_backend_values[k] for k in _BACKEND_CACHE_KEYS
+            ):
+                _invalidate_search_backend()
             result = "Configuration updated:\n" + "\n".join(f"  - {c}" for c in changed)
             if vault_path is not None:
                 result += "\n\nSearch index rebuild started in background."

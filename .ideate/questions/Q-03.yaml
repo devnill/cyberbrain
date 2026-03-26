@@ -1,0 +1,14 @@
+id: Q-03
+type: domain_question
+domain: retrieval
+status: open
+impact: Without graph expansion, semantic links between notes depend entirely on embedding similarity, which may miss structural relationships (causality, supersession, contradiction).
+source: specs/steering/interview.md (Refinement Interview 2026-03-09, first refinement); archive/cycles/001/gap-analysis.md (Deferred Work section)
+resolution: null
+resolved_in: null
+description: Graph expansion was deferred pending validation of RAG improvements (D-4). Have synthesis and retrieval improvements (WI-012) been validated enough to re-evaluate graph expansion?
+cycle_created: 1
+cycle_modified: null
+content_hash: "683f0667dd9890b3e08525764a3756028f3481f7c8a6f0b097a35c644fff8805"
+token_count: 182
+file_path: .ideate/questions/Q-03.yaml

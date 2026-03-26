@@ -750,42 +750,51 @@ class TestAutofileCreateAction:
         assert result is not None
         assert result.exists()
 
-    def test_search_index_update_is_attempted_after_create(self, tmp_path):
-        """After creating a note, the code tries to update the search index (ImportError is tolerated)."""
+    def test_search_index_update_is_called_after_create(self, tmp_path):
+        """After creating a note, update_search_index is called with the output path."""
         vault = _vault(tmp_path)
         content = "---\ntype: decision\ntitle: Search Test\ntags: [search]\nsummary: Test.\n---\nBody."
         decision = json.dumps(
             {"action": "create", "path": "Search Test.md", "content": content}
         )
 
-        # Simulate search_index module being importable and update_search_index being called
-        mock_module = MagicMock()
         mock_update = MagicMock()
+        mock_module = MagicMock()
         mock_module.update_search_index = mock_update
 
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
-            with patch.dict(sys.modules, {"search_index": mock_module}):
+            with patch.dict(
+                sys.modules, {"cyberbrain.extractors.search_index": mock_module}
+            ):
                 result = autofile_beat(_beat(), _config(vault), "s", str(tmp_path), NOW)
 
         assert result is not None
         assert result.exists()
-        # update_search_index was called
         mock_update.assert_called_once()
+        # The first argument should be the string path of the created file
+        called_path = mock_update.call_args[0][0]
+        assert called_path == str(result)
 
-    def test_search_index_import_error_is_silently_ignored(self, tmp_path):
-        """If search_index can't be imported, the create action still succeeds."""
+    def test_search_index_runtime_error_is_silently_ignored(self, tmp_path):
+        """If update_search_index raises at runtime, the create action still succeeds."""
         vault = _vault(tmp_path)
         content = "---\ntype: decision\ntitle: Note\ntags: [x]\n---\nBody."
         decision = json.dumps(
             {"action": "create", "path": "Note.md", "content": content}
         )
 
+        mock_module = MagicMock()
+        mock_module.update_search_index.side_effect = RuntimeError("index locked")
+
         with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
-            with patch.dict(sys.modules, {"search_index": None}):
+            with patch.dict(
+                sys.modules, {"cyberbrain.extractors.search_index": mock_module}
+            ):
                 result = autofile_beat(_beat(), _config(vault), "s", str(tmp_path), NOW)
 
         assert result is not None
         assert result.exists()
+        mock_module.update_search_index.assert_called_once()
 
 
 # ===========================================================================

@@ -1,0 +1,153 @@
+id: RF-python-quality-tooling
+type: research_finding
+topic: python-quality-tooling
+status: active
+date: "2026-03-21"
+content: |
+  ---
+  topic: Python project quality tooling (linting, typing, testing, structure)
+  date: 2026-03-21
+  skill: refine
+  ---
+  
+  ## Summary
+  
+  As of 2025-2026, ruff is the de facto standard for Python linting and formatting in new projects, replacing flake8, black, isort, and related tools in a single binary. Type checking has no single winner: mypy is the reference implementation, pyright/basedpyright are faster and stricter by default. The cyberbrain project has none of these configured, has a 2,387-line god module (`restructure.py`), a structural inconsistency in its dependency declarations, and a test suite with pervasive `sys.modules` manipulation that is a recognized anti-pattern when used at module level.
+  
+  ## Key Facts
+  
+  **Linting / Formatting**
+  - ruff (astral-sh) replaces flake8, black, isort, pydocstyle, pyupgrade, autoflake. Single binary, 10-100x faster, stable.
+  - Two commands: `ruff check` (lint) and `ruff format` (format). Both configured under `[tool.ruff]` in pyproject.toml.
+  - Formatter is Black-compatible by default (88-char lines, double quotes).
+  - Rule sets are opt-in. Defaults: `E` + `F`. Commonly added: `I` (imports), `B` (bugbear), `UP` (pyupgrade), `SIM` (simplify), `PTH` (prefer pathlib).
+  - `ANN` rules enforce type annotations -- enabling them on an unannotated codebase generates many violations; typically phased in separately.
+  - cyberbrain has no `[tool.ruff]` section.
+  
+  **Type Checking**
+  - **mypy**: reference implementation; plugin support (Pydantic, SQLAlchemy); written in Python; slowest; skips unannotated functions by default.
+  - **pyright** (Microsoft): written in TypeScript; 3-5x faster; checks all code regardless of annotation coverage; no plugins; `pyrightconfig.json` or `[tool.pyright]` in pyproject.toml.
+  - **basedpyright**: pyright fork with stricter defaults; supports `[tool.basedpyright]` in pyproject.toml; growing open-source adoption in 2025.
+  - **New Rust-based entrants (2025)**: `ty` (Astral), `pyrefly` (Meta), `zuban` -- none production-ready as of March 2026.
+  - Pydantic v2 (used by fastmcp) supports both mypy plugin and pyright natively. Either checker works for this project.
+  - cyberbrain has no type checker configured. `requires-python = ">=3.11"` means modern syntax (`X | Y`, `list[str]`) is safe without `from __future__ import annotations`.
+  
+  **src-layout and import patterns**
+  - src-layout is current recommended default for libraries. cyberbrain already uses it correctly.
+  - Absolute imports are preferred (PEP 8); cyberbrain uses them throughout -- correct.
+  - Empty `__init__.py` (cyberbrain's current state) is correct for an internal package; heavy re-exports create circular import risk and import perf costs.
+  - For explicit re-exports recognized by type checkers: use `from .module import Foo as Foo` form or declare `__all__`.
+  - For Python 3.11+: use built-in generics (`list[str]`, `dict[str, int]`, `X | None`). `from typing import List, Dict, Optional` is deprecated style.
+  
+  **pytest**
+  - Root `conftest.py` for session-wide fixtures; subdirectory `conftest.py` for scoped fixtures. cyberbrain's single root conftest is appropriate for current size.
+  - Fixture scope: `function` (default) -> `session`. Expensive setup belongs at `session` scope.
+  - `patch.dict("sys.modules", {...})` as a context manager is acceptable and self-cleaning -- this is the pytest-recommended pattern for mocking optional imports.
+  - Module-level `sys.modules.pop(...)` and module-level mock installation (as in cyberbrain's conftest and `test_restructure_tool.py`) are recognized anti-patterns: they create test-order dependencies and make individual tests non-isolatable. The root cause is `shared.py` importing `extract_beats` unconditionally at module import time.
+  - pytest-mock (`mocker` fixture) is the community-standard replacement for `unittest.mock.patch` context managers.
+  
+  **hatchling + uv dependencies**
+  - `[project.optional-dependencies]`: published with the package; installed by users via `pip install package[extra]`. Correct for `bedrock` and `semantic` in cyberbrain.
+  - `[dependency-groups]` (PEP 735): development-time only, never published; `uv sync --group dev`. Correct for pytest, ruff, type checkers.
+  - **cyberbrain has a structural inconsistency**: `dev = ["pytest>=7.0.0"]` appears under `[project.optional-dependencies]` AND `[dependency-groups]`. The extras entry should be removed -- dev tools are not user-installable package features.
+  - `[dependency-groups]` is supported by uv but not by pip natively. Not a risk if contributors use uv, which the project requires.
+  
+  **Anti-patterns present in cyberbrain**
+  
+  | Anti-pattern | Location | Severity |
+  |---|---|---|
+  | God module (2,387 lines) | `mcp/tools/restructure.py` | High |
+  | Broad exception handling | 60 occurrences in 16 source files | Medium |
+  | Module-level `sys.modules.pop` in tests | `test_restructure_tool.py` line 40 | Medium |
+  | Eager import coupling in `shared.py` | `shared.py` lines 16-32 | Medium |
+  | Config as untyped `dict` | All tool files | Medium |
+  | Duplicate dependency declaration | `pyproject.toml` | Low |
+  | Missing type annotations | All source files | Low (no checker configured) |
+  
+  ## Recommendations
+  
+  **Option 1: ruff only (no type checker)**
+  - Pros: Fast setup, immediate formatting and import-sort wins, no type annotation work required upfront.
+  - Cons: No type safety. Dict-based config, broad exception handling, and large function signatures will not be caught.
+  - When to use: When the goal is cosmetic consistency and style enforcement without touching logic.
+  
+  **Option 2: ruff + basedpyright (recommended for this project)**
+  - Pros: basedpyright is faster than mypy; no plugins needed for this codebase; pyproject.toml config; `typeCheckingMode = "basic"` catches real bugs without requiring full annotation coverage; can be applied directory-by-directory with `strict` mode.
+  - Cons: Smaller ecosystem than mypy; basedpyright is a fork; some third-party stubs may lag pyright's.
+  - When to use: Python 3.11+ only, no ORM-style dynamic typing, willingness to annotate incrementally. This project qualifies.
+  
+  **Option 3: ruff + mypy**
+  - Pros: Reference implementation; most widely understood; best plugin ecosystem.
+  - Cons: Slower; requires `--check-untyped-defs` to catch errors in unannotated code; more config to reach equivalent strictness.
+  - When to use: If contributors are mypy-familiar, or if libraries requiring mypy plugins are later added.
+  
+  **Option 4: Decompose `restructure.py`**
+  Independent of tooling choice. Recommended decomposition:
+  - `mcp/tools/_pipeline/audit.py`
+  - `mcp/tools/_pipeline/group.py`
+  - `mcp/tools/_pipeline/decide.py`
+  - `mcp/tools/_pipeline/generate.py`
+  - `mcp/tools/_pipeline/execute.py`
+  - `mcp/tools/restructure.py` reduced to tool registration + orchestration (~200-300 lines)
+  
+  This is a non-trivial refactor (test imports, `sys.modules.pop` pattern must be updated) and should not be done in the same PR as any functional change.
+  
+  ## Risks
+  
+  - **Test-order dependency**: `sys.modules.pop("cyberbrain.mcp.tools.restructure", None)` at module level in `test_restructure_tool.py` is fragile. New contributors adding test files that import MCP tools without understanding conftest's mock pre-installation will get confusing `RuntimeError` failures.
+  - **Silent config bugs**: Config as `dict` with no schema means key typos (`config.get("colsolidation_log")`) return `None` silently. A `TypedDict` or dataclass would make these checkable. This is likely the source of some existing config-related bugs.
+  - **ruff ANN on existing code**: Enabling `ANN` rules immediately will produce hundreds of violations. Should be a separate PR after formatting and import sorting are clean.
+  - **PEP 735 pip compatibility**: `[dependency-groups]` is not supported by pip natively as of early 2026. Not a risk if contributors use uv exclusively.
+  - **basedpyright/pyright config divergence**: If contributors use VS Code with Pylance (which uses pyright, not basedpyright), there may be config inconsistency. Mitigation: include both `[tool.pyright]` and `[tool.basedpyright]` sections pointing to the same settings.
+  - **Refactoring `restructure.py` without type coverage**: The current test suite covers restructure heavily but the tests are tightly coupled to import paths. Splitting the module requires coordinated test updates.
+  
+  ## Recommended pyproject.toml additions
+  
+  ```toml
+  [tool.ruff]
+  target-version = "py311"
+  line-length = 88
+  
+  [tool.ruff.lint]
+  select = ["E", "F", "I", "B", "UP", "SIM", "PTH"]
+  ignore = ["B008"]  # FastMCP uses function calls in default args (Depends pattern)
+  
+  [tool.ruff.format]
+  quote-style = "double"
+  
+  [tool.basedpyright]
+  pythonVersion = "3.11"
+  typeCheckingMode = "basic"  # upgrade to "standard" once annotations are added
+  
+  [dependency-groups]
+  dev = [
+      "pytest>=9.0.2",
+      "ruff>=0.9",
+      "basedpyright>=1.20",
+  ]
+  ```
+  
+  Also: remove `dev = ["pytest>=7.0.0"]` from `[project.optional-dependencies]`.
+  
+  ## Sources
+  
+  - Ruff documentation -- Configuring Ruff, The Linter
+  - pydevtools.com -- How to configure recommended Ruff defaults
+  - discuss.python.org -- Mypy vs pyright in practice
+  - basedpyright docs -- Getting started, Config files
+  - sinon.github.io -- New Python type checkers: Ty, Pyrefly, Zuban
+  - Python Packaging User Guide -- src layout vs flat layout
+  - scientific-python.org -- Exports patterns
+  - PEP 735 -- Dependency Groups in pyproject.toml
+  - pydevtools.com -- Optional dependencies vs dependency groups
+  - uv docs -- Managing dependencies
+  - pytest docs -- How to use fixtures
+  - PEP 760 -- No More Bare Excepts
+  - docs.quantifiedcode.com -- Python Anti-Patterns
+  - Project files: pyproject.toml, restructure.py, shared.py, conftest.py, test_restructure_tool.py, _dependency_map.py
+sources: []
+cycle_created: 1
+cycle_modified: null
+content_hash: cfa6da53b85fe115a8bda0258eee15fc4a5e357e2d24824d8695dd5324e111ad
+token_count: 2536
+file_path: .ideate/research/RF-python-quality-tooling.yaml

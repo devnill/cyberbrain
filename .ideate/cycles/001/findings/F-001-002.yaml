@@ -1,0 +1,22 @@
+id: F-001-002
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: critical
+title: .mcp.json still uses the old module path
+description: |
+  - **File**: `/Users/dan/code/cyberbrain/.mcp.json:8`
+  - **Issue**: The MCP server launch command is `python -m mcp.server`. After WI-034 the server module moved to `cyberbrain.mcp.server`. The old path `mcp.server` resolves to the PyPI `mcp` package's `mcp/server/` module, which has no `main()` function.
+  - **Impact**: Every plugin installation launches the wrong process. The MCP server will fail to start — Claude Code plugin users get no MCP tools.
+  - **Suggested fix**: Change `.mcp.json` to:
+    ```json
+    "args": ["run", "--directory", "${CLAUDE_PLUGIN_ROOT}", "python", "-m", "cyberbrain.mcp.server"]
+    ```
+file_path: cycles/001/findings/F-001-002.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-001
+verdict: Fail
+content_hash: "6f90e3314a691c9f714e221f088f816fc7bb16555573da088e1f6b8096d7617f"
+token_count: 233

@@ -1,0 +1,18 @@
+id: FI-001-032
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: significant
+title: wm-recall.jsonl deployed inside vault but tools read from ~/.claude/cyberbrain/ (FIXED)
+description: |
+  - **File**: `scripts/test-vault.sh` (deploy/reset commands)
+  - **Issue**: wm-recall.jsonl files were placed inside the vault directory but `cb_review` reads from `~/.claude/cyberbrain/wm-recall.jsonl`.
+  - **Fix**: Deploy now copies wm-recall.jsonl to `~/.claude/cyberbrain/` and removes it from the vault directory. Reset does the same.
+file_path: cycles/001/findings/FI-001-032.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-026
+verdict: Pass
+content_hash: "41a7b137cad5415ca251f87f1f59b55af9974d19450636d36aa3fc00ba34f3d5"
+token_count: 171

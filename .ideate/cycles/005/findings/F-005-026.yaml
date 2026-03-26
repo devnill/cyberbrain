@@ -1,0 +1,18 @@
+id: F-005-026
+type: finding
+cycle: 5
+reviewer: code-reviewer
+severity: minor
+title: Test name `test_frontmatter_with_dash_heading_in_body` was misleading (fixed)
+description: |
+  - **File**: `tests/test_repair_frontmatter.py`
+  - **Issue**: Name implied "heading in body" but the test exercised `--- not a delimiter` inside the frontmatter block. Renamed to `test_non_bare_dashes_not_treated_as_closing_delimiter`.
+  - **Status**: Fixed in cycle.
+file_path: cycles/005/findings/F-005-026.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-005
+verdict: Pass
+content_hash: "9e9f34785a8d789ce0afbaef782759a40f1b66aa56ecce2e725e6c06a379398b"
+token_count: 150

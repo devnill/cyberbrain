@@ -1,0 +1,16 @@
+id: P-07
+type: domain_policy
+domain: distribution
+status: active
+derived_from:
+  - D-10
+  - D-12; GP-6 (Lean Architecture
+  - Heavy on Quality)
+established: cycle 012 (WI-058, WI-068, WI-069)
+amended: null
+description: All code must pass `ruff check`, `ruff format --check`, and `basedpyright` at zero errors before merge. pre-commit enforces ruff locally. basedpyright is configured in pyproject.toml with basic mode and targeted per-file ignores.
+cycle_created: 1
+cycle_modified: null
+content_hash: "41e258e567c82465815a096a40ce3544e84b956182d48d94c48a6d09d8f5294d"
+token_count: 136
+file_path: .ideate/policies/P-07.yaml

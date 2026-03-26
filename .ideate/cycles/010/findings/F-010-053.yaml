@@ -1,0 +1,18 @@
+id: F-010-053
+type: finding
+cycle: 10
+reviewer: code-reviewer
+severity: minor
+title: Worker concurrency caused file overwrites
+description: |
+  WI-062 worker reverted pyproject.toml ruff config and extract_beats.py re-exports because it read files before WI-058's changes and wrote them back. Required manual restoration. Future cycles should use worktree isolation for all parallel items.
+  
+  ---
+file_path: cycles/010/findings/F-010-053.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-010
+verdict: Pass
+content_hash: c8d6e3dcbb4d3d9707eacfc7fe7c4ac71f07ab20049b33e99271d6962018f307
+token_count: 138

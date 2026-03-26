@@ -1,0 +1,13 @@
+id: J-012-001
+type: journal_entry
+phase: refine
+date: "2026-03-22"
+cycle_created: 12
+title: Refinement planning completed
+content: |
+  Trigger: Minor findings from cycle 012 review
+  Principles changed: none
+  New work items: 072-075
+  Four items: migrate stale paths to state.py, update CLAUDE.md, fix test_dependency_map.py, eliminate extract_beats.py re-export hub. FastMCP migration dismissed. CI/CD deferred.
+content_hash: "53e88191e7a56eda4aad5c910a72e74d586b3afc1f9747c067af2f57c546128d"
+token_count: 106

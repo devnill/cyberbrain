@@ -1,0 +1,12 @@
+id: J-004-003
+type: journal_entry
+phase: execute
+date: "2026-03-09"
+cycle_created: 4
+title: "Work item 022: Proactive recall cb_configure"
+content: |
+  Status: complete with rework
+  Rework: 2 minor findings fixed from incremental review. Mocked _read_index_stats in no-args display tests; added explicit True case test.
+  Added proactive_recall parameter to cb_configure, no-args display, and cb_status. 6 tests added. No deviations from plan.
+content_hash: d815c8477570d34f35f7b786ad6953a1d4256422e87dda24a1f272e35052b14e
+token_count: 113

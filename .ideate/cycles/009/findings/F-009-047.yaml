@@ -1,0 +1,18 @@
+id: F-009-047
+type: finding
+cycle: 9
+reviewer: gap-analyst
+severity: minor
+title: Architecture component map does not list `repair_frontmatter.py` (OQ4 — carryover)
+description: |
+  - **File**: `specs/plan/architecture.md`
+  - **Gap**: Component map lists `scripts/import.py` but not `scripts/repair_frontmatter.py`.
+  - **Recommendation**: Defer. Documentation-only gap.
+file_path: cycles/009/findings/F-009-047.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-009
+verdict: null
+content_hash: a9444494cc5004fd280606e16e937d21e6dea0aa7f28429e13f3083983e266ab
+token_count: 131

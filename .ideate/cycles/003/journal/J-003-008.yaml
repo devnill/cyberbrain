@@ -1,0 +1,11 @@
+id: J-003-008
+type: journal_entry
+phase: execute
+date: "2026-03-09"
+cycle_created: 3
+title: "Work item 020: Execute invocation test plan"
+content: |
+  Status: complete
+  Executed all 16 manual test cases across Claude Desktop and Claude Code CLI. Results: 12 pass, 2 fail, 1 partial, 1 expected fail. Key findings: (1) Claude Desktop does not auto-fetch MCP resources — orient prompt required for proactive recall. (2) Claude Code can read MCP resources via readMcpResource but Desktop cannot. (3) CLAUDE.md instructions effectively substitute for the guide in Claude Code. (4) Manual capture mode partially fails — model still offers to file. (5) proactive_recall not settable via cb_configure. Results saved to specs/steering/research/invocation-test-results.md.
+content_hash: b8b9b7c2d42bfe4105a0787bd4264a93a91a9844ce3264c5533e07f0a092eebf
+token_count: 194

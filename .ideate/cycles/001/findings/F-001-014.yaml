@@ -1,0 +1,15 @@
+id: F-001-014
+type: finding
+cycle: 1
+reviewer: spec-reviewer
+severity: critical
+title: Path validation
+description: "**WI-027** consolidated `_is_within_vault` into `mcp/shared.py`. The function remains unchanged and continues to validate all vault write paths. No security regression."
+file_path: cycles/001/findings/F-001-014.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-001
+verdict: Fail
+content_hash: "98c9ea78cb88f12adc3b5bc0db100ba0b70a36c31568b672536b8a0edc8bfa75"
+token_count: 111

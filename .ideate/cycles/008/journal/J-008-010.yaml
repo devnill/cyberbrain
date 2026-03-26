@@ -1,0 +1,11 @@
+id: J-008-010
+type: journal_entry
+phase: execute
+date: "2026-03-12"
+cycle_created: 8
+title: "Work item 041: Design — retrieval interface"
+content: |
+  Status: complete with rework
+  Rework: 2 significant, 3 minor findings fixed from incremental review. S1: Committed empty-query synthesis fallback: substitute "Provide a general summary of these notes." into {query} slot. S2: Committed | (pipe) as multi-identifier delimiter (pipe doesn't appear in Obsidian filenames). Minor fixes: single-note synthesis documented, token limit committed at 2000 chars, orient prompt update changed from "may" to "must". Design at specs/plan/retrieval-interface-design.md. Net tool count: 11 → 11 (cb_read extended with synthesize + multi-identifier support).
+content_hash: ea374bc721f685d59aff3251d1c74bdf4a58b72d8f7ec487a53f3853db5c00af
+token_count: 190

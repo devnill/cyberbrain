@@ -1,0 +1,18 @@
+id: F-016-066
+type: finding
+cycle: 16
+reviewer: code-reviewer
+severity: minor
+title: README references install.sh and uninstall.sh which do not exist
+description: |
+  - **File**: `README.md:81,105,417,427,515,523-524`
+  - **Issue**: README references `install.sh` and `uninstall.sh` in multiple places (installation section, MCP setup, troubleshooting, file reference table), but neither file exists on disk. ARCHITECTURE.md correctly omits them.
+  - **Impact**: Users following manual installation instructions will fail immediately. However, this predates cycle 016 — the files were likely removed in a prior cycle and README references were not fully cleaned up.
+file_path: cycles/016/findings/F-016-066.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-016
+verdict: Pass
+content_hash: c5ef2337c96e40c5df4bd2ecff0a24fd2a45f28bcf9c1c517c1760f4f73be1a6
+token_count: 205

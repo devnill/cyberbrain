@@ -1,0 +1,14 @@
+id: Q-06
+type: domain_question
+domain: distribution
+status: "resolved — `pyproject.toml` now defines both `cyberbrain-mcp = \"cyberbrain.mcp.server:main\"` and `cyberbrain-extract = \"cyberbrain.extractors.extract_beats:main\"` in `[project.scripts]`."
+impact: Hooks must fall back to a direct file path, which couples them to the internal layout.
+source: archive/cycles/001/decision-log.md (OQ7); archive/cycles/001/gap-analysis.md (MI1)
+resolution: null
+resolved_in: null
+description: Implementation notes and P-6 policy reference `cyberbrain-extract` as the hook invocation pattern, but it is not defined in `[project.scripts]`. Hooks cannot use an entry point that doesn't exist.
+cycle_created: 1
+cycle_modified: null
+content_hash: "70970d14768f60b8ba1f2b85211a77ef13c4a207873aebdaafcdaaa615cbc24f"
+token_count: 197
+file_path: .ideate/questions/Q-06.yaml

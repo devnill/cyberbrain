@@ -1,0 +1,82 @@
+id: CS-002
+type: cycle_summary
+cycle: 2
+content: |
+  # Review Summary — Cycle 002
+  
+  ## Overview
+  
+  Cycle 002 covers work done since cycle 001: the src layout migration (WI-034), distribution fixes (WI-035–037), research tasks (WI-038, WI-039), interface designs (WI-040, WI-041), filing confidence implementation (WI-043), and token-efficient testing infrastructure (WI-048–051). The three reviewer outputs were generated immediately after WI-034 and documented two critical distribution breakages; both were subsequently fixed within the same cycle by WI-035 and WI-036. The current codebase has no unresolved critical or significant issues from the reviewer outputs. However, five work items (WI-042, WI-044, WI-045, WI-046, WI-047) have uncertain or unstarted implementation status, and four items (WI-048–051) were implemented without incremental review coverage.
+  
+  ---
+  
+  ## Critical Findings
+  
+  *At time of reviewer output generation — subsequently fixed:*
+  
+  - [code-reviewer] install.sh copied from `$REPO_DIR/extractors/`, `$REPO_DIR/mcp/`, `$REPO_DIR/prompts/` — all deleted by WI-034; `set -euo pipefail` caused immediate abort; manual install completely broken — **Fixed by WI-035** — relates to: distribution/P-2, distribution/P-4
+  - [gap-analyst] Same install.sh breakage identified as implicit requirement violation (IR1) and incomplete integration (II1) — same root cause — **Fixed by WI-035** — relates to: cross-cutting
+  
+  ---
+  
+  ## Significant Findings
+  
+  *At time of reviewer output generation — subsequently fixed:*
+  
+  - [code-reviewer] `search_backends.py:783–786` bare `from frontmatter import` always raises `ImportError` in src layout; `except` branch always executes; canonical `frontmatter.py` never used; silent divergence risk — **Fixed by WI-036** — relates to: retrieval/P-3, architecture T4
+  - [gap-analyst] `requirements.txt` files inside `src/cyberbrain/` are orphaned; after install.sh fix, `pip install -r requirements.txt` path installs only `pyyaml` and `anthropic`, missing `fastmcp`, `mcp`, and `ruamel.yaml` — **Open: OQ8** — relates to: distribution/P-5
+  
+  ---
+  
+  ## Minor Findings
+  
+  - [code-reviewer] Dead `EXTRACTORS_DIR` constant in `scripts/import.py:33` — **Fixed by WI-037** — relates to: cross-cutting
+  - [code-reviewer] Stale `# sys.path setup` comment headers in multiple test files — **Deferred: OQ9** — relates to: cross-cutting
+  - [code-reviewer] Legacy `requirements.txt` files inside `src/cyberbrain/` — **Open: OQ8** — relates to: distribution
+  - [code-reviewer] Stale docstring in `scripts/import.py` referencing old install path — **Fixed by WI-037** — relates to: cross-cutting
+  - [spec-reviewer] Architecture doc component map and all module specs use pre-WI-034 flat-layout paths — **Fixed by WI-037** — relates to: architecture D1
+  - [spec-reviewer] mcp-server module spec describes removed `sys.path.insert` mechanism — **Fixed by WI-037** — relates to: architecture D2
+  - [spec-reviewer] import.md module spec describes replaced `sys.path.insert` import mechanism — **Fixed by WI-037** — relates to: architecture D3
+  - [spec-reviewer] `shared.py._parse_frontmatter()` described as "own implementation" in architecture T4 when it now delegates to `frontmatter.py` — **Fixed by WI-037** — relates to: architecture T4
+  - [spec-reviewer] CLAUDE.md reported "ten tools" while listing eleven — **Fixed by WI-037** — relates to: architecture N2
+  - [spec-reviewer] WI-034 spec and incremental review consistently misspell `cyberbrain` as `cybrain` — **Open: OQ11** — relates to: documentation
+  - [gap-analyst] `evaluate.py` `main()` uses bare `from config import resolve_config` — fails in packaged installs — **Open: OQ7** — relates to: capture domain
+  - [gap-analyst] Domain questions file Q-1 through Q-7 showed `status: open` despite all resolved — **Fixed by WI-037** — relates to: distribution domain
+  
+  ---
+  
+  ## Suggestions
+  
+  - [gap-analyst] Stale `# sys.path setup` comment headers should be renamed in a batch cleanup pass (low priority; no functional regression)
+  
+  ---
+  
+  ## Findings Requiring User Input
+  
+  - **WI-042 implementation status**: The incremental review file for WI-042 (implement intake interface) is empty. It is unclear whether the work item was executed. The `cb_file` title parameter and document intake mode (per WI-040 design) may not be implemented. WI-046 and WI-047 depend on WI-042. Needs technical investigation first, then user decision on whether to prioritize completion.
+  
+  - **WI-047 vault CLAUDE.md update**: WI-047 requires user approval before writing to the live vault. It is blocked on WI-042 and WI-046 completing. Once implementation status is confirmed, this becomes a user approval gate, not a technical question.
+  
+  - **WI-030 manual capture mode re-test**: The re-test procedure at `specs/steering/research/manual-capture-retest.md` requires a live Claude Desktop session. The emphatic prohibition wording from WI-023 ("NEVER", "Do NOT") has not been validated. If the behavior is still broken, users in manual mode continue to receive unsolicited filing offers.
+  
+  ---
+  
+  ## Proposed Refinement Plan
+  
+  No new refinement cycle is needed for the issues identified in the reviewer outputs — all critical and significant findings were addressed within this cycle's fix wave (WI-035, WI-036, WI-037).
+  
+  However, five work items planned for this cycle are incomplete or unverified:
+  
+  1. **WI-042 (intake interface implementation)**: Status unknown. Highest priority — blocks WI-046 and WI-047. Investigate first; if not implemented, execute now.
+  2. **WI-044 (improved clustering/filing accuracy)**: Not started. WI-038 research complete. Ready to execute.
+  3. **WI-045 (automatic indexing)**: Not started. WI-039 research complete. Ready to execute.
+  4. **WI-046 (retrieval interface implementation)**: Not started. WI-041 design approved. Ready to execute.
+  5. **WI-047 (update vault CLAUDE.md)**: Not started. Blocked on WI-042 and WI-046; requires user approval.
+  
+  Additionally, WI-048–051 were implemented without incremental review. These should be verified (particularly the `--affected-only` plugin's import graph accuracy) before being relied upon to gate test runs.
+  
+  **Recommended next step**: Use `/ideate:execute` to complete the unfinished work items in dependency order: WI-042 → WI-046 → WI-047 (in parallel with WI-044, WI-045). Then verify WI-048–051 correctness.
+  
+  Minor open items (OQ7 evaluate.py bare import, OQ8 requirements.txt cleanup, OQ9 sys.path comments, OQ11 typo fix) can be addressed in a short cleanup pass alongside the above, or deferred to a later cycle.
+content_hash: e972614d5c0e3311675dd379f46e19b8400e819897ca6188deb2b8db56ad9ef1
+token_count: 1655

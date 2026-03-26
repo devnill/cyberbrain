@@ -1,6 +1,6 @@
 # Domain Registry
 
-current_cycle: 12
+current_cycle: 17
 
 ## Domains
 
@@ -32,4 +32,4 @@ Files: domains/distribution/policies.md, decisions.md, questions.md
 
 **Cycle 003 completion**: All 9 work items from cycles 002-003 are now complete and reviewed: WI-042 (intake interface), WI-044 (filing accuracy), WI-045 (automatic indexing), WI-046 (retrieval interface), WI-047 (vault CLAUDE.md update), WI-048 (pytest markers), WI-049 (affected-only plugin), WI-050 (quiet defaults), WI-051 (test wrapper). See archive/cycles/003/ for review artifacts.
 
-**CLAUDE.md stale after restructure decomposition**: CLAUDE.md still references `restructure.py` as a single file. The module is now a sub-package. See distribution/Q-12.
+**CLAUDE.md restructure decomposition** (resolved): CLAUDE.md was updated in WI-073 (cycle 013) to reflect the restructure sub-package. See distribution/Q-12.

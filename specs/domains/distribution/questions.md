@@ -53,8 +53,8 @@
 - **Question**: `src/cyberbrain/extractors/evaluate.py` line ~407 uses `from config import resolve_config` inside `main()`. Should be `from cyberbrain.extractors.config import resolve_config`. Violates P-3 (all code must use `cyberbrain.*` namespace).
 - **Source**: archive/cycles/002/decision-log.md (OQ7); archive/cycles/002/gap-analysis.md (EC1)
 - **Impact**: The evaluate dev tool fails with `ModuleNotFoundError` on CLI invocation in any packaged install. Failure is invisible at import time; surfaces only when the tool is actually run.
-- **Status**: open
-- **Reexamination trigger**: One-line fix; address in next housekeeping pass or alongside WI-044/045.
+- **Status**: resolved — verified 2026-03-22. Line 429 now reads `from cyberbrain.extractors.config import resolve_config`. Fixed during a prior cycle (likely WI-036 or WI-037).
+- **Resolved in**: prior cycle (confirmed cycle 15 refinement)
 
 ## Q-9: requirements.txt files inside src/cyberbrain/ are orphaned
 - **Question**: Should `src/cyberbrain/extractors/requirements.txt` and `src/cyberbrain/mcp/requirements.txt` be deleted? They specify an incomplete dependency subset and any path that still references them (e.g. the bedrock install path in install.sh) installs without `fastmcp`, `mcp`, and `ruamel.yaml`.
@@ -81,5 +81,5 @@
 - **Question**: CLAUDE.md documents `src/cyberbrain/mcp/tools/restructure.py` as a single module. WI-062 decomposed it into a sub-package with 11 files. The documentation is now stale.
 - **Source**: archive/cycles/012/gap-analysis.md (G4)
 - **Impact**: Agents and developers reading CLAUDE.md will look for a non-existent single file and miss the phase-based sub-module structure.
-- **Status**: open
-- **Reexamination trigger**: Next housekeeping pass; one documentation update.
+- **Status**: resolved — CLAUDE.md updated in WI-073 (cycle 013) to reflect restructure sub-package. Key Files table now lists `restructure/pipeline.py` and `restructure/*.py` with accurate descriptions.
+- **Resolved in**: cycle 013

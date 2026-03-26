@@ -24,12 +24,12 @@ Session in progress
        │
        ▼  (context fills or /compact)
 PreCompact hook fires
-       │
+       │  (registered automatically by plugin install)
        ▼
-~/.claude/hooks/pre-compact-extract.sh
+hooks/pre-compact-extract.sh
        │  reads transcript path from hook stdin
        ▼
-~/.claude/cyberbrain/extractors/extract_beats.py
+src/cyberbrain/extractors/extract_beats.py
        │  parses transcript JSONL
        │  calls Claude (Haiku) to extract "beats"
        │  routes beats by scope (project vs. general)
@@ -53,7 +53,8 @@ A `SessionEnd` hook also fires when a session ends without compacting, so no ses
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.11+
+- `uv` — dependency management ([install](https://docs.astral.sh/uv/getting-started/installation/))
 - Claude Code (the `claude` CLI)
 - An Obsidian vault, or any directory for plain-markdown storage
 - **Optional**: AWS credentials for the `bedrock` backend, or Ollama for the `ollama` backend. The default `claude-code` backend uses your active Claude Code session — no separate API key needed.
@@ -62,28 +63,41 @@ A `SessionEnd` hook also fires when a session ends without compacting, so no ses
 
 ## Installation
 
+### Plugin installation (Claude Code — recommended)
+
 ```bash
-bash install.sh
+# Add the plugin marketplace (one time)
+claude plugin marketplace add devnill/cyberbrain
+
+# Install the plugin
+claude plugin install cyberbrain@devnill-cyberbrain
 ```
 
-The installer:
-1. Installs hooks, prompts, extractors, and the MCP server into `~/.claude/cyberbrain/`
-2. Registers the `PreCompact` and `SessionEnd` hooks in `~/.claude/settings.json`
-3. Creates `~/.claude/cyberbrain/config.json` with a placeholder vault path (if not already present)
-4. Registers the MCP server in Claude Desktop (macOS)
-5. Creates a Python venv at `~/.claude/cyberbrain/venv/` and installs MCP dependencies
+The plugin system handles hook registration (`PreCompact`, `SessionEnd`), MCP server launch via `uv run`, and version management. After install, run `cb_configure` to set your vault path.
 
-After installation, set `vault_path` in `~/.claude/cyberbrain/config.json` before the system will run.
+### Manual installation (Claude Desktop fallback)
+
+```bash
+git clone https://github.com/devnill/cyberbrain.git
+cd cyberbrain
+uv sync
+```
+
+After cloning, register the MCP server in Claude Desktop manually (see the MCP server section below) and set `vault_path` in `~/.claude/cyberbrain/config.json` before the system will run.
 
 ---
 
 ## Uninstallation
 
+### Plugin uninstall (Claude Code)
+
 ```bash
-bash uninstall.sh
+claude plugin uninstall cyberbrain@devnill-cyberbrain
 ```
 
-Pass `--yes` to skip the confirmation prompt. The uninstaller removes all installed files and surgically removes the hook entries from `~/.claude/settings.json`.
+### Manual uninstall
+
+Remove `~/.claude/cyberbrain/` and the hook entries from `~/.claude/settings.json` by hand.
 
 ---
 
@@ -374,7 +388,7 @@ Requires Ollama running locally with a model pulled (`ollama pull llama3.2`). Qu
 
 ## MCP server (Claude Desktop)
 
-The installer registers a FastMCP server in Claude Desktop, exposing eleven tools:
+The MCP server exposes eleven tools to Claude Desktop:
 
 | Tool | Description |
 |---|---|
@@ -390,19 +404,9 @@ The installer registers a FastMCP server in Claude Desktop, exposing eleven tool
 | `cb_review(days_ahead?, dry_run?, folder?)` | Review working memory notes that are due — promote, extend, or delete |
 | `cb_reindex(rebuild?, prune?)` | Rebuild or prune the search index |
 
-### Automatic setup (macOS)
-
-`install.sh` writes the MCP server entry to Claude Desktop's config automatically:
-
-```
-~/Library/Application Support/Claude/claude_desktop_config.json
-```
-
-Restart Claude Desktop after installation. You'll see a hammer icon (🔨) in the chat input when the MCP server is connected.
-
 ### Manual setup
 
-If you need to register the server by hand (or if `install.sh` skipped it because Claude Desktop wasn't running), open Claude Desktop's config file:
+To register the MCP server with Claude Desktop, open its config file:
 
 ```bash
 open ~/Library/Application\ Support/Claude/claude_desktop_config.json
@@ -410,24 +414,40 @@ open ~/Library/Application\ Support/Claude/claude_desktop_config.json
 
 Or navigate there from Claude Desktop: **Settings → Developer → Edit Config**.
 
-Add or merge the `cyberbrain` entry under `mcpServers`:
+Add or merge the `cyberbrain` entry under `mcpServers`.
+
+**Plugin installation (automatic):** If you installed via the Claude Code plugin, the following entry is written for you — shown here so you can verify it:
 
 ```json
 {
   "mcpServers": {
     "cyberbrain": {
-      "command": "/Users/you/.claude/cyberbrain/venv/bin/python",
-      "args": ["/Users/you/.claude/cyberbrain/mcp/server.py"]
+      "command": "uv",
+      "args": ["run", "--directory", "/path/to/plugin/root", "python", "-m", "cyberbrain.mcp.server"]
     }
   }
 }
 ```
 
-Replace `/Users/you` with your actual home directory path. Restart Claude Desktop to apply.
+The plugin system substitutes the actual plugin directory for `/path/to/plugin/root` — no manual edit is required.
+
+**Manual installation (cloned repo / Claude Desktop):** Use the `mcp/start.sh` launcher, which locates `uv` automatically:
+
+```json
+{
+  "mcpServers": {
+    "cyberbrain": {
+      "command": "/path/to/cyberbrain/mcp/start.sh"
+    }
+  }
+}
+```
+
+Replace `/path/to/cyberbrain` with the absolute path to the cloned repository. Restart Claude Desktop to apply.
 
 ### Setting up a Claude Desktop project
 
-For proactive vault recall and filing within Claude Desktop, create a **Project** and paste the system prompt from `prompts/claude-desktop-project.md` into the project's **Customize** field (Project settings → Customize → Custom instructions).
+For proactive vault recall and filing within Claude Desktop, create a **Project** and paste the system prompt from `src/cyberbrain/prompts/claude-desktop-project.md` into the project's **Customize** field (Project settings → Customize → Custom instructions).
 
 This instructs Claude to:
 - Call `cb_recall` automatically when you mention a topic it may have notes on
@@ -474,7 +494,7 @@ Find your path by running `which claude` in a terminal. Apple Silicon Macs typic
 
 **"Prompt file not found" error**
 
-The extractor looks for prompts at `~/.claude/cyberbrain/prompts/`. Reinstall to ensure they were copied: `bash install.sh`
+The extractor looks for prompts relative to `src/cyberbrain/prompts/` in the plugin root. Reinstall the plugin (or re-clone and run `uv sync` for a manual install) to ensure all files are in place.
 
 ---
 
@@ -482,32 +502,30 @@ The extractor looks for prompts at `~/.claude/cyberbrain/prompts/`. Reinstall to
 
 | File | Purpose |
 |---|---|
-| `install.sh` | Installer |
-| `uninstall.sh` | Uninstaller |
 | `QUICKSTART.md` | Fast-path setup guide |
 | `ARCHITECTURE.md` | Detailed architecture documentation |
 | `cyberbrain.example.json` | Template for `~/.claude/cyberbrain/config.json` |
 | `cyberbrain.local.example.json` | Template for per-project `.claude/cyberbrain.local.json` |
 | `hooks/pre-compact-extract.sh` | PreCompact hook entry point |
 | `hooks/session-end-extract.sh` | SessionEnd hook entry point |
-| `extractors/extract_beats.py` | Core engine entry point (re-exports all modules) |
-| `extractors/extractor.py` | LLM-based beat extraction from transcripts |
-| `extractors/backends.py` | LLM backend implementations (claude-code, bedrock, ollama) |
-| `extractors/config.py` | Configuration loading and prompt file loading |
-| `extractors/transcript.py` | JSONL transcript parsing |
-| `extractors/vault.py` | Note writing, routing, filename generation, relations |
-| `extractors/autofile.py` | LLM-driven filing decisions |
-| `extractors/search_backends.py` | Search backends (grep, FTS5, hybrid) |
-| `extractors/search_index.py` | Search index coordination and lifecycle |
-| `extractors/analyze_vault.py` | Vault structure analyzer for cb_setup |
-| `prompts/extract-beats-system.md` | System prompt for beat extraction |
-| `prompts/autofile-system.md` | System prompt for autofile filing decisions |
-| `prompts/enrich-system.md` | System prompt for `cb_enrich` |
-| `prompts/restructure-*.md` | Prompts for `cb_restructure` (decide, generate, audit, group) |
-| `prompts/review-system.md` | System prompt for `cb_review` |
-| `prompts/claude-desktop-project.md` | Recommended Claude Desktop Project system prompt |
-| `mcp/server.py` | FastMCP server entry point |
-| `mcp/shared.py` | Bridge between MCP tools and extractor layer |
-| `mcp/resources.py` | MCP resources and prompts |
-| `mcp/tools/*.py` | MCP tool implementations (extract, file, recall, manage, setup, enrich, restructure, review, reindex) |
+| `src/cyberbrain/extractors/extract_beats.py` | Core engine entry point (re-exports all modules) |
+| `src/cyberbrain/extractors/extractor.py` | LLM-based beat extraction from transcripts |
+| `src/cyberbrain/extractors/backends.py` | LLM backend implementations (claude-code, bedrock, ollama) |
+| `src/cyberbrain/extractors/config.py` | Configuration loading and prompt file loading |
+| `src/cyberbrain/extractors/transcript.py` | JSONL transcript parsing |
+| `src/cyberbrain/extractors/vault.py` | Note writing, routing, filename generation, relations |
+| `src/cyberbrain/extractors/autofile.py` | LLM-driven filing decisions |
+| `src/cyberbrain/extractors/search_backends.py` | Search backends (grep, FTS5, hybrid) |
+| `src/cyberbrain/extractors/search_index.py` | Search index coordination and lifecycle |
+| `src/cyberbrain/extractors/analyze_vault.py` | Vault structure analyzer for cb_setup |
+| `src/cyberbrain/prompts/extract-beats-system.md` | System prompt for beat extraction |
+| `src/cyberbrain/prompts/autofile-system.md` | System prompt for autofile filing decisions |
+| `src/cyberbrain/prompts/enrich-system.md` | System prompt for `cb_enrich` |
+| `src/cyberbrain/prompts/restructure-*.md` | Prompts for `cb_restructure` (decide, generate, audit, group) |
+| `src/cyberbrain/prompts/review-system.md` | System prompt for `cb_review` |
+| `src/cyberbrain/prompts/claude-desktop-project.md` | Recommended Claude Desktop Project system prompt |
+| `src/cyberbrain/mcp/server.py` | FastMCP server entry point |
+| `src/cyberbrain/mcp/shared.py` | Bridge between MCP tools and extractor layer |
+| `src/cyberbrain/mcp/resources.py` | MCP resources and prompts |
+| `src/cyberbrain/mcp/tools/*.py` | MCP tool implementations (extract, file, recall, manage, setup, enrich, restructure, review, reindex) |
 | `scripts/import.py` | Import Claude or ChatGPT export into the vault |

@@ -1,0 +1,19 @@
+id: F-009-044
+type: finding
+cycle: 9
+reviewer: gap-analyst
+severity: minor
+title: `enrich.py` closing-delimiter scan uses `"\n---"` (inconsistent with repair script)
+description: |
+  - **File**: `src/cyberbrain/mcp/tools/enrich.py:123,153`
+  - **Gap**: `content.find("\n---", 3)` matches any line starting with `---`, including `--- heading` lines in note bodies. The repair script fixed this to `"\n---\n"` (WI-053 M1). Notes with `--- heading` patterns in the body could be mis-parsed by `cb_enrich`. Pre-existing; not introduced by this cycle.
+  - **Impact**: Minor — affects only notes with Markdown horizontal rules (`---`) in their body section. `cb_enrich` would treat the horizontal rule as the frontmatter closing delimiter, leaving frontmatter content in the "body". Such notes would not be correctly enriched.
+  - **Recommendation**: Defer. Fix is a one-line change mirroring repair_frontmatter.py's approach.
+file_path: cycles/009/findings/F-009-044.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-009
+verdict: null
+content_hash: fc14f07604c259ae7f46aedb87ddd24b09166b050790d318284fc779fd2a60cd
+token_count: 271

@@ -160,14 +160,15 @@ def resolve_output_dir(beat: dict, config: dict) -> Path | None:
 # Relation resolution
 # ---------------------------------------------------------------------------
 
-# Controlled predicate vocabulary grounded in SKOS / Dublin Core / PROV-O.
+# Controlled predicate vocabulary.
 VALID_PREDICATES = {
     "related",
     "references",
-    "broader",
-    "narrower",
+    "causes",
+    "caused-by",
     "supersedes",
-    "wasderivedfrom",
+    "implements",
+    "contradicts",
 }
 
 

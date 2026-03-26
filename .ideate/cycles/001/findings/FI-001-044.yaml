@@ -1,0 +1,19 @@
+id: FI-001-044
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: minor
+title: Test isolation with conftest.py mock
+description: |
+  - **File**: `tests/conftest.py`
+  - **Issue**: The shared mock for `cyberbrain.extractors.extract_beats` installed by conftest.py requires test files to clear it before importing the real module.
+  - **Impact**: Test files that need the real module must add `sys.modules.pop("cyberbrain.extractors.extract_beats", None)` before importing.
+  - **Suggested fix**: Already handled in affected test files. No further action needed.
+file_path: cycles/001/findings/FI-001-044.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-034
+verdict: Pass
+content_hash: "4697b0fb7cdf6c6d97c5909dd1b05e00e9209128d5ce11b828521260c8e53c41"
+token_count: 180

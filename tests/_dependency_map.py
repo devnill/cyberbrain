@@ -51,4 +51,7 @@ class TestMapper:
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module:
                 imports.add(node.module)
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    imports.add(alias.name)
         return imports

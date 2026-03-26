@@ -1,0 +1,15 @@
+id: P-03
+type: domain_policy
+domain: retrieval
+status: active
+derived_from:
+  - GP-3 (High Signal-to-Noise Above All) + GP-6 (Lean Architecture
+  - Heavy on Quality)
+established: planning phase
+amended: null
+description: The embedding input is `"{title}. {summary} {tags}"`. Full body text is not embedded. This keeps the index compact and focuses semantic similarity on the note's conceptual identity rather than its verbatim content.
+cycle_created: 1
+cycle_modified: null
+content_hash: "60422da392c1ed316e267f9e1b509c5d944636bcdc2b3d6a5d9dd2e1ae5c92c6"
+token_count: 134
+file_path: .ideate/policies/P-03.yaml

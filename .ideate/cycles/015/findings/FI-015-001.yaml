@@ -1,0 +1,18 @@
+id: FI-015-001
+type: finding
+cycle: 15
+reviewer: code-reviewer
+severity: minor
+title: "Stale noqa: I001 suppressor"
+description: |
+  - **File**: `src/cyberbrain/extractors/autofile.py:469`
+  - **Issue**: `# noqa: I001` suppressed the wrong rule for inline imports.
+  - **Suggested fix**: Removed the suppressor. **Applied.**
+file_path: cycles/015/findings/FI-015-001.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-076
+verdict: Pass
+content_hash: ef92fa432de5af019a205e92414bae56c3f1360ed23146eb47f7a6e0edd9a9b2
+token_count: 118

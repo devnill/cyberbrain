@@ -1,0 +1,11 @@
+id: J-006-006
+type: journal_entry
+phase: execute
+date: "2026-03-11"
+cycle_created: 6
+title: "Work item 033: Implement plugin distribution"
+content: |
+  Status: complete
+  Implemented Claude Code plugin distribution. Created `pyproject.toml` with package metadata. Fixed `mcp/shared.py` to resolve prompts and extractors from `__file__`-relative paths with legacy fallback. Updated `.claude-plugin/plugin.json` (removed dead `skills` field, fixed `author` to object). Updated `.mcp.json` for distribution-ready launch with `${CLAUDE_PLUGIN_ROOT}`. Added `main()` entry point to `mcp/server.py`. Updated `CLAUDE.md` with plugin installation instructions. Added Distribution section to `specs/plan/architecture.md`. All acceptance criteria met.
+content_hash: "114cd4fd6748f12ee7cd6da104497f51f6bd76d9f2bb5f586c89dca58baa7699"
+token_count: 188

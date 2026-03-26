@@ -1,0 +1,14 @@
+id: Q-11
+type: domain_question
+domain: distribution
+status: open
+impact: PRs or direct pushes can bypass quality enforcement. The zero-error basedpyright baseline (WI-069) can regress silently.
+source: archive/cycles/012/gap-analysis.md (G3); archive/cycles/012/decision-log.md (G3)
+resolution: null
+resolved_in: null
+description: ruff and basedpyright are enforced by pre-commit, but there is no GitHub Actions or equivalent CI pipeline. Quality gates only run if the developer has pre-commit installed and does not bypass it.
+cycle_created: 1
+cycle_modified: null
+content_hash: ab4d48589bbd8fcde840143cf5d92cc53cc605d2fbb6051b6f761ba6a2646e6b
+token_count: 158
+file_path: .ideate/questions/Q-11.yaml

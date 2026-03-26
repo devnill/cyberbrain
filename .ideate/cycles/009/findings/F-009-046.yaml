@@ -1,0 +1,17 @@
+id: F-009-046
+type: finding
+cycle: 9
+reviewer: gap-analyst
+severity: minor
+title: No enrich-then-repair integration test (OQ3 — carryover)
+description: |
+  - **Gap**: No test exercises the full round-trip: enrich a note with the fixed `_apply_frontmatter_update()`, run `repair_file()` on the result, verify it's a no-op.
+  - **Recommendation**: Defer. Individual components are tested and strategies are logically aligned (last-occurrence-wins in both).
+file_path: cycles/009/findings/F-009-046.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-009
+verdict: null
+content_hash: "94abfc80d63f5fed49b08e4c352b3f385ec3e801628e360f504253810e91f722"
+token_count: 152

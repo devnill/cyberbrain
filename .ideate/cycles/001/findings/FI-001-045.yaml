@@ -1,0 +1,19 @@
+id: FI-001-045
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: significant
+title: Line number for `_build_clusters()` is wrong
+description: |
+  - **File**: `specs/steering/research/filing-accuracy-clustering.md:7`
+  - **Issue**: The report states `_build_clusters()` is at line 543. In the current source, the function definition is at line 543 and the adjacency/OR logic the report criticises is at line 598. The report's description is correct; only the anchor line number is off by the preamble length. Not critical for a research doc, but the implementor will use this number as a jump target.
+  - **Impact**: Implementor wastes time hunting for the wrong line.
+  - **Suggested fix**: Replace "line 543" with "line 543 (function definition); adjacency OR logic at line 596-600".
+file_path: cycles/001/findings/FI-001-045.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-038
+verdict: Pass
+content_hash: a623755a1c8591f2fd9d5cef0de6f913c4254e5f9c28525185d4974c090ad07e
+token_count: 236

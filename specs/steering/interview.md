@@ -76,3 +76,124 @@ A: Handle the minor items. Remove the FastMCP pattern migration — it's a non-i
 - CI/CD: deferred (infrastructure decision, not a code change)
 - ruff ignore list: no action (documented, acceptable breadth)
 - All other minor items: address now
+
+---
+
+## Refinement Interview — 2026-03-22
+
+**Context**: Post-release (v1.1.0) tech debt cleanup. Cycle 014 release review passed clean. Architect survey found additional bugs. User wants to address findings and tech debt with obvious solutions first, deferring items requiring design decisions.
+
+**Q: Review findings exist from cycle 014. Are you here to address those findings, to make other changes, or both?**
+A: Address findings as well as focusing on technical debt.
+
+**Q: Which items have obvious solutions vs need design decisions?**
+A: Fix everything with an obvious solution first, come back to the rest later. Use best judgment, adhere to all rules and principles.
+
+**Items triaged as obvious fixes:**
+- autofile.py bare import (line 469): `from search_index` → `from cyberbrain.extractors.search_index` — silent bug, autofile notes never indexed
+- search_backends.py dead branch (line 862): `or True` makes GrepBackend unreachable
+- Stale build artifacts: build.sh (deprecated), dist/ (stale 0.1.0 wheel), orphaned requirements.txt files
+- README: stale paths, Python 3.8+ requirement, install.sh-first installation instructions
+- evaluate.py bare import (Q-8): already fixed, removed from scope
+
+**Items deferred (require design decisions):**
+- Relation vocabulary mismatch (capture Q-3)
+- Search backend cache invalidation (retrieval Q-2)
+- Hook/MCP extraction path divergence (capture Q-2)
+- Proactive recall validation (retrieval Q-1)
+- Manual capture mode re-test (capture Q-1)
+- --affected-only correctness (distribution Q-10)
+- CI/CD pipeline (distribution Q-11)
+
+**Items accepted as-is (per cycle 014):**
+- Dynamic Path.home() references (intentional)
+- ruff ignore list breadth (acceptable)
+- No formal changelog (journal.md serves)
+
+**Decisions:**
+- All principles unchanged
+- Architecture unchanged
+- Scope limited to obvious fixes only
+
+---
+
+## Refinement Interview — 2026-03-22 (Cycle 16)
+
+**Context**: Post cycle-015 tech debt cleanup. User wants to address all documentation-related minor findings.
+
+**Q: Which deferred items do you want to address?**
+A: All of the documentation-related minor findings.
+
+**Q: For ARCHITECTURE.md — should it be updated comprehensively or deprecated in favor of specs/plan/architecture.md?**
+A: It should match reality. No deprecation for top-level architecture documentation; it is designed for human-centric review where specs are a record of decisions.
+
+**Q: Anything else documentation-related to bundle in?**
+A: This is the full scope.
+
+**Items in scope:**
+- ARCHITECTURE.md comprehensive update to match current src-layout
+- README MCP JSON example clarification for both install paths
+- Close resolved domain question Q-12
+- Archive orphaned cycle-013 incremental reviews
+- Clean up domains/index.md stale cross-cutting note
+
+**Decisions:**
+- All principles unchanged
+- Architecture unchanged
+- ARCHITECTURE.md is the human-facing overview; specs/plan/architecture.md is the decision record — both maintained
+
+---
+
+## Refinement Interview — 2026-03-22 (Cycle 17)
+
+**Context**: Addressing all remaining tech debt, deferred design decisions, and a critical test infrastructure bug.
+
+**Q: Which items do you want to address?**
+A: All of them except CI/CD (item 10) and skip proactive recall / manual capture mode validation (items 7 & 8).
+
+**Q: Relation vocabulary — which is more useful for a knowledge graph like this?**
+A: Need to determine which is the more useful vocabulary. [Research spawned]
+Research recommended merged 7-predicate set: related, references, causes, caused-by, supersedes, implements, contradicts.
+A: Let's do it.
+
+**Q: Search backend cache invalidation — invalidate on config write (a) or TTL-based (b)?**
+A: Option a is fine.
+
+**Q: Hook/MCP extraction path divergence — refactor to shared function (a) or document and leave (b)?**
+A: Option a.
+
+**Investigation: --affected-only correctness**
+Result: Critical bug — _extract_imports() only handles ast.ImportFrom, ignores plain import X. ~30% of import relationships missed. Tests silently skipped.
+
+**Items in scope:**
+- Recreate CyberbrainConfig TypedDict (lost during brrr cycle)
+- Clean up install.sh/uninstall.sh references in README
+- Fix ARCHITECTURE.md prompt count
+- Migrate relation vocabulary to merged 7-predicate set
+- Add search backend cache invalidation on cb_configure
+- Refactor cb_extract to share orchestration with main()
+- Fix --affected-only import detection bug
+
+**Decisions:**
+- Relation vocabulary: merged 7-predicate set (research-backed)
+- Search cache: invalidate on config write
+- Extraction path: shared orchestration function
+- All principles unchanged
+
+---
+
+## Refinement Interview — 2026-03-23 (Cycle 18)
+
+**Context**: Cycle 017 review found 2 significant findings (run_extraction config param, residual _write_beats_and_log) and 3 minor (architecture tensions, CLAUDE.md vocabulary, config docs).
+
+**Q: Address all remaining items?**
+A: Yes, do a refine cycle to address all remaining items.
+
+**Items in scope:**
+- Fix run_extraction() config parameter and merge _write_beats_and_log()
+- Mark architecture doc tensions T5/T6/T7 resolved
+
+**Decisions:**
+- All principles unchanged
+- CLAUDE.md vocabulary update: verified not needed (CLAUDE.md doesn't mention relations)
+- Config doc pass: deferred (TypedDict is canonical)

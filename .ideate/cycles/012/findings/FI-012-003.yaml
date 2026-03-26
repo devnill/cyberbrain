@@ -1,0 +1,15 @@
+id: FI-012-003
+type: finding
+cycle: 12
+reviewer: code-reviewer
+severity: minor
+title: "10 test files retain sys.modules.pop"
+description: Each file has its own module-level setup pattern. Converting to standard mock.patch requires individual attention. Deferred to a future cycle.
+file_path: cycles/012/findings/FI-012-003.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-063
+verdict: Pass
+content_hash: "03ca9a9ea85ef9a18cfe9cf544486b9816c6fa527d56d8a1d79f1c90907d9c11"
+token_count: 109

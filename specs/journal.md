@@ -522,3 +522,165 @@ Curator: skipped — no policy-grade findings in a release review with no new wo
 Agents spawned: 3 (code-reviewer, spec-reviewer, gap-analyst)
 Note: All three reviewers ran out of turns (20-turn limit insufficient for full codebase review). Review files written by coordinator.
 Models used: sonnet
+
+## [refine] 2026-03-22 — Refinement planning completed
+Trigger: Post-release tech debt cleanup (cycle 014 findings + architect survey bugs)
+Principles changed: none
+New work items: 076-079
+Four items: fix autofile.py bare import (silent index failure), fix search_backends.py dead branch (GrepBackend unreachable), delete stale build artifacts (build.sh, dist/, requirements.txt), update README for current architecture. evaluate.py Q-8 confirmed already fixed. Design-decision items deferred (relation vocabulary, search cache invalidation, hook/MCP divergence).
+
+## [refine] 2026-03-22 — Metrics summary
+Agents spawned: 1 (architect — codebase survey)
+Total wall-clock: 207091ms
+Models used: opus (architect)
+Slowest agent: architect — 207091ms
+
+## [execute] 2026-03-22 — Work item 076: Fix autofile.py bare import
+Status: complete with rework
+Rework: 2 minor findings fixed from incremental review. M1: Removed stale `# noqa: I001` suppressor (wrong rule). M2: Added `assert_called_once()` to error-path test to confirm exception path exercised.
+Changed `from search_index import update_search_index` to `from cyberbrain.extractors.search_index import update_search_index`. Updated test mocks to use correct module path. Added test verifying index call on create. No deviations from plan.
+
+## [execute] 2026-03-22 — Work item 077: Fix search_backends.py dead branch
+Status: complete with rework
+Rework: 2 minor findings fixed from incremental review. M1: Added stderr diagnostic to FTS5 fallback except block. M2: Updated misleading comment about FTS5 always being available.
+Replaced `if _has_fastembed() or True:` with try/except FTS5Backend with GrepBackend fallback. No deviations from plan.
+
+## [execute] 2026-03-22 — Work item 078: Delete stale build artifacts
+Status: complete with rework
+Rework: 1 significant finding fixed from incremental review. S1: Removed build.sh reference from ARCHITECTURE.md file tree.
+Deleted build.sh, dist/, and both orphaned requirements.txt files. .gitignore already covered dist/. No deviations from plan.
+
+## [execute] 2026-03-22 — Work item 079: Update README for current architecture
+Status: complete with rework
+Rework: 2 significant findings fixed from incremental review. S1: Updated MCP JSON example from stale venv/mcp paths to uv run pattern. S2: Fixed prompts/ path to src/cyberbrain/prompts/.
+Updated flow diagram, requirements (3.11+), installation (plugin-first), uninstallation. Config table unchanged. No deviations from plan.
+
+## [execute] 2026-03-22 — Metrics summary
+Agents spawned: 8 (4 workers, 4 code-reviewers)
+Total wall-clock: workers 466576ms, reviewers 275490ms
+Models used: sonnet (all agents)
+Slowest agent: worker-076 (autofile fix) — 138844ms
+
+## [review] 2026-03-22 — Comprehensive review completed (Cycle 015)
+Critical findings: 0
+Significant findings: 0
+Minor findings: 6
+Suggestions: 0
+Items requiring user input: 0
+Curator: skipped — no policy-grade findings in a tech debt cleanup cycle
+
+## [review] 2026-03-22 — Metrics summary
+Agents spawned: 3 (code-reviewer, spec-reviewer, gap-analyst)
+Note: All three reviewers exhausted turn limits. Review files written by coordinator.
+Models used: sonnet
+Slowest agent: spec-reviewer — 135469ms
+
+## [refine] 2026-03-22 — Refinement planning completed
+Trigger: Documentation-related minor findings from cycles 014-015
+Principles changed: none
+New work items: 080-082
+Three items: comprehensive ARCHITECTURE.md update for current src-layout (080), README MCP JSON clarification for both install paths (081), close resolved domain questions and archive housekeeping (082). All documentation/housekeeping — no code changes.
+
+## [refine] 2026-03-22 — Metrics summary
+Agents spawned: 0 (all context from current session)
+Total wall-clock: 0ms
+Models used: none
+
+## [execute] 2026-03-22 — Work item 080: Update ARCHITECTURE.md for current codebase
+Status: complete with rework
+Rework: 3 significant, 1 minor findings fixed from incremental review. S1/S2: plugin.json and mcp.json moved from repo root to .claude-plugin/ directory in file tree. S3: Added evaluate-system.md to prompts listing. M1: Changed "24 modules" to "22 test files" for clarity.
+Updated entire File Reference section to match current src-layout, added missing files, fixed counts. No deviations from plan.
+
+## [execute] 2026-03-22 — Work item 081: Clarify README MCP JSON for both install paths
+Status: complete with rework
+Rework: 2 minor findings fixed from incremental review. M1: Reworded plugin block label to bridging sentence. M2: Added clarifying note about auto-substituted plugin path.
+Two labeled JSON blocks: plugin (automatic) and manual (mcp/start.sh). No deviations from plan.
+
+## [execute] 2026-03-22 — Work item 082: Close resolved domain questions and archive housekeeping
+Status: complete
+Q-12 marked resolved. domains/index.md cross-cutting note updated. 4 orphaned cycle-013 files archived. archive/incremental/ clean. No deviations from plan.
+
+## [execute] 2026-03-22 — Metrics summary
+Agents spawned: 6 (3 workers, 3 code-reviewers)
+Total wall-clock: workers 197736ms, reviewers 250184ms
+Models used: sonnet (all agents)
+Slowest agent: reviewer-080 (ARCHITECTURE.md) — 131069ms
+
+## [review] 2026-03-22 — Comprehensive review completed (Cycle 016)
+Critical findings: 0
+Significant findings: 1 (pre-existing: CyberbrainConfig TypedDict missing from source)
+Minor findings: 3 (deduplicated: install.sh references, prompt count methodology, no CI/CD)
+Suggestions: 0
+Items requiring user input: 0
+Curator: skipped — significant finding is pre-existing, not policy-grade for this cycle
+
+## [review] 2026-03-22 — Metrics summary
+Agents spawned: 3 (code-reviewer, spec-reviewer, gap-analyst)
+Note: All three reviewers exhausted turn limits. Review files written by coordinator.
+Models used: sonnet
+Slowest agent: gap-analyst — 177076ms
+
+## [refine] 2026-03-22 — Refinement planning completed
+Trigger: Remaining tech debt + deferred design decisions + critical test bug
+Principles changed: none
+New work items: 083-089
+Seven items in two groups. Group 1 (independent): recreate CyberbrainConfig TypedDict (083), clean README install.sh refs (084), fix ARCHITECTURE.md prompt count (085), fix --affected-only import bug (089). Group 2 (design decisions): migrate relation vocabulary to 7-predicate set (086), add search backend cache invalidation (087), refactor cb_extract shared orchestration (088). Research: relation vocabulary analysis recommended merged set over SKOS. Investigation: --affected-only has critical ast.Import detection bug causing ~30% false negatives.
+
+## [refine] 2026-03-22 — Metrics summary
+Agents spawned: 2 (researcher — vocabulary, explorer — affected-only)
+Total wall-clock: 383178ms
+Models used: sonnet (both)
+Slowest agent: researcher (vocabulary) — 246125ms
+
+## [execute] 2026-03-23 — Work item 083: Recreate CyberbrainConfig TypedDict
+Status: complete
+Added TypedDict with 32 fields to config.py. Return types annotated. basedpyright 0 errors.
+
+## [execute] 2026-03-23 — Work item 084: Clean up install.sh/uninstall.sh references in README
+Status: complete
+All install.sh/uninstall.sh references removed. Manual install now uses clone+uv sync. Uninstall uses plugin command.
+
+## [execute] 2026-03-23 — Work item 085: Fix ARCHITECTURE.md prompt count
+Status: complete
+Prompt count was already correct (23). No changes needed.
+
+## [execute] 2026-03-23 — Work item 086: Migrate relation vocabulary to merged 7-predicate set
+Status: complete
+VALID_PREDICATES updated: removed broader/narrower/wasderivedfrom, added causes/caused-by/implements/contradicts. Prompt updated with definitions. Tests updated.
+
+## [execute] 2026-03-23 — Work item 087: Search backend cache invalidation on cb_configure
+Status: complete
+_invalidate_search_backend() added to shared.py. cb_configure calls it when search_backend or embedding_model changes. 4 new tests.
+
+## [execute] 2026-03-23 — Work item 088: Refactor cb_extract shared orchestration
+Status: complete with rework
+Worker hit rate limit after 86 tool calls. Coordinator fixed: 5 test patches (old _extract_beats → run_extraction), 1 test isolation fix, 2 basedpyright type annotations. run_extraction() shared function created. cb_extract and main() both delegate to it.
+
+## [execute] 2026-03-23 — Work item 089: Fix --affected-only import detection bug
+Status: complete
+ast.Import handling added. 8 new tests verify plain import detection and known source-to-test mappings.
+
+## [execute] 2026-03-23 — Metrics summary
+Agents spawned: 7 workers (083-089)
+Models used: sonnet
+Slowest agent: worker-088 (extraction refactor) — 970613ms (hit rate limit)
+
+## [review] 2026-03-23 — Comprehensive review completed (Cycle 017)
+Critical findings: 0
+Significant findings: 2 (run_extraction config param ignored, _write_beats_and_log residual duplication)
+Minor findings: 3 (architecture tensions T5/T6/T7 not marked resolved, CLAUDE.md vocabulary stale, config docs incomplete)
+Suggestions: 0
+Items requiring user input: 0
+Curator: skipped — findings are implementation-level, not policy-grade
+
+## [review] 2026-03-23 — Metrics summary
+Agents spawned: 3 (code-reviewer, spec-reviewer, gap-analyst)
+Note: All three reviewers exhausted turn limits. Review files written by coordinator.
+Models used: sonnet
+Slowest agent: code-reviewer — 196404ms
+
+## [refine] 2026-03-23 — Refinement planning completed
+Trigger: Cycle 017 review findings (2 significant, 3 minor)
+Principles changed: none
+New work items: 090-091
+Two items: fix run_extraction config param + merge _write_beats_and_log (090), mark architecture tensions T5/T6/T7 resolved (091). CLAUDE.md vocabulary update verified not needed. Config doc pass deferred.

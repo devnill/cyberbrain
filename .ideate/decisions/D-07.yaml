@@ -1,0 +1,13 @@
+id: D-07
+type: domain_decision
+domain: retrieval
+status: provisional (design approved; WI-046 implementation not started as of cycle 002)
+cycle: 2
+supersedes: null
+description: "`cb_read` gains: pipe `|` delimited multi-identifier support (up to 10 identifiers), `synthesize: bool` parameter, and `max_chars_per_note: int` (default 2000, 0 = no truncation). Empty-query synthesis uses a fallback message. Pipe `|` is the delimiter because it does not appear in Obsidian filenames."
+rationale: Design approved in WI-041. `max_chars_per_note` was changed from hardcoded to an explicit parameter at user request. Net tool count remains 11.
+cycle_created: 1
+cycle_modified: null
+content_hash: "4a1019b7686362ddb484f959031961d6b74de8f89199a3edbed00b95ecd9e9b1"
+token_count: 184
+file_path: .ideate/decisions/D-07.yaml

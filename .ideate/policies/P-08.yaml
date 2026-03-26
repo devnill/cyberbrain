@@ -1,0 +1,14 @@
+id: P-08
+type: domain_policy
+domain: distribution
+status: active
+derived_from:
+  - D-11
+established: cycle 012 (WI-058)
+amended: null
+description: "Modules that intentionally re-export symbols use per-file `# noqa: F401` annotations or targeted pyproject.toml per-file ignores. Global F401 suppression is prohibited."
+cycle_created: 1
+cycle_modified: null
+content_hash: c1631e9065561415b1310d11c855269c000c1e903a6c3540d808417053960279
+token_count: 104
+file_path: .ideate/policies/P-08.yaml

@@ -1,0 +1,11 @@
+id: J-009-018
+type: journal_entry
+phase: brrr
+date: "2026-03-21"
+cycle_created: 9
+title: "Cycle 1 — Work item 064: Fix enrich delimiter"
+content: |
+  Status: already-complete
+  enrich.py already uses "\n---\n" (bare dashes with trailing newline). Test already exists (test_body_dash_heading_not_treated_as_closing_delimiter). No changes needed.
+content_hash: "53ddf9a73def907be4620ea471042119914fbe7acfa2a5638cdd481f1ebb1fc1"
+token_count: 90

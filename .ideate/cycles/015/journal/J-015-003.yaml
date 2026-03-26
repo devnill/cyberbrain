@@ -1,0 +1,12 @@
+id: J-015-003
+type: journal_entry
+phase: execute
+date: "2026-03-22"
+cycle_created: 15
+title: "Work item 077: Fix search_backends.py dead branch"
+content: |
+  Status: complete with rework
+  Rework: 2 minor findings fixed from incremental review. M1: Added stderr diagnostic to FTS5 fallback except block. M2: Updated misleading comment about FTS5 always being available.
+  Replaced `if _has_fastembed() or True:` with try/except FTS5Backend with GrepBackend fallback. No deviations from plan.
+content_hash: "92b41788cedcab5d4433f7479fc18090b0dc5d885c69c0b7bbe0abd4437ffa98"
+token_count: 125

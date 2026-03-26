@@ -1,0 +1,15 @@
+id: F-006-032
+type: finding
+cycle: 6
+reviewer: gap-analyst
+severity: minor
+title: Repair script scans dotfolders including `.trash` (OQ2 — still deferred)
+description: ""
+file_path: cycles/006/findings/F-006-032.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-006
+verdict: null
+content_hash: "76ad6faeacf1ddadac19deb83929d97195b4a4b6e905a672f2c918596f822589"
+token_count: 81

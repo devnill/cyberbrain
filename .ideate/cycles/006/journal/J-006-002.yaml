@@ -1,0 +1,11 @@
+id: J-006-002
+type: journal_entry
+phase: execute
+date: "2026-03-10"
+cycle_created: 6
+title: "Work item 031: Research Claude Code plugin system capabilities"
+content: |
+  Status: complete
+  Pure research task. Created `specs/steering/research/plugin-system-capabilities.md` covering: plugin.json field schema, post-install lifecycle hooks (not supported), MCP server bundling via mcpServers field, versioning/update mechanism, marketplace install flow, uvx launch pattern, install.sh responsibilities breakdown, and concrete recommendations. All acceptance criteria met.
+content_hash: f7e2a5a9fcc4542a54a79e62e658a7da0ddbacda9903ae13af344d8680934579
+token_count: 145

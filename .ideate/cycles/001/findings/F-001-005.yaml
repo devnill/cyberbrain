@@ -1,0 +1,19 @@
+id: F-001-005
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: significant
+title: manage.py imports tools.recall by unqualified relative path
+description: |
+  - **File**: `/Users/dan/code/cyberbrain/src/cyberbrain/mcp/tools/manage.py:12`
+  - **Issue**: `from tools.recall import _DEFAULT_DB_PATH, _DEFAULT_MANIFEST_PATH` is a partially-qualified import. This works only if the parent of `tools/` (i.e., `mcp/`) is on `sys.path`. After migration the correct import is `from cyberbrain.mcp.tools.recall import _DEFAULT_DB_PATH, _DEFAULT_MANIFEST_PATH`.
+  - **Impact**: `cb_configure` and `cb_status` will raise `ModuleNotFoundError: No module named 'tools'` in a properly installed package, where the old `mcp/` directory is not on `sys.path`.
+  - **Suggested fix**: Change to `from cyberbrain.mcp.tools.recall import _DEFAULT_DB_PATH, _DEFAULT_MANIFEST_PATH`.
+file_path: cycles/001/findings/F-001-005.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-001
+verdict: Fail
+content_hash: "79cfc196adf2b9b3fb608161bcdb1afec9f5e97c0df16af32cf421aabc087504"
+token_count: 255

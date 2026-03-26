@@ -1,0 +1,18 @@
+id: F-002-020
+type: finding
+cycle: 2
+reviewer: code-reviewer
+severity: minor
+title: Stale EXTRACTORS_DIR constant in scripts/import.py
+description: |
+  - **File**: `scripts/import.py:33`
+  - **Issue**: `EXTRACTORS_DIR = Path.home() / ".claude" / "cyberbrain" / "extractors"` is defined but never referenced. Dead constant from the pre-src-layout era.
+  - **Suggested fix**: Remove line 33.
+file_path: cycles/002/findings/F-002-020.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: cycle-002
+verdict: Fail
+content_hash: fab617d4212707d77c6f2f585576c554509978f9e3a309a1a654d4f6396d8080
+token_count: 137

@@ -1,0 +1,14 @@
+id: P-05
+type: domain_policy
+domain: distribution
+status: active
+derived_from:
+  - DL17; GP-6 (Lean Architecture)
+established: WI-032 research, cycle 5
+amended: null
+description: `uv run --directory ${CLAUDE_PLUGIN_ROOT}` is the canonical invocation for the MCP server. This aligns with the de facto ecosystem pattern for Python MCP servers.
+cycle_created: 1
+cycle_modified: null
+content_hash: "8db12f68982d29c97e4b98d42ea57d85cdbb32f479f02cee55e975b19339b8ae"
+token_count: 111
+file_path: .ideate/policies/P-05.yaml

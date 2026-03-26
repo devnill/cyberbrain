@@ -1,0 +1,18 @@
+id: FI-016-006
+type: finding
+cycle: 16
+reviewer: code-reviewer
+severity: minor
+title: Placeholder /path/to/plugin/root gives no hint it is auto-populated
+description: |
+  - **File**: `README.md:444`
+  - **Issue**: Users comparing real config to example wouldn't know the path is substituted.
+  - **Suggested fix**: Added clarifying note after code block. **Applied.**
+file_path: cycles/016/findings/FI-016-006.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-081
+verdict: Pass
+content_hash: f0949406bbfbbdb26929650ef8c55d93ad60ec0c4ef9a092deb9131f1c2a1b02
+token_count: 130

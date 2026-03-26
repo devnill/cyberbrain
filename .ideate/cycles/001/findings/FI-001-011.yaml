@@ -1,0 +1,15 @@
+id: FI-001-011
+type: finding
+cycle: 1
+reviewer: code-reviewer
+severity: minor
+title: Enrich gate confidence not included in report
+description: "- **Issue**: When enrich gate blocks an item, the report shows the rationale but not the confidence score. Other tools (review, restructure) include confidence in their gate output."
+file_path: cycles/001/findings/FI-001-011.yaml
+line: null
+suggestion: null
+addressed_by: null
+work_item: WI-011
+verdict: Pass
+content_hash: "5185fab423ee158c3b60651c4cc0074fa7b6679af4c4499eb32855e818983981"
+token_count: 121

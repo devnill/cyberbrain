@@ -1,0 +1,13 @@
+id: J-009-001
+type: journal_entry
+phase: refine
+date: "2026-03-12"
+cycle_created: 9
+title: Refinement cycle 7 planning completed
+content: |
+  Trigger: Cycle 002 review found critical post-WI-034 bugs (install.sh broken, runtime bare imports) + user requirements for intake/retrieval interface redesign, filing accuracy improvements, and automatic indexing.
+  Principles changed: none
+  New work items: 035-047
+  Three workstreams: (1) Distribution completion — fix install.sh (035), bare imports (036), docs cleanup (037). (2) Interface redesign — research intake/retrieval (040, 041 design, then 042, 046 implementation); tool count must not increase relative to removals. (3) Filing accuracy and automation — research clustering/confidence (038), research auto-indexing (039), then implement confidence scoring (043), clustering fix + history injection (044), automatic indexing (045). WI-047 updates vault CLAUDE.md last and requires user approval before writing to live vault. User consultation gates: design review after WI-040/041, vault write approval before WI-047.
+content_hash: "49899e14b09ce6e993ea0629007ca8bc280df203de64dd212f389a529191a6c2"
+token_count: 271
