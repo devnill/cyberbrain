@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.1.1 — 2026-03-26
+
+Code quality and constraint enforcement patch.
+
+### Improvements
+
+- **Extraction orchestration unified** — `run_extraction()` now accepts `config` and `beats` parameters; `_write_beats_and_log()` removed (eliminated duplicate orchestration path)
+- **Lazy state paths** — `state.py` constants converted to functions; `Path.home()` no longer evaluated at import time (fixes test isolation fragility)
+- **C-06 enforced** — `cb_review` and `cb_restructure` vault writes routed through `write_vault_note()`/`update_vault_note()`/`move_vault_note()` abstraction layer in `vault.py`
+- **`_is_within_vault` consolidated** — single implementation in `vault.py`, re-exported via `shared.py`; duplicate in `shared.py` removed
+
+### Bug Fixes
+
+- Fixed `run_extraction()` ignoring passed `config` parameter (always re-loaded from disk)
+- Fixed 2 basedpyright type errors (`CyberbrainConfig` assignability in `shared.py` and `evaluate.py`)
+- Removed dead code in `--beats-json` CLI path (unreachable `result["skipped"]` check)
+
+### Documentation
+
+- Architecture tensions T5, T6, T7 marked as resolved
+
 ## 1.1.0 — 2026-03-22
 
 Architecture and code quality release. No new features or breaking changes.

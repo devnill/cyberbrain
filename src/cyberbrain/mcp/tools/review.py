@@ -13,7 +13,6 @@ from pydantic import Field
 from cyberbrain.mcp.shared import (
     _get_search_backend,
     _index_paths,
-    _is_within_vault,
     _load_config,
     _move_to_trash,
     _parse_frontmatter,
@@ -419,11 +418,6 @@ def register(mcp: FastMCP) -> None:
                     continue
 
                 output_path = vault / promoted_path_rel
-                if not _is_within_vault(vault, output_path):
-                    result_lines.append(
-                        f"Promote skipped — path traversal rejected: {promoted_path_rel}"
-                    )
-                    continue
 
                 # Inject provenance
                 prov = f"\ncb_source: cb-review\ncb_created: {ts}"
@@ -434,7 +428,13 @@ def register(mcp: FastMCP) -> None:
                             promoted_content[:end] + prov + promoted_content[end:]
                         )
 
-                write_vault_note(output_path, promoted_content, vault_path_str)
+                try:
+                    write_vault_note(output_path, promoted_content, vault_path_str)
+                except ValueError:
+                    result_lines.append(
+                        f"Promote skipped — path traversal rejected: {promoted_path_rel}"
+                    )
+                    continue
                 promoted += 1
                 written_paths.append(output_path)
 

@@ -1,6 +1,6 @@
 [project]
 name = "cyberbrain-mcp"
-version = "1.1.0"
+version = "1.1.1"
 description = "Knowledge capture and retrieval for Claude sessions"
 readme = "README.md"
 requires-python = ">=3.11"

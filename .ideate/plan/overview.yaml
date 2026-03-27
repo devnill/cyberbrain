@@ -1,31 +1,21 @@
 id: overview
 type: overview
-title: Refinement Cycle 18 — Cycle 017 Review Follow-up
-content: |
-  # Refinement Cycle 18 — Cycle 017 Review Follow-up
-  
+title: Cycle 22 — Minor Cleanup
+content: |-
+  # Cycle 22 — Minor Cleanup
+
   ## What is Changing
-  
-  Addressing the 2 significant and 3 minor findings from cycle 017 review. Completing the extraction orchestration unification and updating documentation.
-  
-  ## Triggering Context
-  
-  Cycle 017 review found run_extraction() ignores its config parameter and _write_beats_and_log() remains as residual duplication. Architecture doc tensions T5/T6/T7 were resolved in code but not marked in documentation.
-  
+
+  Addressing 3 minor findings and 2 suggestions from the cycle 21 review. Dead code removal and _is_within_vault consolidation.
+
   ## Scope Boundary
-  
+
   **In scope:**
-  - Fix run_extraction() to use passed config when non-None
-  - Merge _write_beats_and_log() into run_extraction() via optional beats parameter
-  - Mark T5/T6/T7 resolved in specs/plan/architecture.md
-  
-  **Not in scope:**
-  - Config documentation pass (deferred — TypedDict is canonical reference)
-  - CI/CD pipeline
-  - New features
-  
-  ## Principles / Architecture
-  
-  No changes to principles. Architecture doc updated to mark resolved tensions.
-content_hash: "140b01fe54a4aded1db924b451d07bb1d84ed84aa575c040372db47f2fc086c8"
-token_count: 265
+  - Remove unreachable result["skipped"] check in extract_beats.py --beats-json path
+  - Remove redundant _is_within_vault pre-check in review.py promote path
+  - Consolidate duplicate _is_within_vault from shared.py into vault.py re-export
+
+  **Not in scope:** Everything else.
+content_hash: eec64fd2ec9636bf8ee04ad02ca15843683a9c858d1a411bd0c08d389e75fe5b
+token_count: 142
+file_path: .ideate/plan/overview.yaml

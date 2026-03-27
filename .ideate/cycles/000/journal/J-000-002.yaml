@@ -3,38 +3,28 @@ type: journal_entry
 phase: execute
 date: 2026-03-26
 cycle_created: 0
-title: execution-complete
+title: cycle-22-complete
 content: >-
-  ## [execute] 2026-03-26 — Execution complete
+  ## [execute] 2026-03-26 — Cycle 22 complete
 
 
-  ### WI-094: Add vault write abstraction layer
-
-  Status: complete with rework
-
-  Rework: 1 significant finding — update_vault_note missing existence check.
-  Fixed. 2 minor findings fixed (missing tests for nonexistent file paths).
-
-
-  ### WI-095: Enforce C-06 in cb_review
+  ### WI-097: Remove dead and redundant code
 
   Status: complete
 
-  All 3 direct vault write sites migrated to write_vault_note/update_vault_note.
-  Consolidation log append converted to read+write pattern. _extend_review_after
-  signature updated to accept vault_path.
+  Removed unreachable result["skipped"] check in extract_beats.py --beats-json
+  path. Removed redundant _is_within_vault pre-check in review.py promote path,
+  replaced with try/except ValueError around write_vault_note. Removed
+  _is_within_vault import from review.py.
 
 
-  ### WI-096: Enforce C-06 in cb_restructure
+  ### WI-098: Consolidate _is_within_vault
 
   Status: complete
 
-  All 5 direct vault write sites migrated to write_vault_note/move_vault_note.
-  Inline _is_within_vault checks replaced with try/except ValueError.
+  Deleted duplicate _is_within_vault from shared.py, added re-export from
+  vault.py. Refactored vault.py _is_within_vault_check to call _is_within_vault
+  (DRY). Single source of truth for vault path validation.
 
 
-  ### Summary
-
-  All 5 work items complete. 1331 tests passing, 0 pyright errors. C-06
-  constraint now enforced — review.py and restructure/execute.py have zero
-  direct .write_text() or .rename() calls on vault paths.
+  1331 tests pass, 0 pyright errors.

@@ -305,16 +305,10 @@ def main():
         result = run_extraction(
             None, session_id, args.trigger, args.cwd, config=config, beats=beats
         )
-        if result["skipped"]:
-            print(
-                f"[extract_beats] Session '{session_id}' already extracted. Skipping.",
-                file=sys.stderr,
-            )
-        else:
-            print(
-                f"[extract_beats] Done. {result['beats_written']} beat(s) written.",
-                file=sys.stderr,
-            )
+        print(
+            f"[extract_beats] Done. {result['beats_written']} beat(s) written.",
+            file=sys.stderr,
+        )
         return
 
     # Normal transcript path

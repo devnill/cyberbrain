@@ -439,9 +439,7 @@ cb_created: {date_str}{wm_fields}{uncertain_routing_field}
 
 def _is_within_vault_check(vault: Path, target: Path) -> None:
     """Raise ValueError if target is not within vault."""
-    try:
-        target.resolve().relative_to(vault.resolve())
-    except ValueError:
+    if not _is_within_vault(vault, target):
         raise ValueError(f"Path {target} is not within vault {vault}")
 
 
