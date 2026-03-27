@@ -1,0 +1,47 @@
+id: WI-098
+type: work_item
+title: Consolidate _is_within_vault into vault.py
+status: done
+complexity: low
+scope:
+  - path: src/cyberbrain/mcp/shared.py
+    op: modify
+  - path: src/cyberbrain/extractors/vault.py
+    op: modify
+depends: []
+blocks: []
+criteria:
+  - shared.py no longer defines its own _is_within_vault function
+  - shared.py re-exports _is_within_vault from vault.py
+  - vault.py _is_within_vault_check calls _is_within_vault for DRY (no duplicated resolve().relative_to() logic)
+  - All callers of shared._is_within_vault continue to work (pipeline.py, collect.py)
+  - All existing tests pass (1331+)
+  - basedpyright reports 0 errors
+domain: cross-cutting
+notes: |-
+  ## Implementation Notes
+
+  ### shared.py
+  Delete the _is_within_vault function definition at lines 95-101. Add to the vault import block (line 31):
+  ```python
+  from cyberbrain.extractors.vault import _is_within_vault
+  ```
+
+  Callers that import from shared.py (pipeline.py:16, review.py:16 if still present) get the vault.py version via re-export.
+
+  ### vault.py
+  vault.py already has _is_within_vault at line 98 (boolean return). Also has _is_within_vault_check at line 440 (raises ValueError). Refactor _is_within_vault_check to call _is_within_vault:
+
+  ```python
+  def _is_within_vault_check(vault: Path, target: Path) -> None:
+      if not _is_within_vault(vault, target):
+          raise ValueError(f"Path {target} is not within vault {vault}")
+  ```
+
+  This eliminates the duplicated resolve().relative_to() logic.
+resolution: null
+cycle_created: 22
+cycle_modified: null
+content_hash: 2f9e91f14b3390e7c1710d57d0ad38cb5f18f73664c355e714ff2c8d1de283f3
+token_count: 392
+file_path: .ideate/work-items/WI-098.yaml

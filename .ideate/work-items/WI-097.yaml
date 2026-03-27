@@ -1,0 +1,35 @@
+id: WI-097
+type: work_item
+title: Remove dead and redundant code
+status: done
+complexity: low
+scope:
+  - path: src/cyberbrain/extractors/extract_beats.py
+    op: modify
+  - path: src/cyberbrain/mcp/tools/review.py
+    op: modify
+depends: []
+blocks: []
+criteria:
+  - Lines 308-312 of extract_beats.py (unreachable result["skipped"] check in --beats-json path) are removed
+  - The _is_within_vault pre-check at review.py:422 is removed (write_vault_note validates internally)
+  - The _is_within_vault import in review.py is removed if no longer used
+  - All existing tests pass (1331+)
+  - basedpyright reports 0 errors
+domain: cross-cutting
+notes: |-
+  ## Implementation Notes
+
+  ### extract_beats.py dead code
+  In main(), the --beats-json path at ~line 293 calls sys.exit(0) if session already extracted. Then run_extraction() is called at ~line 305. The result["skipped"] check at lines 308-312 is unreachable because the dedup guard already exited. Remove lines 308-312.
+
+  ### review.py redundant pre-check
+  Line 422: `if not _is_within_vault(vault, output_path):` is a pre-check before `write_vault_note()` at line 437. Since write_vault_note() calls _is_within_vault_check() internally, this pre-check is redundant. Remove the if block (lines 422-426). The write_vault_note call will raise ValueError if the path is outside the vault — wrap it in try/except ValueError and append the same skip message.
+
+  Also remove `_is_within_vault` from the import block (line 16) if no other uses remain in the file.
+resolution: null
+cycle_created: 22
+cycle_modified: null
+content_hash: 3a30c7262582bc43ff46565c86b1a0ecc73d292e80d20952a4f07c2ec8b77388
+token_count: 392
+file_path: .ideate/work-items/WI-097.yaml
