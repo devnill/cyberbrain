@@ -30,15 +30,16 @@ def extract_beats(transcript_text: str, config: dict, trigger: str, cwd: str) ->
     if vault_claude_md:
         vault_claude_md_section = (
             "<vault_claude_md>\n"
-            "The following is the vault's CLAUDE.md, which defines the type vocabulary "
-            "and filing conventions for this vault. Use the type vocabulary defined here "
-            "instead of the default four-type vocabulary.\n\n"
+            "The following is the vault's CLAUDE.md, which defines filing conventions "
+            "for this vault. Use it for context about the vault's domain structure and "
+            "tag conventions, but always use the four beat types (decision, insight, "
+            "problem, reference) for the `type` field — not the vault's entity types.\n\n"
             f"{vault_claude_md}\n"
             "</vault_claude_md>\n\n"
         )
     else:
         vault_claude_md_section = (
-            "No vault CLAUDE.md was found. Use the default four-type vocabulary only: "
+            "No vault CLAUDE.md was found. Use the default four beat types: "
             "decision, insight, problem, reference.\n\n"
         )
 

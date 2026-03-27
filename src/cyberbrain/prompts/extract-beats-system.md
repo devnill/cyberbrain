@@ -26,11 +26,9 @@ For each beat, classify its scope:
 - "project": specific to this codebase/project (would only be useful in this project context)
 - "general": broadly applicable across projects (would be useful anywhere)
 
-## Type vocabulary
+## Beat type vocabulary
 
-**When a vault CLAUDE.md is provided in the user message:** Use the type vocabulary defined in that CLAUDE.md. The CLAUDE.md is the authoritative source — it overrides the default types below.
-
-**When no vault CLAUDE.md is provided:** Use these four default types and no others:
+Always use these four beat types for classification — regardless of whether a vault CLAUDE.md is provided. The vault CLAUDE.md may define separate "entity types" for vault organization; ignore those here. Beat types are mapped to entity types automatically after extraction.
 
 | Type | What it captures |
 |---|---|
@@ -112,7 +110,7 @@ Each beat object must have exactly these fields:
 ```json
 {
   "title": "Brief, descriptive title (5-10 words). Do not use #, [, ], or ^ — these characters break Obsidian wikilinks when used in filenames. Write 'CSharp' not 'C#', 'Sharp' not '#'.",
-  "type": "one of the valid types for this vault (see above)",
+  "type": "decision, insight, problem, or reference (beat type only — see above)",
   "scope": "project or general",
   "durability": "durable or working-memory",
   "summary": "Single information-dense sentence optimized for search/retrieval",

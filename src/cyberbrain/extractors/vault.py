@@ -18,26 +18,52 @@ from cyberbrain.extractors.config import GLOBAL_CONFIG_PATH
 # Beat type and scope vocabulary
 # ---------------------------------------------------------------------------
 
-_DEFAULT_VALID_TYPES = {"decision", "insight", "problem", "reference"}
+_DEFAULT_VALID_BEAT_TYPES = {"decision", "insight", "problem", "reference"}
+_DEFAULT_VALID_ENTITY_TYPES = {"project", "note", "resource", "archived"}
 VALID_SCOPES = {"project", "general"}
+
+# Beat type → vault entity type mapping.
+# Durable beats are reference material; working-memory beats are temporal captures.
+_BEAT_TO_ENTITY_TYPE = {
+    "decision": "resource",
+    "insight": "resource",
+    "problem": "note",
+    "reference": "resource",
+}
+
+
+def _resolve_entity_type(beat_type: str, durability: str) -> str:
+    """Map a beat type to a vault entity type based on durability."""
+    if durability == "working-memory":
+        return "note"
+    return _BEAT_TO_ENTITY_TYPE.get(beat_type, "resource")
 
 
 def parse_valid_types_from_claude_md(vault_claude_md_text: str) -> set:
     """
-    Extract the type vocabulary from a vault CLAUDE.md.
+    Extract the entity type vocabulary from a vault CLAUDE.md.
     Looks for a ## Entity Types or ## Types section and reads subsection headings.
-    Falls back to _DEFAULT_VALID_TYPES if nothing parseable is found.
+    Explicitly skips ## Beat Types sections (those are a separate vocabulary).
+    Falls back to _DEFAULT_VALID_ENTITY_TYPES if nothing parseable is found.
     """
     if not vault_claude_md_text:
-        return _DEFAULT_VALID_TYPES
+        return _DEFAULT_VALID_ENTITY_TYPES
 
     types: set = set()
 
     in_types_section = False
     for line in vault_claude_md_text.splitlines():
         stripped = line.strip()
+        # Skip Beat Types sections — those define a separate vocabulary
         if re.match(
-            r"^#{1,3}\s+(entity\s+types?|beat\s+types?|note\s+types?|types?)\s*$",
+            r"^#{1,3}\s+beat\s+types?\s*$",
+            stripped,
+            re.IGNORECASE,
+        ):
+            in_types_section = False
+            continue
+        if re.match(
+            r"^#{1,3}\s+(entity\s+types?|note\s+types?|types?)\s*$",
             stripped,
             re.IGNORECASE,
         ):
@@ -57,7 +83,7 @@ def parse_valid_types_from_claude_md(vault_claude_md_text: str) -> set:
 
     if types:
         return types
-    return _DEFAULT_VALID_TYPES
+    return _DEFAULT_VALID_ENTITY_TYPES
 
 
 def read_vault_claude_md(vault_path: str) -> str | None:
@@ -72,11 +98,16 @@ def read_vault_claude_md(vault_path: str) -> str | None:
 
 
 def get_valid_types(config: dict) -> set:
-    """Return the valid beat types for this vault, read from vault CLAUDE.md if available."""
+    """Return the valid entity types for this vault, read from vault CLAUDE.md if available."""
     vault_claude_md = read_vault_claude_md(config["vault_path"])
     if vault_claude_md:
         return parse_valid_types_from_claude_md(vault_claude_md)
-    return _DEFAULT_VALID_TYPES
+    return _DEFAULT_VALID_ENTITY_TYPES
+
+
+def get_valid_beat_types(config: dict) -> set:
+    """Return the valid beat types (extraction vocabulary). Always the default set."""
+    return _DEFAULT_VALID_BEAT_TYPES.copy()
 
 
 # ---------------------------------------------------------------------------
@@ -319,6 +350,27 @@ def _wm_frontmatter_fields(beat: dict, config: dict, now: datetime) -> str:
     return f"cb_ephemeral: true\ncb_review_after: {review_after}"
 
 
+_FOLDER_TO_DOMAIN: dict[str, str] = {
+    "work": "work",
+    "personal": "personal",
+    "knowledge": "knowledge",
+    "ai": "knowledge",
+}
+
+
+def _infer_domain_tag(output_dir: Path, vault_path: str) -> str | None:
+    """Infer the domain tag from the output directory path within the vault."""
+    vault = Path(vault_path)
+    try:
+        rel = output_dir.resolve().relative_to(vault.resolve())
+    except ValueError:
+        return None
+    parts = rel.parts
+    if not parts:
+        return None
+    return _FOLDER_TO_DOMAIN.get(parts[0].lower())
+
+
 def write_beat(
     beat: dict,
     config: dict,
@@ -329,10 +381,14 @@ def write_beat(
     source: str = "hook-extraction",
 ) -> Path | None:
     """Write a single beat to a markdown file. Returns the file path, or None if routing fails."""
-    valid_types = get_valid_types(config)
     beat_type = beat.get("type", "reference")
-    if beat_type not in valid_types:
+    if beat_type not in _DEFAULT_VALID_BEAT_TYPES:
         beat_type = "reference"
+
+    durability = beat.get("durability", "durable")
+
+    # Map beat type to vault entity type
+    entity_type = _resolve_entity_type(beat_type, durability)
 
     scope = beat.get("scope", "general")
     if scope not in VALID_SCOPES:
@@ -363,13 +419,17 @@ def write_beat(
     if output_dir is None:
         return None
 
+    # Inject domain tag based on output folder
+    domain_tag = _infer_domain_tag(output_dir, config["vault_path"])
+    if domain_tag and domain_tag not in tags:
+        tags.insert(0, domain_tag)
+
     output_path = output_dir / make_filename(title)
     counter = 2
     while output_path.exists():
         output_path = output_dir / f"{counter} {make_filename(title)}"
         counter += 1
 
-    durability = beat.get("durability", "durable")
     wm_fields = ""
     if durability == "working-memory":
         wm_fields = "\n" + _wm_frontmatter_fields(beat, config, now)
@@ -379,20 +439,24 @@ def write_beat(
         confidence_val = beat["_autofile_low_confidence"]
         uncertain_routing_field = f"\ncb_uncertain_routing: {confidence_val:.2f}"
 
+    # Derive status from durability
+    status = "active" if durability == "durable" else "active"
+
     # Use json.dumps for string fields to safely handle quotes and special chars.
     # JSON string syntax is valid YAML scalar syntax.
     front_matter = f"""---
 id: {beat_id}
 date: {date_str}
 session_id: {session_id}
-type: {beat_type}
+type: {entity_type}
+beat_type: {beat_type}
 scope: {scope}
 title: {json.dumps(title)}
 project: {project_name}
 cwd: {cwd}
 tags: {json.dumps(tags)}
 related: {json.dumps(related_wikilinks)}
-status: completed
+status: {status}
 summary: {json.dumps(summary)}
 cb_source: {source}
 cb_created: {date_str}{wm_fields}{uncertain_routing_field}
@@ -421,7 +485,8 @@ cb_created: {date_str}{wm_fields}{uncertain_routing_field}
             "summary": summary,
             "tags": tags,
             "related": related_wikilinks,
-            "type": beat_type,
+            "type": entity_type,
+            "beat_type": beat_type,
             "scope": scope,
             "project": project_name,
             "date": date_str,

@@ -11,19 +11,25 @@ in the same order as the input:
 [
   {
     "index": 0,
-    "type": "one of the valid types for this vault",
+    "type": "one of the valid entity types for this vault (NOT beat types)",
     "summary": "One sentence. Front-load the key noun or concept. Include terms a future searcher would use. Do not start with 'This note...' or 'A guide to...'",
-    "tags": ["2-6 lowercase keywords", "most distinguishing terms only"],
+    "tags": ["domain-tag", "2-5 specific topic keywords"],
     "skip": false,
     "skip_reason": ""
   }
 ]
 
+Type rules:
+- Use ONLY entity types: project, note, resource, archived
+- Do NOT use beat types (decision, insight, problem, reference) — those are a separate vocabulary
+- When in doubt: stable reference material → resource, temporal capture → note
+
 Tag rules:
-- 2-6 lowercase keywords
-- Most distinguishing terms only
+- First tag MUST be a domain tag: "work", "personal", or "knowledge"
+- Infer domain from the note's file path (Work/ → work, Personal/ → personal, Knowledge/ → knowledge, AI/ → knowledge)
+- Then add 2-5 specific, distinguishing topic keywords
 - Omit generic words: note, guide, tips, overview
-- Omit domain-level terms: personal, work, home
+- Do NOT use placeholder tags like "new-tag" or "updated"
 
 If a note is a daily journal entry, meeting notes, reading list, draft, or template
 that cannot be meaningfully classified into any valid type, set "skip": true and

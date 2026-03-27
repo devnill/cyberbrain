@@ -22,27 +22,31 @@ from cyberbrain.mcp.shared import (
 
 _DAILY_JOURNAL_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
 _BATCH_SIZE = 10
-_DEFAULT_TYPES = ["decision", "insight", "problem", "reference"]
+_DEFAULT_ENTITY_TYPES = ["project", "note", "resource", "archived"]
+_BEAT_TYPES = {"decision", "insight", "problem", "reference"}
 
 
 def _get_valid_types(vault: Path) -> list[str]:
-    """Extract valid type vocabulary from vault CLAUDE.md, or return defaults."""
+    """Extract valid entity type vocabulary from vault CLAUDE.md, or return defaults."""
     claude_md = vault / "CLAUDE.md"
     if not claude_md.exists():
-        return _DEFAULT_TYPES[:]
+        return _DEFAULT_ENTITY_TYPES[:]
 
     content = claude_md.read_text(encoding="utf-8")
-    # Look for `type: typename` patterns in YAML examples within the CLAUDE.md
+    # Look for `type: typename` patterns in YAML examples within the CLAUDE.md,
+    # but exclude beat types (decision/insight/problem/reference) which are a
+    # separate vocabulary used during extraction, not vault entity types.
     yaml_types = re.findall(r"\btype:\s+([a-z][a-z-]+)\b", content)
     if yaml_types:
         seen: list[str] = []
+        skip = {"journal", "moc", "template", "skip"} | _BEAT_TYPES
         for t in yaml_types:
-            if t not in seen and t not in ("journal", "moc", "template", "skip"):
+            if t not in seen and t not in skip:
                 seen.append(t)
         if len(seen) >= 2:
             return seen[:10]
 
-    return _DEFAULT_TYPES[:]
+    return _DEFAULT_ENTITY_TYPES[:]
 
 
 def _get_vault_type_context(vault: Path) -> str:
@@ -51,17 +55,23 @@ def _get_vault_type_context(vault: Path) -> str:
     if claude_md.exists():
         content = claude_md.read_text(encoding="utf-8")
         return (
-            "Use the type vocabulary defined in the vault's CLAUDE.md below. "
-            "Choose types only from those listed there.\n\n"
+            "Use ONLY the vault entity type vocabulary from the CLAUDE.md below. "
+            "Valid entity types are: project, note, resource, archived. "
+            "Do NOT use beat types (decision, insight, problem, reference) — "
+            "those are a separate extraction vocabulary and must not appear as `type:` values.\n\n"
+            "For domain tags, every note MUST have at least one of: work, personal, knowledge. "
+            "Add this based on the note's folder location and content. "
+            "Then add 2-5 specific topic tags.\n\n"
             f"Vault CLAUDE.md (excerpt):\n{content[:3000]}"
         )
-    types = _DEFAULT_TYPES
+    types = _DEFAULT_ENTITY_TYPES
     return (
-        f"Use these four default types: {', '.join(types)}.\n"
-        "- decision: a choice made between alternatives, with rationale\n"
-        "- insight: a non-obvious understanding or pattern\n"
-        "- problem: something broken, blocked, or constrained\n"
-        "- reference: a fact, command, snippet, or config value for future lookup"
+        f"Use these four entity types: {', '.join(types)}.\n"
+        "- project: active work being built or maintained\n"
+        "- note: quick capture, meeting note, or uncertain item\n"
+        "- resource: stable reference used for lookup\n"
+        "- archived: completed, retired, or superseded\n\n"
+        "Do NOT use beat types (decision, insight, problem, reference) as `type:` values."
     )
 
 

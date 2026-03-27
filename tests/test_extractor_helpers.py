@@ -343,16 +343,16 @@ import cyberbrain.extractors.vault as vault_mod
 class TestParseValidTypesFromClaudeMd:
     def test_empty_text_returns_defaults(self):
         result = vault_mod.parse_valid_types_from_claude_md("")
-        assert result == vault_mod._DEFAULT_VALID_TYPES
+        assert result == vault_mod._DEFAULT_VALID_ENTITY_TYPES
 
     def test_none_returns_defaults(self):
         result = vault_mod.parse_valid_types_from_claude_md(None)
-        assert result == vault_mod._DEFAULT_VALID_TYPES
+        assert result == vault_mod._DEFAULT_VALID_ENTITY_TYPES
 
     def test_no_types_section_returns_defaults(self):
         text = "# My Vault\n\nSome content here.\n"
         result = vault_mod.parse_valid_types_from_claude_md(text)
-        assert result == vault_mod._DEFAULT_VALID_TYPES
+        assert result == vault_mod._DEFAULT_VALID_ENTITY_TYPES
 
     def test_parses_types_from_level4_subsections(self):
         # The code ends the types section on any #{1,3} heading, so type headings
@@ -375,15 +375,26 @@ class TestParseValidTypesFromClaudeMd:
         assert "insight" in result
 
     def test_parses_backtick_types(self):
-        # Inline backtick types within the Types section are also captured.
+        # Inline backtick types within the Entity Types section are captured.
+        text = textwrap.dedent("""\
+            ## Entity Types
+
+            Use `resource` for reference and `note` for captures.
+        """)
+        result = vault_mod.parse_valid_types_from_claude_md(text)
+        assert "resource" in result
+        assert "note" in result
+
+    def test_skips_beat_types_section(self):
+        # ## Beat Types is a separate vocabulary and should be ignored.
         text = textwrap.dedent("""\
             ## Beat Types
 
             Use `reference` for facts and `problem` for blockers.
         """)
         result = vault_mod.parse_valid_types_from_claude_md(text)
-        assert "reference" in result
-        assert "problem" in result
+        # Falls back to defaults since no entity types section was found
+        assert result == vault_mod._DEFAULT_VALID_ENTITY_TYPES
 
     def test_types_section_ends_at_next_h2_heading(self):
         # #{1,3} headings end the types section. Only #### headings inside it
@@ -425,7 +436,7 @@ class TestGetValidTypes:
     def test_returns_defaults_when_no_claude_md(self, tmp_path):
         config = {"vault_path": str(tmp_path)}
         result = vault_mod.get_valid_types(config)
-        assert result == vault_mod._DEFAULT_VALID_TYPES
+        assert result == vault_mod._DEFAULT_VALID_ENTITY_TYPES
 
     def test_returns_types_from_claude_md(self, tmp_path):
         claude_md = tmp_path / "CLAUDE.md"
@@ -953,7 +964,7 @@ class TestExtractBeats:
         ):
             extractor_mod.extract_beats("text", config, "manual", "/cwd")
 
-        assert "default four-type vocabulary" in calls[0]
+        assert "default four beat types" in calls[0]
 
 
 # ===========================================================================

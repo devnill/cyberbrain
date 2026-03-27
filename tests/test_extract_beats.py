@@ -65,7 +65,8 @@ from cyberbrain.extractors.run_log import (
 )
 from cyberbrain.extractors.transcript import parse_jsonl_transcript
 from cyberbrain.extractors.vault import (
-    _DEFAULT_VALID_TYPES,
+    _DEFAULT_VALID_BEAT_TYPES,
+    _DEFAULT_VALID_ENTITY_TYPES,
     _is_within_vault,
     build_vault_titles_set,
     get_valid_types,
@@ -336,7 +337,8 @@ class TestWriteBeat:
 
         content = path.read_text(encoding="utf-8")
         assert content.startswith("---")
-        assert "type: decision" in content
+        assert "type: resource" in content  # decision maps to resource entity type
+        assert "beat_type: decision" in content
         assert "session_id: sess001" in content
         assert '"auth"' in content  # tags are JSON-serialized
         assert '"backend"' in content
@@ -344,12 +346,13 @@ class TestWriteBeat:
     def test_invalid_beat_type_falls_back_to_reference(
         self, global_config, temp_vault, fixed_now
     ):
-        """A beat with an unrecognized type is filed as 'reference'."""
+        """A beat with an unrecognized type is filed as 'reference' → 'resource' entity type."""
         beat = make_beat(beat_type="totally-invalid-type")
         path = write_beat(beat, global_config, "sess001", "/cwd", fixed_now)
 
         content = path.read_text(encoding="utf-8")
-        assert "type: reference" in content
+        assert "type: resource" in content  # reference maps to resource
+        assert "beat_type: reference" in content
 
     def test_handles_filename_collision_with_counter(
         self, global_config, temp_vault, fixed_now
@@ -364,12 +367,19 @@ class TestWriteBeat:
         assert path2.exists()
 
     def test_all_valid_types_accepted(self, global_config, temp_vault, fixed_now):
-        """All four valid types are accepted without fallback to 'reference'."""
+        """All four beat types are accepted and mapped to entity types."""
+        expected_entity = {
+            "decision": "resource",
+            "insight": "resource",
+            "problem": "note",
+            "reference": "resource",
+        }
         for beat_type in ("decision", "insight", "problem", "reference"):
             beat = make_beat(title=f"Beat {beat_type}", beat_type=beat_type)
             path = write_beat(beat, global_config, "sess001", "/cwd", fixed_now)
             content = path.read_text(encoding="utf-8")
-            assert f"type: {beat_type}" in content
+            assert f"type: {expected_entity[beat_type]}" in content
+            assert f"beat_type: {beat_type}" in content
 
 
 # ===========================================================================
@@ -872,46 +882,55 @@ class TestParseValidTypesFromClaudeMd:
     """parse_valid_types_from_claude_md() extracts type vocabulary from vault CLAUDE.md."""
 
     def test_extracts_types_from_entity_types_h2_section(self):
-        """## Entity Types section with ### decision extracts 'decision'."""
-        md = "## Entity Types\n\n### decision\n\nA choice made between alternatives.\n"
+        """## Entity Types section with backtick-quoted types extracts them."""
+        md = "## Entity Types\n\n- `project` — active work\n- `resource` — stable reference\n"
         result = parse_valid_types_from_claude_md(md)
-        assert "decision" in result
+        assert "project" in result
+        assert "resource" in result
 
     def test_extracts_backtick_types_from_list_items(self):
         """List items with backtick-quoted types are extracted."""
-        md = "## Types\n\n- `insight` — a non-obvious understanding\n"
+        md = "## Types\n\n- `note` — quick capture\n- `resource` — reference\n"
         result = parse_valid_types_from_claude_md(md)
-        assert "insight" in result
+        assert "note" in result
+        assert "resource" in result
 
     def test_returns_defaults_when_no_types_section_found(self):
-        """Arbitrary markdown without a types section → _DEFAULT_VALID_TYPES."""
+        """Arbitrary markdown without a types section → _DEFAULT_VALID_ENTITY_TYPES."""
         result = parse_valid_types_from_claude_md("# Just a header\n\nSome content.\n")
-        assert result == _DEFAULT_VALID_TYPES
+        assert result == _DEFAULT_VALID_ENTITY_TYPES
 
     def test_returns_defaults_on_empty_string(self):
-        """Empty string → _DEFAULT_VALID_TYPES."""
+        """Empty string → _DEFAULT_VALID_ENTITY_TYPES."""
         result = parse_valid_types_from_claude_md("")
-        assert result == _DEFAULT_VALID_TYPES
+        assert result == _DEFAULT_VALID_ENTITY_TYPES
 
     def test_multiple_types_all_extracted(self):
-        """A section with multiple types extracts all of them."""
-        md = "## Types\n\n- `decision` — choice\n- `insight` — understanding\n- `problem` — blocker\n"
+        """A section with multiple entity types extracts all of them."""
+        md = "## Types\n\n- `project` — active work\n- `note` — capture\n- `resource` — reference\n"
         result = parse_valid_types_from_claude_md(md)
-        assert "decision" in result
-        assert "insight" in result
-        assert "problem" in result
+        assert "project" in result
+        assert "note" in result
+        assert "resource" in result
 
     def test_exits_types_section_at_next_h2(self):
         """A second ## heading stops collection of types."""
         md = (
             "## Types\n\n"
-            "- `decision` — choice\n\n"
+            "- `project` — active work\n- `note` — capture\n\n"
             "## Other Section\n\n"
             "- `not_a_type` — not in types\n"
         )
         result = parse_valid_types_from_claude_md(md)
-        assert "decision" in result
+        assert "project" in result
         assert "not_a_type" not in result
+
+    def test_beat_types_section_is_skipped(self):
+        """## Beat Types section is a separate vocabulary and is not parsed."""
+        md = "## Beat Types\n\n- `decision` — choice\n- `insight` — pattern\n"
+        result = parse_valid_types_from_claude_md(md)
+        # Falls back to defaults since no entity types section was found
+        assert result == _DEFAULT_VALID_ENTITY_TYPES
 
 
 # ===========================================================================
@@ -923,21 +942,22 @@ class TestGetValidTypes:
     """get_valid_types() reads type vocabulary from vault CLAUDE.md."""
 
     def test_reads_from_vault_claude_md_when_present(self, temp_vault):
-        """When vault has CLAUDE.md with custom types, those types are returned."""
+        """When vault has CLAUDE.md with custom entity types, those types are returned."""
         claude_md = temp_vault / "CLAUDE.md"
         claude_md.write_text(
-            "## Types\n\n- `decision` — choice\n- `recipe` — cooking instructions\n",
+            "## Types\n\n- `recipe` — cooking instructions\n- `guide` — how-to\n",
             encoding="utf-8",
         )
         config = {"vault_path": str(temp_vault)}
         result = get_valid_types(config)
         assert "recipe" in result
+        assert "guide" in result
 
     def test_falls_back_to_defaults_when_no_claude_md(self, temp_vault):
-        """No CLAUDE.md → _DEFAULT_VALID_TYPES."""
+        """No CLAUDE.md → _DEFAULT_VALID_ENTITY_TYPES."""
         config = {"vault_path": str(temp_vault)}
         result = get_valid_types(config)
-        assert result == _DEFAULT_VALID_TYPES
+        assert result == _DEFAULT_VALID_ENTITY_TYPES
 
     def test_falls_back_to_defaults_when_claude_md_has_no_types_section(
         self, temp_vault
@@ -948,7 +968,7 @@ class TestGetValidTypes:
         )
         config = {"vault_path": str(temp_vault)}
         result = get_valid_types(config)
-        assert result == _DEFAULT_VALID_TYPES
+        assert result == _DEFAULT_VALID_ENTITY_TYPES
 
 
 # ===========================================================================

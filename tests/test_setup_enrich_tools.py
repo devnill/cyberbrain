@@ -792,13 +792,13 @@ Body.
         assert "No Tags.md" in result
 
     def test_skips_fully_enriched_note(self, vault):
-        """A note with valid type, summary, and specific tags is not flagged."""
+        """A note with valid entity type, summary, and specific tags is not flagged."""
         write_note(
             vault,
             "Fully Enriched.md",
             """\
 ---
-type: decision
+type: resource
 summary: Chose FastAPI for its async support and type safety.
 tags: [fastapi, python, backend]
 ---
@@ -981,7 +981,7 @@ Body.
             "Done.md",
             """\
 ---
-type: decision
+type: resource
 summary: Chose FastAPI.
 tags: [python, fastapi]
 ---
@@ -1806,18 +1806,18 @@ class TestGetValidTypes:
     """Unit tests for _get_valid_types edge cases."""
 
     def test_returns_defaults_when_claude_md_has_fewer_than_2_types(self, tmp_path):
-        """Lines 47-52: fewer than 2 type matches in CLAUDE.md → returns default types."""
+        """Lines 47-52: fewer than 2 type matches in CLAUDE.md → returns default entity types."""
         from cyberbrain.mcp.tools.enrich import _get_valid_types
 
         vault = tmp_path / "vault"
         vault.mkdir()
-        # CLAUDE.md with only one type: line
+        # CLAUDE.md with only one non-beat type: line (decision is filtered as beat type)
         (vault / "CLAUDE.md").write_text(
-            "## Entity Types\n\ntype: decision\n\nNo other types here.\n"
+            "## Entity Types\n\ntype: resource\n\nNo other types here.\n"
         )
         result = _get_valid_types(vault)
         # Only 1 match → falls back to defaults
-        assert result == ["decision", "insight", "problem", "reference"]
+        assert result == ["project", "note", "resource", "archived"]
 
     def test_returns_types_from_claude_md_when_2_or_more_match(self, tmp_path):
         """Lines 47-52: 2+ matches → returns deduplicated list from CLAUDE.md."""
@@ -2216,7 +2216,7 @@ class TestCbEnrichMoreEdgeCases:
             "Done.md",
             """\
 ---
-type: decision
+type: resource
 summary: Chose FastAPI.
 tags: [python, fastapi]
 ---
