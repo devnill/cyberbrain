@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
-from cyberbrain.mcp.shared import _parse_frontmatter
+from cyberbrain.mcp.shared import _parse_frontmatter, update_vault_note, write_vault_note
 
 _REQUIRED_FM_FIELDS = ("type", "summary", "tags")
 
@@ -115,15 +115,18 @@ def _append_errata_log(vault: Path, log_rel_path: str, entries: list[str]) -> No
     if not entries:
         return
     log_path = vault / log_rel_path
-    log_path.parent.mkdir(parents=True, exist_ok=True)
 
     now = datetime.now(UTC)
     date_str = now.strftime("%Y-%m-%d")
     header = f"\n## {date_str} — Restructure Run\n\n"
     body = "\n".join(f"- {e}" for e in entries) + "\n"
+    new_content = header + body
 
-    with open(log_path, "a", encoding="utf-8") as f:
-        f.write(header + body)
+    if log_path.exists():
+        existing = log_path.read_text(encoding="utf-8")
+        update_vault_note(log_path, existing + new_content, str(vault))
+    else:
+        write_vault_note(log_path, new_content, str(vault))
 
 
 def _build_folder_context(

@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from cyberbrain.extractors.config import GLOBAL_CONFIG_PATH
+from cyberbrain.extractors.state import config_path as _config_path
 
 # ---------------------------------------------------------------------------
 # Beat type and scope vocabulary
@@ -169,7 +169,7 @@ def resolve_output_dir(beat: dict, config: dict) -> Path | None:
     else:
         print(
             "[extract_beats] 'inbox' is not configured. "
-            f"Set 'inbox' in {GLOBAL_CONFIG_PATH} before writing beats.",
+            f"Set 'inbox' in {_config_path()} before writing beats.",
             file=sys.stderr,
         )
         return None
@@ -439,26 +439,25 @@ def write_beat(
         confidence_val = beat["_autofile_low_confidence"]
         uncertain_routing_field = f"\ncb_uncertain_routing: {confidence_val:.2f}"
 
-    # Derive status from durability
-    status = "active" if durability == "durable" else "active"
+    status = "active"
 
-    # Use json.dumps for string fields to safely handle quotes and special chars.
-    # JSON string syntax is valid YAML scalar syntax.
+    # Use json.dumps for all string fields to safely handle quotes, colons,
+    # and special chars. JSON string syntax is valid YAML scalar syntax.
     front_matter = f"""---
 id: {beat_id}
 date: {date_str}
-session_id: {session_id}
-type: {entity_type}
-beat_type: {beat_type}
-scope: {scope}
+session_id: {json.dumps(session_id)}
+type: {json.dumps(entity_type)}
+beat_type: {json.dumps(beat_type)}
+scope: {json.dumps(scope)}
 title: {json.dumps(title)}
-project: {project_name}
-cwd: {cwd}
+project: {json.dumps(project_name)}
+cwd: {json.dumps(cwd)}
 tags: {json.dumps(tags)}
 related: {json.dumps(related_wikilinks)}
-status: {status}
+status: {json.dumps(status)}
 summary: {json.dumps(summary)}
-cb_source: {source}
+cb_source: {json.dumps(source)}
 cb_created: {date_str}{wm_fields}{uncertain_routing_field}
 ---"""
 
@@ -532,6 +531,8 @@ def move_vault_note(src: Path, dest: Path, vault_path: str) -> Path:
     vault = Path(vault_path)
     _is_within_vault_check(vault, src)
     _is_within_vault_check(vault, dest)
+    if dest.exists():
+        raise FileExistsError(f"Destination already exists: {dest}")
     dest.parent.mkdir(parents=True, exist_ok=True)
     src.rename(dest)
     return dest

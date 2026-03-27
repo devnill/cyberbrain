@@ -337,9 +337,9 @@ class TestWriteBeat:
 
         content = path.read_text(encoding="utf-8")
         assert content.startswith("---")
-        assert "type: resource" in content  # decision maps to resource entity type
-        assert "beat_type: decision" in content
-        assert "session_id: sess001" in content
+        assert 'type: "resource"' in content  # decision maps to resource entity type
+        assert 'beat_type: "decision"' in content
+        assert 'session_id: "sess001"' in content
         assert '"auth"' in content  # tags are JSON-serialized
         assert '"backend"' in content
 
@@ -351,8 +351,8 @@ class TestWriteBeat:
         path = write_beat(beat, global_config, "sess001", "/cwd", fixed_now)
 
         content = path.read_text(encoding="utf-8")
-        assert "type: resource" in content  # reference maps to resource
-        assert "beat_type: reference" in content
+        assert 'type: "resource"' in content  # reference maps to resource
+        assert 'beat_type: "reference"' in content
 
     def test_handles_filename_collision_with_counter(
         self, global_config, temp_vault, fixed_now
@@ -378,8 +378,8 @@ class TestWriteBeat:
             beat = make_beat(title=f"Beat {beat_type}", beat_type=beat_type)
             path = write_beat(beat, global_config, "sess001", "/cwd", fixed_now)
             content = path.read_text(encoding="utf-8")
-            assert f"type: {expected_entity[beat_type]}" in content
-            assert f"beat_type: {beat_type}" in content
+            assert f'type: "{expected_entity[beat_type]}"' in content
+            assert f'beat_type: "{beat_type}"' in content
 
 
 # ===========================================================================
@@ -494,7 +494,7 @@ class TestAutofileBeat:
         assert path.exists()
         written = path.read_text(encoding="utf-8")
         # Provenance fields are injected into frontmatter; verify core content preserved
-        assert "type: insight" in written
+        assert "type: insight" in written  # LLM-provided content preserved as-is
         assert "## Test" in written
         assert "cb_source: hook-extraction" in written
         assert "cb_created:" in written

@@ -14,8 +14,7 @@ Usage:
     python3 import.py --export ~/Downloads/conversations.json --format claude --limit 10
     python3 import.py --export ~/Downloads/conversations.json --format claude --since 2026-01-01
 
-The extractor lives at ~/.claude/cyberbrain/extractors/extract_beats.py (installed by install.sh).
-All vault writes go through that extractor — import.py never writes vault files directly.
+All vault writes go through the extractor — import.py never writes vault files directly.
 """
 
 import argparse
@@ -30,7 +29,6 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 STATE_PATH = Path.home() / ".claude" / "cyberbrain" / "import-state.json"
-EXTRACTORS_DIR = Path.home() / ".claude" / "cyberbrain" / "extractors"
 MAX_TRANSCRIPT_CHARS = 150_000
 
 # Minimum rendered character count to bother passing to the extraction LLM.

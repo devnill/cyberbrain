@@ -56,6 +56,9 @@ class CyberbrainConfig(TypedDict, total=False):
     project_name: str
     vault_folder: str
     ollama_url: str
+    bedrock_region: str
+    claude_path: str
+    search_db_path: str
 
 
 def load_global_config() -> CyberbrainConfig:

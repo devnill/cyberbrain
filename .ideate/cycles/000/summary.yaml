@@ -1,0 +1,67 @@
+id: summary
+type: cycle_summary
+content: |-
+  # Review Summary — Full Audit (2026-03-26)
+
+  ## Overview
+  The project is functional and stable: 1333 tests pass, all 11 MCP tools are registered, and the core capture/retrieval pipeline works end-to-end. No critical findings. Six significant findings span vault write abstraction completeness, search subsystem correctness, YAML frontmatter safety, and documentation accuracy. The significant findings are code quality and correctness issues, not architectural defects.
+
+  ## Critical Findings
+
+  None.
+
+  ## Significant Findings
+
+  - [spec-reviewer] C-06 violated by 7 direct vault writes across 5 files bypassing write_vault_note() abstraction — relates to: C-06, GP-06
+  - [spec-reviewer] GP-09 violated — cb_extract and cb_file MCP tools lack dry_run parameter — relates to: GP-09
+  - [code-reviewer] Unquoted YAML frontmatter fields in vault.py write_beat() — project_name, cwd, source interpolated raw; colons/special chars corrupt YAML — relates to: C-03
+  - [code-reviewer] SQLite connection leak in _find_note_by_title (recall.py:57-74) — connection not closed on exception — relates to: GP-08
+  - [gap-analyst] vault_path change does not invalidate MCP-layer search backend cache — relates to: Q-02, retrieval domain
+  - [gap-analyst] incremental_refresh passes empty metadata dict to index_note — reindexed notes lose title/tags/summary — relates to: retrieval accuracy
+
+  ## Minor Findings
+
+  - [spec-reviewer] vault.py imports GLOBAL_CONFIG_PATH at module scope, defeating lazy evaluation (WI-093 regression) — relates to: WI-093
+  - [spec-reviewer] move_vault_note silently overwrites existing destinations (WI-094 M1 unresolved) — relates to: WI-094
+  - [spec-reviewer] Three hooks undocumented in architecture (session-end-extract.sh, session-end-reindex.sh) — relates to: documentation
+  - [spec-reviewer] Four prompt files undocumented (evaluate, synthesize, quality-gate) — relates to: documentation
+  - [spec-reviewer] resources.py MCP resource/prompts not listed in architecture — relates to: documentation
+  - [spec-reviewer] Two parallel log-append patterns (review.py vs format.py) — relates to: C-06
+  - [spec-reviewer] _extract_beats underscore re-export inconsistency in shared.py — relates to: naming
+  - [spec-reviewer] cb_configure hardcodes config path instead of state.config_path() — relates to: state.py centralization
+  - [code-reviewer] Dead status branch: vault.py:443 both branches return 'active' — relates to: dead code
+  - [code-reviewer] LIKE query wildcard escape missing in _find_note_by_title — relates to: correctness
+  - [code-reviewer] TOCTOU race on session dedup (low risk, single-user) — relates to: C-11
+  - [gap-analyst] CyberbrainConfig TypedDict missing bedrock_region, claude_path, search_db_path — relates to: type safety
+  - [gap-analyst] QUICKSTART.md references non-existent install.sh, omits cb_reindex — relates to: documentation
+  - [gap-analyst] shared.py/server.py error messages reference non-existent install.sh — relates to: documentation
+  - [gap-analyst] scripts/import.py dead constant and stale docstring — relates to: dead code
+  - [gap-analyst] README.md wrong default for uncertain_filing_threshold (0.7 vs 0.5) — relates to: documentation
+  - [gap-analyst] cb_review trash output doesn't mention recoverability — relates to: UX
+
+  ## Suggestions
+
+  - [gap-analyst] cb_reindex(rebuild=True) should return note count for user feedback
+  - [gap-analyst] No CI/CD pipeline (Q-11) — accepted risk for single-developer, revisit if contributors join
+  - [gap-analyst] No config backup mechanism — recoverable by manual JSON edit
+
+  ## Findings Requiring User Input
+
+  - Should C-06 distinguish note writes from metadata writes? CLAUDE.md writes (manage.py, setup.py) bypass write_vault_note() but target a fixed known path. The constraint may need refinement.
+  - Should all YAML frontmatter fields in write_beat() use json.dumps() quoting? Currently only title, summary, tags, related are quoted. Expanding to all string fields would prevent YAML corruption but changes the frontmatter format.
+
+  ## Proposed Refinement Plan
+
+  The review identified 0 critical and 6 significant findings. A refinement cycle is recommended to address:
+
+  1. **YAML frontmatter safety** (code-reviewer S1) — add json.dumps() quoting to remaining string fields in vault.py write_beat(). Affects: vault.py, tests.
+  2. **SQLite connection leak** (code-reviewer S2) — wrap _find_note_by_title in try/finally or context manager. Affects: recall.py.
+  3. **vault_path cache invalidation** (gap-analyst S1) — add _invalidate_search_backend() call on vault_path change. Affects: manage.py (1 line).
+  4. **incremental_refresh metadata** (gap-analyst S3) — pass parsed frontmatter to index_note or have FTS5Backend populate from file. Affects: search_index.py.
+  5. **C-06 remaining bypasses** (spec-reviewer S1) — route pipeline.py, enrich.py, format.py through write_vault_note()/update_vault_note(). Decide on CLAUDE.md writes.
+  6. **Documentation cleanup** — update QUICKSTART.md, README.md defaults, error messages referencing install.sh. Low effort, high value.
+
+  Estimated scope: 6-8 work items, mostly small (1-2 file changes each). No architecture changes needed.
+content_hash: 375e5faf9836ddd314537a9346ed4ff49c180102e31e7f65a62ee8f577ef73ab
+token_count: 1316
+file_path: .ideate/cycles/000/summary.yaml

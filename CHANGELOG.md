@@ -1,5 +1,59 @@
 # Changelog
 
+## 1.1.3 — 2026-03-26
+
+Full audit fixes — correctness, constraint enforcement, and documentation.
+
+### Fixes
+
+- **YAML frontmatter safety** — all string fields in `write_beat()` now use `json.dumps()` quoting; prevents YAML corruption from project names with colons or special characters
+- **SQLite connection leak** — `_find_note_by_title` in `recall.py` now uses `try/finally` for `conn.close()`; also escapes LIKE wildcards (`%`, `_`) in user input
+- **Search backend cache invalidation** — `vault_path` changes in `cb_configure` now call `_invalidate_search_backend()` (previously only `search_backend`/`embedding_model` changes did)
+- **Incremental reindex metadata** — `incremental_refresh` now parses frontmatter and passes it to `index_note` instead of empty dict; reindexed notes no longer lose title/tags/summary
+- **C-06 vault write abstraction** — routed `pipeline.py` (4 calls), `enrich.py` (1 call), `format.py` (1 call) through `write_vault_note()`/`update_vault_note()`; CLAUDE.md metadata writes in `manage.py`/`setup.py` exempt by design
+- **Lazy import in vault.py** — replaced module-scope `GLOBAL_CONFIG_PATH` binding with lazy `config_path()` call from `state.py`
+- **move_vault_note overwrite guard** — raises `FileExistsError` if destination already exists instead of silently overwriting
+- **cb_configure config path** — uses `state.config_path()` instead of hardcoded `Path.home() / ...`
+- **Dead status branch** — removed `"active" if durability == "durable" else "active"` ternary
+
+### Documentation
+
+- Added `session-end-extract.sh` and `session-end-reindex.sh` hooks to key files table and data flow diagram
+- Added `synthesize-system/user.md`, `evaluate-system.md`, `quality-gate-system.md` prompts to key files table
+- Added `resources.py` (MCP resource + prompts) to key files table
+- Updated QUICKSTART.md install instructions (removed `install.sh` references)
+- Fixed README.md `uncertain_filing_threshold` default (0.7 → 0.5)
+- Updated error messages in `shared.py`/`server.py` to reference plugin install
+- Removed dead `EXTRACTORS_DIR` constant and stale docstring in `scripts/import.py`
+- Added `bedrock_region`, `claude_path`, `search_db_path` to `CyberbrainConfig` TypedDict
+
+## 1.1.2 — 2026-03-26
+
+Vocabulary separation and frontmatter model update.
+
+### Improvements
+
+- **Beat type / entity type split** — extraction uses beat types (`decision`, `insight`, `problem`, `reference`); vault notes use entity types (`project`, `note`, `resource`, `archived`). Mapping is automatic via `_resolve_entity_type()` in `vault.py`
+- **`beat_type` frontmatter field** — vault notes now carry both `type` (entity type) and `beat_type` (original extraction type) for traceability
+- **Domain tag inference** — `_infer_domain_tag()` auto-tags notes with `work`, `personal`, or `knowledge` based on vault folder path
+- **Updated relation predicates** — replaced `broader`/`narrower`/`wasDerivedFrom` with `causes`/`caused-by`/`implements`/`contradicts`
+- **`CyberbrainConfig` TypedDict** — all known config fields now have typed definitions in `config.py`
+- **`cb_extract` uses `run_extraction()`** — MCP tool now shares the unified orchestration path, gaining dedup checking
+- **Enrichment prompt updated** — `enrich-system.md` now enforces entity type vocabulary and domain tagging rules
+- **Extraction prompt updated** — `extract-beats-system.md` clarifies beat types are fixed regardless of vault CLAUDE.md entity types
+
+### Bug Fixes
+
+- Fixed `_get_valid_types()` in `enrich.py` returning beat types instead of entity types when parsing vault CLAUDE.md
+- Fixed `parse_valid_types_from_claude_md()` matching `## Beat Types` sections as entity type definitions
+
+### Tests
+
+- Added `test_vault.py` with coverage for entity type mapping, domain tag inference, and relation predicates
+- Expanded `test_extract_beats.py` with `run_extraction()` integration tests
+- Expanded `test_manage_tool.py` with additional config and status scenarios
+- Added `test_dependency_map.py` for the test infrastructure mapper
+
 ## 1.1.1 — 2026-03-26
 
 Code quality and constraint enforcement patch.

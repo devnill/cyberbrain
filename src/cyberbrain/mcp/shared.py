@@ -33,7 +33,7 @@ except ImportError as e:
     raise RuntimeError(
         f"Could not import cyberbrain extractors. "
         f"Ensure cyberbrain is installed: {e}. "
-        "Run install.sh or ensure plugin is correctly installed."
+        "Run `uv sync` or install via `claude plugin install cyberbrain@devnill-cyberbrain`."
     ) from e
 
 # Search backend — lazy-loaded on first cb_recall call
@@ -81,7 +81,7 @@ def _load_tool_prompt(filename: str) -> str:
     raise ToolError(
         f"Prompt file not found: {filename}. "
         "Checked: {} and {}. "
-        "Run install.sh or ensure plugin is correctly installed.".format(
+        "Run `uv sync` or install via `claude plugin install cyberbrain@devnill-cyberbrain`.".format(
             primary_path, legacy_path
         )
     )

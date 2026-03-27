@@ -39,6 +39,30 @@ def __getattr__(name: str):  # noqa: N807 — PEP 562 lazy module attributes
 
 _DEFAULT_REFRESH_INTERVAL = 3600  # seconds
 
+
+def _parse_note_metadata(path: Path) -> dict:
+    """Parse YAML frontmatter from a vault note into a metadata dict for index_note."""
+    try:
+        from cyberbrain.extractors.frontmatter import parse_frontmatter
+
+        text = path.read_text(encoding="utf-8")
+        fm = parse_frontmatter(text)
+        if fm is None:
+            return {}
+        return {
+            "id": fm.get("id", ""),
+            "title": fm.get("title", ""),
+            "summary": fm.get("summary", ""),
+            "tags": fm.get("tags", []),
+            "related": fm.get("related", []),
+            "type": fm.get("type", ""),
+            "scope": fm.get("scope", ""),
+            "project": fm.get("project", ""),
+            "date": str(fm.get("date", "")),
+        }
+    except Exception:  # intentional: frontmatter parse failure is non-fatal; empty metadata degrades gracefully
+        return {}
+
 # Module-level backend cache: one backend instance per (vault_path, backend_key) pair.
 # Avoids re-loading the usearch index on every note write.
 _backend_cache: dict[str, SearchBackend] = {}
@@ -182,7 +206,8 @@ def incremental_refresh(config: dict, max_age_seconds: int | None = None) -> int
         for md_file in Path(vault_path).rglob("*.md"):
             try:
                 if md_file.stat().st_mtime > last_scan_ts:
-                    backend.index_note(str(md_file), {})
+                    metadata = _parse_note_metadata(md_file)
+                    backend.index_note(str(md_file), metadata)
                     count += 1
             except Exception as e:  # intentional: per-file indexing failure is non-fatal; continue scan
                 print(

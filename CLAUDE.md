@@ -21,7 +21,7 @@ Read `specs/plan/overview.md` for current focus. The `specs/` directory uses the
 
 A knowledge capture and retrieval system for LLM interactions. It automatically extracts durable knowledge ("beats") from Claude sessions and stores them as structured Obsidian markdown notes, making that knowledge searchable and injectable into future sessions.
 
-The system exposes an MCP server with eleven tools (`cb_extract`, `cb_file`, `cb_recall`, `cb_read`, `cb_setup`, `cb_enrich`, `cb_configure`, `cb_status`, `cb_restructure`, `cb_review`, `cb_reindex`), a PreCompact hook for automatic capture, and CLI import scripts for Claude and ChatGPT data exports. The MCP server is the single interface — no slash command skills.
+The system exposes an MCP server with eleven tools (`cb_extract`, `cb_file`, `cb_recall`, `cb_read`, `cb_setup`, `cb_enrich`, `cb_configure`, `cb_status`, `cb_restructure`, `cb_review`, `cb_reindex`), three hooks (PreCompact extraction, SessionEnd extraction, SessionEnd reindex) for automatic capture, and CLI import scripts for Claude and ChatGPT data exports. The MCP server is the single interface — no slash command skills.
 
 ---
 
@@ -98,9 +98,13 @@ echo '{"transcript_path": "/path/to/transcript.jsonl", "session_id": "test-123",
 ```
 Claude Code session
   → PreCompact event fires hooks/pre-compact-extract.sh
-  → invokes src/cyberbrain/extractors/extract_beats.py with transcript path
-  → calls LLM (via configured backend) to extract beats as JSON
-  → writes .md files to Obsidian vault
+    → invokes src/cyberbrain/extractors/extract_beats.py with transcript path
+    → calls LLM (via configured backend) to extract beats as JSON
+    → writes .md files to Obsidian vault
+  → SessionEnd event fires hooks/session-end-extract.sh
+    → runs extraction for sessions not already captured by PreCompact (dedup check)
+  → SessionEnd event fires hooks/session-end-reindex.sh
+    → runs incremental search index refresh
 ```
 
 Beat routing:
@@ -113,6 +117,8 @@ Beat routing:
 | File | Purpose |
 |---|---|
 | `hooks/pre-compact-extract.sh` | PreCompact hook; reads hook context JSON from stdin, strips nested-session env vars, calls extractor; always exits 0 |
+| `hooks/session-end-extract.sh` | SessionEnd hook; runs extraction for sessions not already captured by PreCompact (dedup via cb-extract.log); always exits 0 |
+| `hooks/session-end-reindex.sh` | SessionEnd hook; runs incremental search index refresh after each session ends; always exits 0 |
 | `src/cyberbrain/extractors/extract_beats.py` | Core engine; parses JSONL/text transcripts, calls LLM backend, writes vault notes, daily journal |
 | `src/cyberbrain/extractors/backends.py` | LLM backend implementations (claude-code, bedrock, ollama); env var stripping; subprocess hardening |
 | `src/cyberbrain/extractors/analyze_vault.py` | Vault structure analyzer used by `cb_setup`; produces JSON report |
@@ -122,6 +128,7 @@ Beat routing:
 | `src/cyberbrain/prompts/autofile-system.md` / `autofile-user.md` | Autofile routing prompts |
 | `src/cyberbrain/prompts/enrich-system.md` / `enrich-user.md` | Batch enrichment prompts — support `{vault_type_context}` injection |
 | `src/cyberbrain/mcp/server.py` | FastMCP server entry point; registers all tools |
+| `src/cyberbrain/mcp/resources.py` | MCP resource (`cyberbrain://guide`) and prompts (`orient`, `recall`); exposes behavioral guidance and proactive recall instructions to the client LLM |
 | `src/cyberbrain/mcp/tools/extract.py` | `cb_extract` tool |
 | `src/cyberbrain/mcp/tools/file.py` | `cb_file` tool — `content`, `title` (mode switch: omit for LLM extraction, provide for direct document intake), `type`, `tags`, `durability`, `folder`, `cwd` |
 | `src/cyberbrain/mcp/tools/recall.py` | `cb_recall` + `cb_read` tools — `cb_read` accepts pipe-separated `identifier` (up to 10), `synthesize: bool`, `query: str`, `max_chars_per_note: int` (default 2000, 0 = no truncation) |
@@ -138,6 +145,9 @@ Beat routing:
 | `src/cyberbrain/prompts/restructure-group-system.md` / `restructure-group-user.md` | Restructure grouping prompts — LLM-driven semantic clustering |
 | `src/cyberbrain/mcp/tools/reindex.py` | `cb_reindex` tool — prune stale index entries or full rebuild |
 | `src/cyberbrain/prompts/review-system.md` / `review-user.md` | Working memory review LLM prompts |
+| `src/cyberbrain/prompts/synthesize-system.md` / `synthesize-user.md` | Recall synthesis prompts — multi-note summarization for `cb_read(synthesize=True)` |
+| `src/cyberbrain/prompts/evaluate-system.md` | Extraction evaluation prompt — used by `evaluate.py` for comparing alternative outputs |
+| `src/cyberbrain/prompts/quality-gate-system.md` | Quality gate prompt — LLM judge for validating extraction and enrichment output |
 | `scripts/import.py` | Unified import for Claude Desktop and ChatGPT data exports |
 | `tests/` | Test suite — unit and integration tests with mocked LLM calls |
 

@@ -6,8 +6,8 @@ Exposes cb_extract, cb_file, cb_recall, cb_read, cb_configure, cb_status,
 cb_enrich, cb_restructure, cb_review, cb_reindex, and cb_setup as MCP tools
 so Claude Code and Claude Desktop can file beats into and search an Obsidian vault.
 
-Install: see install.sh — copies this package to ~/.claude/cyberbrain/mcp/ and
-registers it in ~/Library/Application Support/Claude/claude_desktop_config.json.
+Install: via Claude Code plugin system (`claude plugin install cyberbrain@devnill-cyberbrain`)
+or development install (`uv sync`).
 """
 
 from fastmcp import FastMCP

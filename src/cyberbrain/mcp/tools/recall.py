@@ -54,6 +54,7 @@ def _find_note_by_title(title: str, config: dict) -> "Path | None":
     db_path = config.get("search_db_path", str(_search_db_path()))
     if not Path(db_path).exists():
         return None
+    conn = None
     try:
         conn = sqlite3.connect(db_path)
         # Exact match (case-insensitive)
@@ -61,17 +62,20 @@ def _find_note_by_title(title: str, config: dict) -> "Path | None":
             "SELECT path FROM notes WHERE title = ? COLLATE NOCASE LIMIT 1", (title,)
         ).fetchone()
         if row:
-            conn.close()
             return Path(row[0])
-        # Prefix/fuzzy match
+        # Prefix/fuzzy match — escape LIKE wildcards in user input
+        escaped = title.replace("%", r"\%").replace("_", r"\_")
         row = conn.execute(
-            "SELECT path FROM notes WHERE title LIKE ? LIMIT 1", (f"%{title}%",)
+            "SELECT path FROM notes WHERE title LIKE ? ESCAPE '\\' LIMIT 1",
+            (f"%{escaped}%",),
         ).fetchone()
-        conn.close()
         if row:
             return Path(row[0])
     except Exception:  # intentional: SQLite query failure (schema mismatch, corrupt db) returns None gracefully
         pass
+    finally:
+        if conn is not None:
+            conn.close()
     return None
 
 

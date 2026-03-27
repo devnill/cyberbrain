@@ -772,7 +772,7 @@ class TestWriteBeat:
             beat, self._config(tmp_path), "s", "/cwd", now, vault_titles=set()
         )
         content = path.read_text()
-        assert "type: reference" in content
+        assert 'type: "resource"' in content  # reference maps to resource entity type
 
     def test_working_memory_beat_includes_wm_fields(self, tmp_path):
         config = {**self._config(tmp_path), "working_memory_folder": "AI/WM"}

@@ -17,6 +17,7 @@ from cyberbrain.mcp.shared import (
     _load_config,
     _move_to_trash,
     _prune_index,
+    write_vault_note,
 )
 from cyberbrain.mcp.shared import (
     _load_tool_prompt as _load_prompt,
@@ -497,12 +498,6 @@ def register(mcp: FastMCP) -> None:
                     break
 
                 out = vault / final_hub_path
-                if not _is_within_vault(vault, out):
-                    result_lines.append(
-                        "  Hub creation skipped — path traversal rejected."
-                    )
-                    break
-
                 now2 = datetime.now(UTC)
                 ts2 = now2.strftime("%Y-%m-%dT%H:%M:%S")
                 provenance = f"\ncb_source: cb-restructure\ncb_created: {ts2}"
@@ -514,8 +509,13 @@ def register(mcp: FastMCP) -> None:
                 result_lines.extend(
                     _validate_frontmatter(hub_content, "Folder hub note")
                 )
-                out.parent.mkdir(parents=True, exist_ok=True)
-                out.write_text(hub_content, encoding="utf-8")
+                try:
+                    write_vault_note(out, hub_content, str(vault))
+                except ValueError:
+                    result_lines.append(
+                        "  Hub creation skipped — path traversal rejected."
+                    )
+                    break
                 notes_created += 1
                 written_paths.append(out)
 
@@ -746,12 +746,6 @@ def register(mcp: FastMCP) -> None:
                         )
                         continue
                     out_path = vault / note_path_rel
-                    if not _is_within_vault(vault, out_path):
-                        result_lines.append(
-                            f"  Warning: path traversal rejected for {note_path_rel}"
-                        )
-                        split_ok = False
-                        continue
                     provenance_lines = (
                         f"\ncb_source: cb-restructure"
                         f"\ncb_created: {ts}"
@@ -770,8 +764,14 @@ def register(mcp: FastMCP) -> None:
                             note_content, f"Split note {note_path_rel}"
                         )
                     )
-                    out_path.parent.mkdir(parents=True, exist_ok=True)
-                    out_path.write_text(note_content, encoding="utf-8")
+                    try:
+                        write_vault_note(out_path, note_content, str(vault))
+                    except ValueError:
+                        result_lines.append(
+                            f"  Warning: path traversal rejected for {note_path_rel}"
+                        )
+                        split_ok = False
+                        continue
                     split_written.append(out_path)
                     notes_created += 1
 
@@ -806,13 +806,13 @@ def register(mcp: FastMCP) -> None:
                     )
                     continue
                 hub_abs = vault / str(hub_path_rel)
-                if not _is_within_vault(vault, hub_abs):
+                try:
+                    write_vault_note(hub_abs, hub_content, str(vault))
+                except ValueError:
                     result_lines.append(
                         f"Large note {note_idx}: path traversal rejected for hub {hub_path_rel}"
                     )
                     continue
-                hub_abs.parent.mkdir(parents=True, exist_ok=True)
-                hub_abs.write_text(hub_content, encoding="utf-8")
                 written_paths.append(hub_abs)
                 notes_created += 1
                 split_written_sf: list[Path] = []
@@ -826,14 +826,14 @@ def register(mcp: FastMCP) -> None:
                         )
                         continue
                     out_path = vault / note_path_rel
-                    if not _is_within_vault(vault, out_path):
+                    try:
+                        write_vault_note(out_path, note_content, str(vault))
+                    except ValueError:
                         result_lines.append(
                             f"  Warning: path traversal rejected for {note_path_rel}"
                         )
                         split_ok_sf = False
                         continue
-                    out_path.parent.mkdir(parents=True, exist_ok=True)
-                    out_path.write_text(note_content, encoding="utf-8")
                     split_written_sf.append(out_path)
                     notes_created += 1
                 if split_written_sf and split_ok_sf:

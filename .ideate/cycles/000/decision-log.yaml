@@ -1,0 +1,59 @@
+id: decision-log
+type: cycle_summary
+reviewer: journal-keeper
+content: |-
+  # Decision Log — Full Audit (2026-03-26)
+
+  Compiled from code-quality, spec-adherence, and gap-analysis reviews.
+
+  ## Cross-Cutting Themes
+
+  ### Theme 1: C-06 Vault Write Abstraction Incomplete
+  All three reviewers flagged this. The `write_vault_note()`/`update_vault_note()`/`move_vault_note()` abstraction was introduced in WI-094 (cycle 21-22) to centralize vault writes with path-traversal checks. However, 7 direct `write_text()` calls across 5 files bypass it:
+  - `pipeline.py` (4 calls) — restructure split/hub paths
+  - `enrich.py` (1 call) — frontmatter update
+  - `format.py` (1 call) — errata log append
+  - `manage.py` (1 call) — CLAUDE.md prefs
+  - `setup.py` (1 call) — CLAUDE.md generation
+
+  The pipeline.py calls have inline `_is_within_vault` guards, so traversal is prevented. But the dual pattern (abstraction + inline guards) defeats the purpose of centralization.
+
+  **Decision needed**: Should CLAUDE.md writes (manage.py, setup.py) go through the abstraction? They are metadata files, not knowledge notes. The constraint may need refinement to distinguish note writes from metadata writes.
+
+  ### Theme 2: Search Subsystem Correctness
+  Two reviewers (code-reviewer, gap-analyst) found search-related issues:
+  - **Connection leak**: `_find_note_by_title` in recall.py doesn't close SQLite connection on exception
+  - **LIKE wildcard escape**: User-supplied titles containing `%` or `_` produce wrong results
+  - **Incremental refresh metadata**: `search_index.py:185` passes empty dict to `index_note`, potentially losing title/tags/summary in reindexed notes
+  - **Stale backend cache**: `vault_path` changes don't invalidate the MCP-layer `_search_backend` global
+
+  These collectively affect retrieval accuracy (GP-03: High Signal-to-Noise).
+
+  ### Theme 3: YAML Frontmatter Safety
+  Code-reviewer found that `write_beat()` in vault.py quotes some frontmatter fields with `json.dumps()` but not others. `project_name`, `cwd`, `source`, `entity_type`, `beat_type`, `scope`, `status` are interpolated raw. Project names with colons or special characters produce invalid YAML, breaking Obsidian parsing (C-03).
+
+  ### Theme 4: Documentation Gaps
+  Spec-reviewer found multiple undocumented components:
+  - `session-end-extract.sh` and `session-end-reindex.sh` hooks
+  - `synthesize-system.md`, `synthesize-user.md`, `evaluate-system.md`, `quality-gate-system.md` prompts
+  - `resources.py` MCP resource and prompts (`orient`, `recall`)
+  - QUICKSTART.md references non-existent `install.sh`
+
+  These are documentation-only issues but affect onboarding and agent comprehension.
+
+  ### Theme 5: Lazy Path Evaluation Incomplete
+  Spec-reviewer found `vault.py:15` still imports `GLOBAL_CONFIG_PATH` as a module-level binding from `config.py`, which evaluates `Path.home()` at import time. This was the exact pattern WI-093 was intended to fix.
+
+  ## Open Questions (Updated)
+
+  | ID | Question | Source | Status |
+  |---|---|---|---|
+  | Q-01 | Is proactive recall reliably triggering in production? | gap-analyst | Open — no validation harness exists |
+  | Q-02 | Stale search backend on config change | gap-analyst | Partially fixed — vault_path changes still not covered |
+  | Q-09 | Should requirements.txt files be deleted? | prior cycles | Open |
+  | Q-11 | No CI/CD pipeline | gap-analyst | Accepted risk for single-developer |
+  | NEW | Should C-06 distinguish note writes from metadata writes (CLAUDE.md)? | spec-reviewer | New — needs user decision |
+  | NEW | Should all YAML frontmatter fields use json.dumps() quoting? | code-reviewer | New — needs decision on scope |
+content_hash: c8266d7ed933367bbf047fbae06ff11d9c1576e0a31d30d21e4bba706419aef5
+token_count: 921
+file_path: .ideate/cycles/000/decision-log.yaml

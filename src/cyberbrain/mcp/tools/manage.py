@@ -8,7 +8,7 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from cyberbrain.extractors.state import runs_log_path, search_db_path, search_manifest_path
+from cyberbrain.extractors.state import config_path, runs_log_path, search_db_path, search_manifest_path
 from cyberbrain.mcp.shared import (
     _invalidate_search_backend,
     _load_config,
@@ -237,9 +237,7 @@ def register(mcp: FastMCP) -> None:
         import json as _json
         import threading
 
-        cfg_path = (
-            Path.home() / ".claude" / "cyberbrain" / "config.json"
-        )  # dynamic: tests monkeypatch Path.home()
+        cfg_path = config_path()
 
         # --- preferences operations ---
         if show_prefs or set_prefs is not None or reset_prefs:
@@ -349,6 +347,7 @@ def register(mcp: FastMCP) -> None:
                 resolved.mkdir(parents=True, exist_ok=True)
                 cfg["vault_path"] = str(resolved)
                 changed.append(f"vault_path → {resolved}")
+                _invalidate_search_backend()
 
                 # Rebuild index in background
                 def _rebuild():

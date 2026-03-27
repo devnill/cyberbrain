@@ -147,7 +147,7 @@ Remove `~/.claude/cyberbrain/` and the hook entries from `~/.claude/settings.jso
 | `trash_folder` | `".trash"` | Vault-relative folder for soft-deleted notes |
 | `autofile_model` | *(uses `model`)* | Separate model for autofile routing decisions |
 | `uncertain_filing_behavior` | `"inbox"` | What to do on low-confidence filing: `"inbox"` or `"ask"` |
-| `uncertain_filing_threshold` | `0.7` | Confidence cutoff (0.0–1.0) below which `uncertain_filing_behavior` applies |
+| `uncertain_filing_threshold` | `0.5` | Confidence cutoff (0.0–1.0) below which `uncertain_filing_behavior` applies |
 | `search_backend` | `"hybrid"` | Search backend: `"grep"`, `"fts5"`, or `"hybrid"` |
 | `search_db_path` | `~/.claude/cyberbrain/search-index.db` | Path to the SQLite search index |
 | `embedding_model` | `"TaylorAI/bge-micro-v2"` | Model for semantic embeddings (hybrid backend) |

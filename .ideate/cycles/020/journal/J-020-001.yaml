@@ -1,13 +1,47 @@
 id: J-020-001
 type: journal_entry
-phase: refine
-date: "2026-03-23"
+phase: review
+date: 2026-03-26
 cycle_created: 20
-title: Refinement planning completed
-content: |
-  Trigger: Cycle 017 review findings (2 significant, 3 minor)
-  Principles changed: none
-  New work items: 090-091
-  Two items: fix run_extraction config param + merge _write_beats_and_log (090), mark architecture tensions T5/T6/T7 resolved (091). CLAUDE.md vocabulary update verified not needed. Config doc pass deferred.
-content_hash: e25cd5236d8297b7fcd44806e66df6567f837baa21d0ca04e6ea6d8c6c721a8b
-token_count: 116
+title: full-audit
+content: >-
+  ## [review] 2026-03-26 — Full audit completed
+
+
+  Critical findings: 0
+
+  Significant findings: 6
+
+  Minor findings: 18
+
+  Suggestions: 3
+
+  Items requiring user input: 2
+
+  Curator: skipped — ad-hoc full audit, no policy-grade findings requiring
+  domain updates
+
+
+  Agents spawned: 4 (code-reviewer, spec-reviewer, gap-analyst, journal-keeper)
+
+  Note: code-reviewer and journal-keeper hit turn limits before producing final
+  formatted output. Findings were extracted from their work-in-progress analysis
+  and compiled manually.
+
+
+  Test suite: 1333 passed, 16 skipped, 4 warnings in 4.27s
+
+
+  Cross-cutting themes:
+
+  1. C-06 vault write abstraction incomplete (7 bypasses across 5 files)
+
+  2. Search subsystem correctness (connection leak, wildcard escape, metadata
+  loss, stale cache)
+
+  3. YAML frontmatter safety (unquoted fields in write_beat)
+
+  4. Documentation gaps (undocumented hooks, prompts, stale install.sh
+  references)
+
+  5. Lazy path evaluation incomplete (vault.py GLOBAL_CONFIG_PATH)

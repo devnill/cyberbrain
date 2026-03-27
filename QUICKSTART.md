@@ -3,9 +3,11 @@
 ## Install
 
 ```bash
-git clone https://github.com/your-org/cyberbrain
-cd cyberbrain
-bash install.sh
+# Add plugin marketplace (one time)
+claude plugin marketplace add devnill/cyberbrain
+
+# Install the plugin
+claude plugin install cyberbrain@devnill-cyberbrain
 ```
 
 ---
@@ -204,4 +206,4 @@ The transcript may be very long. Add `"claude_timeout": 180` to `~/.claude/cyber
 Confirm `.claude/cyberbrain.local.json` exists in the project root (or a parent directory up to `~`).
 
 **MCP tools not available in Claude Desktop**
-Restart Claude Desktop after running `bash install.sh`. Check Settings → Developer → Edit Config to verify the `cyberbrain` entry is present in `mcpServers`.
+Restart Claude Desktop and verify the `cyberbrain` entry is present in Settings → Developer → Edit Config under `mcpServers`.

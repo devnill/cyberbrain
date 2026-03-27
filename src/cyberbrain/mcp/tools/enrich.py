@@ -15,6 +15,8 @@ from cyberbrain.extractors.frontmatter import parse_frontmatter as _parse_frontm
 from cyberbrain.mcp.shared import (
     _index_paths,
     _load_config,
+    update_vault_note,
+    write_vault_note,
 )
 from cyberbrain.mcp.shared import (
     _load_tool_prompt as _load_prompt,
@@ -132,6 +134,7 @@ def _apply_frontmatter_update(
     content: str,
     classification: dict,
     overwrite: bool,
+    vault_path: str = "",
 ) -> bool:
     """Apply classification to the note's frontmatter. Returns True on success."""
     fm = _parse_frontmatter(content)
@@ -190,9 +193,14 @@ def _apply_frontmatter_update(
         new_content = "\n".join(fm_lines) + "\n\n" + content
 
     try:
-        path.write_text(new_content, encoding="utf-8")
+        if vault_path and path.exists():
+            update_vault_note(path, new_content, vault_path)
+        elif vault_path:
+            write_vault_note(path, new_content, vault_path)
+        else:
+            path.write_text(new_content, encoding="utf-8")
         return True
-    except OSError:
+    except (OSError, ValueError):
         return False
 
 
@@ -415,7 +423,7 @@ def register(mcp: FastMCP) -> None:
                         gate_skipped.append((f, cls, verdict))
                         continue
 
-                success = _apply_frontmatter_update(f, content, cls, overwrite)
+                success = _apply_frontmatter_update(f, content, cls, overwrite, vault_path=config["vault_path"])
                 if success:
                     enriched.append((f, cls))
                 else:
