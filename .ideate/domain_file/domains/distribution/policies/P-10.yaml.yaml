@@ -1,0 +1,19 @@
+id: domains/distribution/policies/P-10.yaml
+type: domain_file
+content: |-
+  id: P-10
+  domain: distribution
+  status: active
+  title: C-06 exempts metadata file writes
+  summary: >
+    C-06 (all vault writes through Python abstraction) applies to knowledge note
+    writes where paths may be LLM-influenced. Metadata file writes to known fixed
+    paths (vault CLAUDE.md in manage.py and setup.py) are exempt. The vault write
+    abstraction (write_vault_note/update_vault_note/move_vault_note) provides
+    path-traversal protection that is unnecessary for hardcoded paths.
+  source: Full audit session 2026-03-27 — user decision during review finding triage.
+  cycle_added: 23
+  cycle_modified: 23
+content_hash: 88737cf507b86b21816a7b85f39426c230f598f04fb4a430c63ab2b7d0a31032
+token_count: 175
+file_path: .ideate/domain_file/domains/distribution/policies/P-10.yaml.yaml
