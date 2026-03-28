@@ -19,8 +19,10 @@ class BackendError(Exception):
     """Raised when the configured LLM backend cannot produce a response."""
 
 
-# Rough token budget: haiku has 200k context. We'll send up to ~150k chars of transcript.
-MAX_TRANSCRIPT_CHARS = 150_000
+# Token budget: haiku has 200k context. System+user prompts take ~10k tokens,
+# leaving ~190k for transcript. Noise filtering in transcript.py strips skill
+# prompts, command messages, and system reminders before this limit applies.
+MAX_TRANSCRIPT_CHARS = 190_000
 
 # Env vars that cause nested-session hangs when claude -p is spawned as a subprocess
 _STRIP_VARS = {

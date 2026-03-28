@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.2.0 — 2026-03-27
+
+Transcript noise filtering, full audit fixes, and vocabulary separation.
+
+### New Features
+
+- **Transcript noise filtering** — `transcript.py` now strips skill prompts, command messages, task notifications, system reminders, and usage blocks before extraction. Sessions dominated by tooling output (e.g., ideate skills at 65% noise) now produce beats from actual conversation content instead of returning 0 beats.
+- **Transcript truncation limit raised** — `MAX_TRANSCRIPT_CHARS` increased from 150K to 190K. Safe because noise filtering removes bulk before truncation applies.
+- **Beat type / entity type vocabulary split** — extraction uses beat types (`decision`, `insight`, `problem`, `reference`); vault notes use entity types (`project`, `note`, `resource`, `archived`) with automatic mapping via `_resolve_entity_type()`
+- **Domain tag inference** — `_infer_domain_tag()` auto-tags notes with `work`, `personal`, or `knowledge` based on vault folder path
+- **`beat_type` frontmatter field** — vault notes carry both `type` (entity) and `beat_type` (extraction) for traceability
+
+### Fixes
+
+- **YAML frontmatter safety** — all string fields in `write_beat()` use `json.dumps()` quoting; prevents YAML corruption from project names with colons or special characters
+- **SQLite connection leak** — `_find_note_by_title` uses `try/finally` for `conn.close()`; LIKE wildcards (`%`, `_`) escaped in user input
+- **Search backend cache invalidation** — `vault_path` changes in `cb_configure` now invalidate the cached backend
+- **Incremental reindex metadata** — `incremental_refresh` parses frontmatter instead of passing empty dict to `index_note`
+- **C-06 vault write abstraction** — routed `pipeline.py` (4), `enrich.py` (1), `format.py` (1) through `write_vault_note()`/`update_vault_note()`
+- **Lazy import in vault.py** — replaced module-scope `GLOBAL_CONFIG_PATH` with lazy `config_path()` call
+- **move_vault_note overwrite guard** — raises `FileExistsError` if destination exists
+- **cb_configure config path** — uses `state.config_path()` instead of hardcoded literal
+- **Updated relation predicates** — `causes`/`caused-by`/`implements`/`contradicts` replace `broader`/`narrower`/`wasDerivedFrom`
+- **Dead status branch removed** — both branches returned `"active"`
+
+### Documentation
+
+- Added `session-end-extract.sh`, `session-end-reindex.sh` hooks to CLAUDE.md
+- Added `synthesize-system/user.md`, `evaluate-system.md`, `quality-gate-system.md` prompts to CLAUDE.md
+- Added `resources.py` MCP resource/prompts to CLAUDE.md
+- Updated QUICKSTART.md install instructions (removed `install.sh` references)
+- Fixed README.md `uncertain_filing_threshold` default (0.7 → 0.5)
+- Updated error messages to reference plugin install / `uv sync`
+- Added `bedrock_region`, `claude_path`, `search_db_path` to `CyberbrainConfig` TypedDict
+- Removed dead `EXTRACTORS_DIR` constant in `scripts/import.py`
+
 ## 1.1.3 — 2026-03-26
 
 Full audit fixes — correctness, constraint enforcement, and documentation.

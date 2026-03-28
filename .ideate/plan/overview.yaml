@@ -1,21 +1,40 @@
 id: overview
 type: overview
-title: Cycle 22 — Minor Cleanup
+title: Cycle 23 — Full Audit Fixes + Transcript Noise Filtering
 content: |-
-  # Cycle 22 — Minor Cleanup
+  ## Summary
 
-  ## What is Changing
+  Full audit of the codebase (v1.1.1) identified 6 significant and 18 minor findings across code quality, constraint enforcement, and documentation. All significant findings were fixed. A subsequent investigation into missing beat captures revealed transcript noise from skill prompts consuming 65% of extraction input. Noise filtering was added to the transcript parser.
 
-  Addressing 3 minor findings and 2 suggestions from the cycle 21 review. Dead code removal and _is_within_vault consolidation.
+  ## Changes Shipped
 
-  ## Scope Boundary
+  ### v1.1.2 — Beat/entity type vocabulary split
+  - Beat types (decision/insight/problem/reference) separated from entity types (project/note/resource/archived)
+  - Domain tag inference from vault folder paths
+  - Updated relation predicates
+  - CyberbrainConfig TypedDict
 
-  **In scope:**
-  - Remove unreachable result["skipped"] check in extract_beats.py --beats-json path
-  - Remove redundant _is_within_vault pre-check in review.py promote path
-  - Consolidate duplicate _is_within_vault from shared.py into vault.py re-export
+  ### v1.1.3 — Full audit fixes
+  - YAML frontmatter safety (json.dumps all string fields)
+  - SQLite connection leak + LIKE wildcard escape in recall.py
+  - Search backend cache invalidation on vault_path change
+  - Incremental reindex metadata loss fix
+  - C-06 vault write abstraction enforcement (6 remaining bypasses)
+  - Lazy import, move_vault_note overwrite guard, config path centralization
+  - Documentation: undocumented hooks, prompts, resources; stale install.sh references
 
-  **Not in scope:** Everything else.
-content_hash: eec64fd2ec9636bf8ee04ad02ca15843683a9c858d1a411bd0c08d389e75fe5b
-token_count: 142
+  ### v1.1.3+ (uncommitted) — Transcript noise filtering
+  - transcript.py filters skill prompts, command messages, task notifications, system reminders, usage blocks
+  - MAX_TRANSCRIPT_CHARS raised from 150K to 190K
+  - 3 new tests for filtering
+
+  ## Deferred Items
+  - GP-09: MCP dry_run for cb_extract/cb_file (needs design)
+  - Q-11: No CI/CD pipeline (accepted risk)
+  - TOCTOU dedup race (theoretical, single-user)
+
+  ## Test Suite
+  1336 passed, 16 skipped, 4 warnings
+content_hash: 3e907450aad36fbcf31e3a611311dbb21f90e8b9083bb02c21cee9b796ed9577
+token_count: 438
 file_path: .ideate/plan/overview.yaml

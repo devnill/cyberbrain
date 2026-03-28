@@ -276,6 +276,45 @@ class TestParseJsonlTranscript:
         result = parse_jsonl_transcript(str(jsonl))
         assert "hello" in result
 
+    def test_filters_skill_prompt_blocks(self, tmp_path):
+        """Skill prompt injections (Base directory for this skill) are stripped."""
+        jsonl = tmp_path / "skill.jsonl"
+        jsonl.write_text(
+            '{"type": "user", "message": {"role": "user", "content": "tell me about auth"}}\n'
+            '{"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "Base directory for this skill: /foo/bar\\n\\nYou are the **review** skill...a very long prompt that dominates the transcript"}]}}\n'
+            '{"type": "assistant", "message": {"role": "assistant", "content": "OAuth2 is the standard approach."}}\n'
+        )
+        result = parse_jsonl_transcript(str(jsonl))
+        assert "tell me about auth" in result
+        assert "OAuth2" in result
+        assert "Base directory for this skill" not in result
+        assert "review" not in result
+
+    def test_filters_command_messages(self, tmp_path):
+        """Command invocations and local-command output are stripped."""
+        jsonl = tmp_path / "commands.jsonl"
+        jsonl.write_text(
+            '{"type": "user", "message": {"role": "user", "content": "<command-name>/commit</command-name>"}}\n'
+            '{"type": "user", "message": {"role": "user", "content": "fix the auth bug"}}\n'
+            '{"type": "user", "message": {"role": "user", "content": "<local-command-stdout>done</local-command-stdout>"}}\n'
+        )
+        result = parse_jsonl_transcript(str(jsonl))
+        assert "fix the auth bug" in result
+        assert "<command-name>" not in result
+        assert "<local-command-stdout>" not in result
+
+    def test_strips_system_reminders_inline(self, tmp_path):
+        """System reminder tags are removed but surrounding text is preserved."""
+        jsonl = tmp_path / "reminders.jsonl"
+        jsonl.write_text(
+            '{"type": "assistant", "message": {"role": "assistant", "content": "Here is the answer.<system-reminder>task tools reminder</system-reminder> The fix is simple."}}\n'
+        )
+        result = parse_jsonl_transcript(str(jsonl))
+        assert "Here is the answer." in result
+        assert "The fix is simple." in result
+        assert "system-reminder" not in result
+        assert "task tools" not in result
+
 
 # ===========================================================================
 # Beat writing
