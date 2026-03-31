@@ -36,10 +36,7 @@ _INLINE_STRIP_PATTERNS = [
 
 def _is_noise_block(text: str) -> bool:
     """Return True if the text block is system/skill noise."""
-    for pat in _SKIP_BLOCK_PATTERNS:
-        if pat.search(text):
-            return True
-    return False
+    return any(pat.search(text) for pat in _SKIP_BLOCK_PATTERNS)
 
 
 def _strip_inline_noise(text: str) -> str:

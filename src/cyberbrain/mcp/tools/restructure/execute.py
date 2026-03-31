@@ -1,10 +1,14 @@
 """Execution phase for cb_restructure — apply cluster decisions to vault files."""
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 from cyberbrain.mcp.shared import _move_to_trash, move_vault_note, write_vault_note
-from cyberbrain.mcp.tools.restructure.format import _validate_frontmatter
+from cyberbrain.mcp.tools.restructure.format import (
+    _correct_entity_type_in_content,
+    _validate_frontmatter,
+)
 
 
 def _execute_cluster_decisions(
@@ -83,10 +87,14 @@ def _execute_cluster_decisions(
 
             output_path = vault / merged_path_rel
 
+            _today = datetime.now().strftime("%Y-%m-%d")
             provenance_lines = (
+                f"\naliases: []"
+                f"\ncreated: {_today}"
+                f"\nupdated: {_today}"
                 f"\ncb_source: cb-restructure"
                 f"\ncb_created: {ts}"
-                f"\ncb_consolidated_from: {json.dumps(source_titles)}"
+                f"\ncb_restructured_from: {json.dumps(source_titles)}"
             )
             if merged_content.startswith("---"):
                 end = merged_content.find("\n---", 3)
@@ -95,6 +103,11 @@ def _execute_cluster_decisions(
                         merged_content[:end] + provenance_lines + merged_content[end:]
                     )
 
+            merged_content, type_warn = _correct_entity_type_in_content(merged_content)
+            if type_warn:
+                result_lines.append(
+                    f"  Warning: Cluster {cluster_idx} merged note — {type_warn}"
+                )
             result_lines.extend(
                 _validate_frontmatter(
                     merged_content, f"Cluster {cluster_idx} merged note"
@@ -142,7 +155,14 @@ def _execute_cluster_decisions(
 
             output_path = vault / hub_path_rel
 
-            provenance_lines = f"\ncb_source: cb-restructure\ncb_created: {ts}"
+            _today_hs = datetime.now().strftime("%Y-%m-%d")
+            provenance_lines = (
+                f"\naliases: []"
+                f"\ncreated: {_today_hs}"
+                f"\nupdated: {_today_hs}"
+                f"\ncb_source: cb-restructure"
+                f"\ncb_created: {ts}"
+            )
             if hub_content.startswith("---"):
                 end = hub_content.find("\n---", 3)
                 if end != -1:
@@ -150,6 +170,11 @@ def _execute_cluster_decisions(
                         hub_content[:end] + provenance_lines + hub_content[end:]
                     )
 
+            hub_content, type_warn = _correct_entity_type_in_content(hub_content)
+            if type_warn:
+                result_lines.append(
+                    f"  Warning: Cluster {cluster_idx} hub note — {type_warn}"
+                )
             result_lines.extend(
                 _validate_frontmatter(hub_content, f"Cluster {cluster_idx} hub note")
             )
@@ -215,7 +240,14 @@ def _execute_cluster_decisions(
                     )
 
             # Write hub note inside the subfolder
-            provenance_lines = f"\ncb_source: cb-restructure\ncb_created: {ts}"
+            _today_sf = datetime.now().strftime("%Y-%m-%d")
+            provenance_lines = (
+                f"\naliases: []"
+                f"\ncreated: {_today_sf}"
+                f"\nupdated: {_today_sf}"
+                f"\ncb_source: cb-restructure"
+                f"\ncb_created: {ts}"
+            )
             if hub_content.startswith("---"):
                 end = hub_content.find("\n---", 3)
                 if end != -1:
@@ -223,6 +255,11 @@ def _execute_cluster_decisions(
                         hub_content[:end] + provenance_lines + hub_content[end:]
                     )
 
+            hub_content, type_warn = _correct_entity_type_in_content(hub_content)
+            if type_warn:
+                result_lines.append(
+                    f"  Warning: Cluster {cluster_idx} subfolder hub — {type_warn}"
+                )
             result_lines.extend(
                 _validate_frontmatter(
                     hub_content, f"Cluster {cluster_idx} subfolder hub"

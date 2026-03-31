@@ -28,7 +28,13 @@ try:
     )
     from cyberbrain.extractors.run_log import write_journal_entry
     from cyberbrain.extractors.transcript import parse_jsonl_transcript
-    from cyberbrain.extractors.vault import _is_within_vault, move_vault_note, update_vault_note, write_beat, write_vault_note
+    from cyberbrain.extractors.vault import (
+        _is_within_vault,
+        move_vault_note,
+        update_vault_note,
+        write_beat,
+        write_vault_note,
+    )
 except ImportError as e:
     raise RuntimeError(
         f"Could not import cyberbrain extractors. "
@@ -89,6 +95,7 @@ def _load_tool_prompt(filename: str) -> str:
 
 def _load_config(cwd: str = "") -> dict:
     from typing import cast
+
     return cast(dict, _resolve_config(cwd or str(Path.home())))
 
 

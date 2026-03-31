@@ -662,6 +662,30 @@ class TestInjectProvenance:
         result = vault_mod.inject_provenance(content, "src", None, now)
         assert result == content
 
+    def test_inject_provenance_includes_created_and_updated(self):
+        content = "---\ntitle: Test\n---\n\nBody"
+        now = datetime(2026, 3, 7, 12, 0, 0)
+        result = vault_mod.inject_provenance(content, "test-source", "sess-1", now)
+        assert "\ncreated: 2026-03-07\n" in result  # standalone created: field
+        assert "updated: 2026-03-07" in result
+
+    def test_inject_provenance_no_duplicate_if_fields_exist(self):
+        import re
+
+        content = "---\ntitle: Test\ncreated: 2026-01-01\nupdated: 2026-01-01\naliases: [existing]\n---\n\nBody"
+        now = datetime(2026, 3, 7, 12, 0, 0)
+        result = vault_mod.inject_provenance(content, "test-source", "sess-1", now)
+        assert len(re.findall(r"^created:", result, re.MULTILINE)) == 1
+        assert len(re.findall(r"^updated:", result, re.MULTILINE)) == 1
+        # aliases already present — must not be duplicated
+        assert len(re.findall(r"^aliases:", result, re.MULTILINE)) == 1
+
+    def test_inject_provenance_injects_aliases(self):
+        content = "---\ntitle: Test\n---\n\nBody"
+        now = datetime(2026, 3, 7, 12, 0, 0)
+        result = vault_mod.inject_provenance(content, "test-source", "sess-1", now)
+        assert "aliases: []" in result
+
 
 class TestWmFrontmatterFields:
     def test_returns_ephemeral_and_review_after(self):
@@ -790,6 +814,8 @@ class TestWriteBeat:
         path = vault_mod.write_beat(beat, config, "s", "/cwd", now, vault_titles=set())
         content = path.read_text()
         assert "cb_ephemeral: true" in content
+        assert 'durability: "working-memory"' in content
+        assert 'type: "note"' in content
 
     def test_tags_normalised_to_lowercase(self, tmp_path):
         beat = {
@@ -809,6 +835,182 @@ class TestWriteBeat:
         content = path.read_text()
         assert '"python"' in content
         assert '"testing"' in content
+
+    def test_write_beat_includes_aliases_field(self, tmp_path):
+        beat = {
+            "title": "Aliases Beat",
+            "type": "reference",
+            "scope": "general",
+            "durability": "durable",
+            "summary": "",
+            "tags": [],
+            "body": "",
+            "relations": [],
+        }
+        now = datetime(2026, 3, 7, 12, 0, 0)
+        path = vault_mod.write_beat(
+            beat, self._config(tmp_path), "s", "/cwd", now, vault_titles=set()
+        )
+        content = path.read_text()
+        assert "aliases: []" in content
+
+    def test_write_beat_includes_created_date(self, tmp_path):
+        beat = {
+            "title": "Created Date Beat",
+            "type": "reference",
+            "scope": "general",
+            "durability": "durable",
+            "summary": "",
+            "tags": [],
+            "body": "",
+            "relations": [],
+        }
+        now = datetime(2026, 3, 7, 12, 0, 0)
+        path = vault_mod.write_beat(
+            beat, self._config(tmp_path), "s", "/cwd", now, vault_titles=set()
+        )
+        content = path.read_text()
+        assert "\ncreated: 2026-03-07\n" in content  # standalone created: field
+
+    def test_write_beat_includes_updated_date(self, tmp_path):
+        beat = {
+            "title": "Updated Date Beat",
+            "type": "reference",
+            "scope": "general",
+            "durability": "durable",
+            "summary": "",
+            "tags": [],
+            "body": "",
+            "relations": [],
+        }
+        now = datetime(2026, 3, 7, 12, 0, 0)
+        path = vault_mod.write_beat(
+            beat, self._config(tmp_path), "s", "/cwd", now, vault_titles=set()
+        )
+        content = path.read_text()
+        assert "updated: 2026-03-07" in content
+
+    def test_write_beat_includes_durability_field(self, tmp_path):
+        beat = {
+            "title": "Durability Beat",
+            "type": "reference",
+            "scope": "general",
+            "durability": "durable",
+            "summary": "",
+            "tags": [],
+            "body": "",
+            "relations": [],
+        }
+        now = datetime(2026, 3, 7, 12, 0, 0)
+        path = vault_mod.write_beat(
+            beat, self._config(tmp_path), "s", "/cwd", now, vault_titles=set()
+        )
+        content = path.read_text()
+        assert 'durability: "durable"' in content
+
+    def test_write_beat_uses_cb_session_field(self, tmp_path):
+        beat = {
+            "title": "Session Beat",
+            "type": "reference",
+            "scope": "general",
+            "durability": "durable",
+            "summary": "",
+            "tags": [],
+            "body": "",
+            "relations": [],
+        }
+        now = datetime(2026, 3, 7, 12, 0, 0)
+        path = vault_mod.write_beat(
+            beat, self._config(tmp_path), "sess-abc", "/cwd", now, vault_titles=set()
+        )
+        content = path.read_text()
+        assert 'cb_session: "sess-abc"' in content
+        assert "session_id:" not in content
+
+    def test_write_beat_skips_pytest_cwd(self, tmp_path, capsys):
+        beat = {
+            "title": "Pytest Beat",
+            "type": "reference",
+            "scope": "general",
+            "durability": "durable",
+            "summary": "",
+            "tags": [],
+            "body": "",
+            "relations": [],
+        }
+        now = datetime(2026, 3, 7, 12, 0, 0)
+        # Use a non-pytest vault_path so the guard fires (cwd is pytest, vault is real)
+        config = {
+            "vault_path": "/Users/dan/vault",
+            "inbox": "AI/Inbox",
+            "backend": "claude-code",
+            "model": "claude-haiku-4-5",
+        }
+        result = vault_mod.write_beat(
+            beat,
+            config,
+            "sess-1",
+            "/private/var/folders/xx/pytest-123/test_foo",
+            now,
+            vault_titles=set(),
+        )
+        assert result is None
+        out, err = capsys.readouterr()
+        assert "pytest temporary directory" in err
+
+    def test_write_beat_skips_pytest_underscore_cwd(self, tmp_path, capsys):
+        beat = {
+            "title": "Pytest Underscore Beat",
+            "type": "reference",
+            "scope": "general",
+            "durability": "durable",
+            "summary": "",
+            "tags": [],
+            "body": "",
+            "relations": [],
+        }
+        now = datetime(2026, 3, 7, 12, 0, 0)
+        # Use a non-pytest vault_path so the guard fires (cwd is pytest, vault is real)
+        config = {
+            "vault_path": "/Users/dan/vault",
+            "inbox": "AI/Inbox",
+            "backend": "claude-code",
+            "model": "claude-haiku-4-5",
+        }
+        result = vault_mod.write_beat(
+            beat,
+            config,
+            "sess-2",
+            "/tmp/pytest_worker0/",
+            now,
+            vault_titles=set(),
+        )
+        assert result is None
+        out, err = capsys.readouterr()
+        assert "pytest temporary directory" in err
+
+    def test_write_beat_normal_cwd_writes(self, tmp_path):
+        beat = {
+            "title": "Normal CWD Beat",
+            "type": "reference",
+            "scope": "general",
+            "durability": "durable",
+            "summary": "",
+            "tags": [],
+            "body": "content",
+            "relations": [],
+        }
+        now = datetime(2026, 3, 7, 12, 0, 0)
+        result = vault_mod.write_beat(
+            beat,
+            self._config(tmp_path),
+            "sess-3",
+            "/Users/dan/code/myproject",
+            now,
+            vault_titles=set(),
+        )
+        assert result is not None
+        assert result.exists()
 
 
 # ===========================================================================

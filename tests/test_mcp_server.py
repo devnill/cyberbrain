@@ -332,7 +332,17 @@ class TestCbExtractErrors:
             with patch.object(
                 _extract_mod, "parse_jsonl_transcript", return_value="content"
             ):
-                with patch.object(_extract_mod, "run_extraction", return_value={"skipped": False, "beats_count": 0, "beats_written": 0, "beat_records": [], "run_errors": []}):
+                with patch.object(
+                    _extract_mod,
+                    "run_extraction",
+                    return_value={
+                        "skipped": False,
+                        "beats_count": 0,
+                        "beats_written": 0,
+                        "beat_records": [],
+                        "run_errors": [],
+                    },
+                ):
                     result = cb_extract(transcript_path=str(transcript_file))
         assert result == "No beats extracted."
         assert isinstance(result, str)
@@ -355,7 +365,17 @@ class TestCbExtractCwdParam:
             with patch.object(
                 _extract_mod, "parse_jsonl_transcript", return_value="content"
             ):
-                with patch.object(_extract_mod, "run_extraction", return_value={"skipped": False, "beats_count": 0, "beats_written": 0, "beat_records": [], "run_errors": []}):
+                with patch.object(
+                    _extract_mod,
+                    "run_extraction",
+                    return_value={
+                        "skipped": False,
+                        "beats_count": 0,
+                        "beats_written": 0,
+                        "beat_records": [],
+                        "run_errors": [],
+                    },
+                ):
                     cb_extract(transcript_path=str(transcript_file), cwd=project_cwd)
         mock_load.assert_called_with(project_cwd)
 
@@ -367,7 +387,17 @@ class TestCbExtractCwdParam:
             with patch.object(
                 _extract_mod, "parse_jsonl_transcript", return_value="content"
             ):
-                with patch.object(_extract_mod, "run_extraction", return_value={"skipped": False, "beats_count": 0, "beats_written": 0, "beat_records": [], "run_errors": []}):
+                with patch.object(
+                    _extract_mod,
+                    "run_extraction",
+                    return_value={
+                        "skipped": False,
+                        "beats_count": 0,
+                        "beats_written": 0,
+                        "beat_records": [],
+                        "run_errors": [],
+                    },
+                ):
                     cb_extract(transcript_path=str(transcript_file))
         called_with = mock_load.call_args[0][0]
         assert called_with == str(fake_home)
@@ -403,13 +433,23 @@ class TestCbExtractSuccess:
             with patch.object(
                 _extract_mod, "parse_jsonl_transcript", return_value="content"
             ):
-                with patch.object(_extract_mod, "run_extraction", return_value={
-                    "skipped": False,
-                    "beats_count": 1,
-                    "beats_written": 1,
-                    "beat_records": [{"path": str(fake_path), "type": "insight", "title": "My Insight"}],
-                    "run_errors": [],
-                }):
+                with patch.object(
+                    _extract_mod,
+                    "run_extraction",
+                    return_value={
+                        "skipped": False,
+                        "beats_count": 1,
+                        "beats_written": 1,
+                        "beat_records": [
+                            {
+                                "path": str(fake_path),
+                                "type": "insight",
+                                "title": "My Insight",
+                            }
+                        ],
+                        "run_errors": [],
+                    },
+                ):
                     result = cb_extract(transcript_path=str(transcript_file))
 
         assert "1/1" in result

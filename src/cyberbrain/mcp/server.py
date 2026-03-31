@@ -3,7 +3,7 @@
 Cyberbrain MCP Server
 
 Exposes cb_extract, cb_file, cb_recall, cb_read, cb_configure, cb_status,
-cb_enrich, cb_restructure, cb_review, cb_reindex, and cb_setup as MCP tools
+cb_enrich, cb_restructure, cb_review, cb_reindex, cb_setup, and cb_audit as MCP tools
 so Claude Code and Claude Desktop can file beats into and search an Obsidian vault.
 
 Install: via Claude Code plugin system (`claude plugin install cyberbrain@devnill-cyberbrain`)
@@ -16,6 +16,7 @@ mcp = FastMCP("cyberbrain")
 
 from cyberbrain.mcp import resources
 from cyberbrain.mcp.tools import (
+    audit,
     enrich,
     extract,
     file,
@@ -36,6 +37,7 @@ enrich.register(mcp)
 restructure.register(mcp)
 review.register(mcp)
 reindex.register(mcp)
+audit.register(mcp)
 resources.register(mcp)
 
 if __name__ == "__main__":

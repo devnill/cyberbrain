@@ -1,9 +1,0 @@
-id: J-013-001
-type: journal_entry
-phase: refine
-date: "2026-03-22"
-cycle_created: 13
-title: Metrics summary
-content: "Agents spawned: 0 (all context from current session)"
-content_hash: d36eb6cfb1c6452a9bb433c5e90859690f595f5fdbef676fe040ab7ca17ca49d
-token_count: 47

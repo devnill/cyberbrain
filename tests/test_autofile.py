@@ -1240,3 +1240,258 @@ class TestBuildFolderExamples:
         # Count note appearances (bold titles **Note X**)
         note_count = user_msg.count("**Note")
         assert note_count <= 1, f"Expected at most 1 note sample, got {note_count}"
+
+
+# ===========================================================================
+# _update_cb_modified — writes updated field
+# ===========================================================================
+
+
+class TestUpdateCbModified:
+    """_update_cb_modified writes both cb_modified and updated to frontmatter."""
+
+    def test_update_cb_modified_writes_updated_field(self, tmp_path):
+        """_update_cb_modified writes both cb_modified and updated: YYYY-MM-DD."""
+        pytest.importorskip("ruamel.yaml")
+        from cyberbrain.extractors.autofile import _update_cb_modified
+
+        note = _write(
+            tmp_path / "Note.md",
+            textwrap.dedent("""\
+                ---
+                title: "Test Note"
+                tags: [test]
+                ---
+
+                Body.
+            """),
+        )
+        _update_cb_modified(note, NOW)
+        content = note.read_text()
+        assert "2026-01-15T12:00:00" in content
+        assert "2026-01-15" in content
+        assert "cb_modified:" in content
+        assert "updated:" in content
+
+    def test_update_cb_modified_overwrites_existing_updated_field(self, tmp_path):
+        """_update_cb_modified overwrites an existing updated: field."""
+        pytest.importorskip("ruamel.yaml")
+        from cyberbrain.extractors.autofile import _update_cb_modified
+
+        note = _write(
+            tmp_path / "Note.md",
+            textwrap.dedent("""\
+                ---
+                title: "Test Note"
+                updated: 2020-01-01
+                cb_modified: 2020-01-01T00:00:00
+                ---
+
+                Body.
+            """),
+        )
+        _update_cb_modified(note, NOW)
+        content = note.read_text()
+        assert content.count("updated:") == 1
+        assert "2026-01-15" in content
+        assert "2020-01-01" not in content
+
+
+# ===========================================================================
+# autofile_beat — create action entity type remapping
+# ===========================================================================
+
+
+class TestAutofileCreateEntityTypeRemap:
+    """create action remaps beat types to entity types in LLM-generated content."""
+
+    def test_autofile_create_remaps_beat_type_to_entity_type(self, tmp_path):
+        """LLM returns type: decision; written file contains type: resource (durable decision)."""
+        vault = _vault(tmp_path)
+        content = textwrap.dedent("""\
+            ---
+            id: abc123
+            type: decision
+            title: "Choose FastAPI"
+            tags: ["fastapi", "python"]
+            summary: "FastAPI chosen."
+            ---
+
+            ## Decision
+
+            FastAPI was chosen.
+        """)
+        decision = json.dumps(
+            {
+                "action": "create",
+                "path": "Projects/Choose FastAPI.md",
+                "content": content,
+                "confidence": 0.9,
+            }
+        )
+        beat = _beat(type="decision")  # durable by default
+
+        with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
+            with patch("cyberbrain.extractors.autofile.search_vault", return_value=[]):
+                result = autofile_beat(beat, _config(vault), "s", str(tmp_path), NOW)
+
+        assert result is not None
+        assert result.exists()
+        written = result.read_text()
+        assert "type: resource" in written
+        assert "type: decision" not in written
+
+    def test_autofile_create_preserves_valid_entity_type(self, tmp_path):
+        """LLM returns type: note; written file still contains type: note (unchanged)."""
+        vault = _vault(tmp_path)
+        content = textwrap.dedent("""\
+            ---
+            id: abc123
+            type: note
+            title: "A Working Note"
+            tags: ["python"]
+            summary: "Some note."
+            ---
+
+            Body.
+        """)
+        decision = json.dumps(
+            {
+                "action": "create",
+                "path": "Projects/A Working Note.md",
+                "content": content,
+                "confidence": 0.9,
+            }
+        )
+        beat = _beat(type="note")
+
+        with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
+            with patch("cyberbrain.extractors.autofile.search_vault", return_value=[]):
+                result = autofile_beat(beat, _config(vault), "s", str(tmp_path), NOW)
+
+        assert result is not None
+        assert result.exists()
+        written = result.read_text()
+        assert "type: note" in written
+
+    def test_autofile_create_working_memory_beat_maps_to_note_type(self, tmp_path):
+        """Beat with type: decision and durability: working-memory is written with type: note."""
+        vault = _vault(tmp_path)
+        content = textwrap.dedent("""\
+            ---
+            id: abc123
+            type: decision
+            title: "In-Flight Refactor Plan"
+            tags: ["refactor", "python"]
+            summary: "Current refactor in progress."
+            ---
+
+            ## Decision
+
+            Refactor in progress.
+        """)
+        decision = json.dumps(
+            {
+                "action": "create",
+                "path": "Projects/In-Flight Refactor Plan.md",
+                "content": content,
+                "confidence": 0.9,
+            }
+        )
+        beat = _beat(type="decision")
+        beat["durability"] = "working-memory"
+
+        with patch("cyberbrain.extractors.autofile.call_model", return_value=decision):
+            with patch("cyberbrain.extractors.autofile.search_vault", return_value=[]):
+                result = autofile_beat(beat, _config(vault), "s", str(tmp_path), NOW)
+
+        assert result is not None
+        assert result.exists()
+        written = result.read_text()
+        assert "type: note" in written
+
+
+# ===========================================================================
+# autofile_beat — scope-aware routing (WI-101 / WI-112)
+# ===========================================================================
+
+
+class TestAutofileScopeRouting:
+    """Scope-aware routing: system prompt contains scope instructions; scope:general
+    beats route to Knowledge/ not inbox."""
+
+    def test_autofile_system_prompt_contains_scope_routing(self):
+        """Verify the autofile system prompt contains scope-aware routing instructions."""
+        prompt_path = (
+            Path(__file__).parent.parent
+            / "src"
+            / "cyberbrain"
+            / "prompts"
+            / "autofile-system.md"
+        )
+        content = prompt_path.read_text()
+        assert "scope: general" in content, (
+            "autofile-system.md should contain scope:general routing rules"
+        )
+        assert "scope: project" in content, (
+            "autofile-system.md should contain scope:project routing rules"
+        )
+        assert "Knowledge/" in content, (
+            "autofile-system.md should reference Knowledge/ folder"
+        )
+
+    def test_autofile_scope_general_routes_to_knowledge(self, tmp_path):
+        """When autofile_beat receives a scope:general beat and the LLM responds with
+        a Knowledge/ folder, the note is filed there (not in inbox)."""
+        vault = _vault(tmp_path)
+        (vault / "Knowledge" / "Python").mkdir(parents=True)
+
+        llm_response = json.dumps(
+            {
+                "action": "create",
+                "folder": "Knowledge/Python",
+                "filename": "Python Subprocess Encoding.md",
+                "path": "Knowledge/Python/Python Subprocess Encoding.md",
+                "content": textwrap.dedent("""\
+                    ---
+                    title: "Python Subprocess Encoding"
+                    type: reference
+                    tags: ["python", "subprocess"]
+                    summary: "How subprocess handles encoding."
+                    ---
+
+                    ## Reference
+
+                    Subprocess encoding details.
+                """),
+                "confidence": 0.9,
+                "reasoning": "World knowledge about Python subprocesses.",
+            }
+        )
+
+        beat = _beat(
+            title="Python Subprocess Encoding",
+            type="reference",
+            scope="general",
+            summary="How subprocess handles encoding.",
+            tags=["python", "subprocess"],
+        )
+        config = _config(vault)
+
+        with patch(
+            "cyberbrain.extractors.autofile.call_model", return_value=llm_response
+        ):
+            result = autofile_beat(
+                beat, config, "session-scope-test", str(tmp_path), NOW
+            )
+
+        assert result is not None
+        assert result.exists()
+        assert "Knowledge" in str(result), (
+            f"Expected result path to contain 'Knowledge/', got: {result}"
+        )
+        # Confirm it did NOT land in inbox
+        inbox_path = vault / "AI" / "Claude-Sessions"
+        assert not str(result).startswith(str(inbox_path)), (
+            f"scope:general beat should not route to inbox, got: {result}"
+        )

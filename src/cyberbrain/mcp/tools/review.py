@@ -23,6 +23,7 @@ from cyberbrain.mcp.shared import (
 from cyberbrain.mcp.shared import (
     _load_tool_prompt as _load_prompt,
 )
+from cyberbrain.mcp.tools.restructure.format import _correct_entity_type_in_content
 
 _PREFS_HEADING = "## Cyberbrain Preferences"
 
@@ -54,7 +55,8 @@ def _find_due_notes(vault: Path, wm_root: Path, days_ahead: int) -> list[dict]:
         except OSError:
             continue
         fm = _parse_frontmatter(content)
-        if not fm.get("cb_ephemeral"):
+        _eph = fm.get("cb_ephemeral")
+        if not (_eph is True or _eph == "true" or _eph == 1):
             continue
         review_after_raw = fm.get("cb_review_after", "")
         if not review_after_raw:
@@ -419,8 +421,32 @@ def register(mcp: FastMCP) -> None:
 
                 output_path = vault / promoted_path_rel
 
+                # Correct beat types to entity types before writing
+                promoted_content, type_warn = _correct_entity_type_in_content(
+                    promoted_content
+                )
+                if type_warn:
+                    result_lines.append(
+                        f"  Note: Promoted note type corrected — {type_warn}"
+                    )
+
+                # Strip working-memory-only fields from promoted notes
+                promoted_content = re.sub(
+                    r"^cb_ephemeral:.*\n?", "", promoted_content, flags=re.MULTILINE
+                )
+                promoted_content = re.sub(
+                    r"^cb_review_after:.*\n?", "", promoted_content, flags=re.MULTILINE
+                )
+
                 # Inject provenance
-                prov = f"\ncb_source: cb-review\ncb_created: {ts}"
+                _today_promote = datetime.now().strftime("%Y-%m-%d")
+                prov = (
+                    f"\naliases: []"
+                    f"\ncreated: {_today_promote}"
+                    f"\nupdated: {_today_promote}"
+                    f"\ncb_source: cb-review"
+                    f"\ncb_created: {ts}"
+                )
                 if promoted_content.startswith("---"):
                     end = promoted_content.find("\n---", 3)
                     if end != -1:

@@ -806,6 +806,7 @@ def _rrf_fuse(
 # ---------------------------------------------------------------------------
 
 from cyberbrain.extractors.state import search_db_path as _search_db_path
+
 _DEFAULT_MODEL = "TaylorAI/bge-micro-v2"
 
 
@@ -862,7 +863,11 @@ def get_search_backend(config: dict) -> SearchBackend:
         return FTS5Backend(vault_path, db_path)
     except Exception as exc:
         import sys
-        print(f"[search_backends] FTS5Backend init failed, falling back to GrepBackend: {exc}", file=sys.stderr)
+
+        print(
+            f"[search_backends] FTS5Backend init failed, falling back to GrepBackend: {exc}",
+            file=sys.stderr,
+        )
         return GrepBackend(vault_path)
 
 

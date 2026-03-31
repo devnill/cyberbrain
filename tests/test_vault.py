@@ -7,11 +7,13 @@ Covers:
 - move_vault_note: happy path, path traversal rejection (src and dest), parent dir creation
 """
 
-from pathlib import Path
-
 import pytest
 
-from cyberbrain.extractors.vault import move_vault_note, update_vault_note, write_vault_note
+from cyberbrain.extractors.vault import (
+    move_vault_note,
+    update_vault_note,
+    write_vault_note,
+)
 
 
 class TestWriteVaultNote:

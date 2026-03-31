@@ -33,7 +33,13 @@ _BEAT_TO_ENTITY_TYPE = {
 
 
 def _resolve_entity_type(beat_type: str, durability: str) -> str:
-    """Map a beat type to a vault entity type based on durability."""
+    """Map a beat type to a vault entity type based on durability.
+
+    If beat_type is already a valid entity type (e.g. 'project', 'archived'),
+    it is returned as-is so document-intake callers can pass entity types directly.
+    """
+    if beat_type in _DEFAULT_VALID_ENTITY_TYPES:
+        return beat_type
     if durability == "working-memory":
         return "note"
     return _BEAT_TO_ENTITY_TYPE.get(beat_type, "resource")
@@ -115,6 +121,7 @@ def get_valid_beat_types(config: dict) -> set:
 # ---------------------------------------------------------------------------
 
 _FILENAME_INVALID = re.compile(r'[<>:"/\\|?*#\[\]^\x00-\x1f]')
+_PYTEST_TMPDIR_PATTERN = re.compile(r"/pytest-\d+/|/pytest_[^/]+/|/tmp/pytest[-_]")
 
 
 def make_filename(title: str) -> str:
@@ -318,19 +325,45 @@ def inject_provenance(
     extra_fields: optional additional YAML lines (e.g. WM fields) to append after provenance.
     """
     ts = now.strftime("%Y-%m-%dT%H:%M:%S")
-    lines = [f"cb_source: {source}", f"cb_created: {ts}"]
-    if session_id:
-        lines.append(f"cb_session: {session_id}")
-    if extra_fields:
-        lines.extend(extra_fields.splitlines())
+    date_str = now.strftime("%Y-%m-%d")
 
     if not content.startswith("---"):
+        lines = [
+            "aliases: []",
+            f"created: {date_str}",
+            f"updated: {date_str}",
+            f"cb_source: {source}",
+            f"cb_created: {ts}",
+        ]
+        if session_id:
+            lines.append(f"cb_session: {session_id}")
+        if extra_fields:
+            lines.extend(extra_fields.splitlines())
         header = "---\n" + "\n".join(lines) + "\n---\n\n"
         return header + content
 
     end = content.find("\n---", 3)
     if end == -1:
         return content
+
+    existing_fm = content[3:end]
+
+    def _should_inject(key: str) -> bool:
+        return not re.search(rf"^{re.escape(key)}:", existing_fm, re.MULTILINE)
+
+    lines: list[str] = []
+    if _should_inject("aliases"):
+        lines.append("aliases: []")
+    if _should_inject("created"):
+        lines.append(f"created: {date_str}")
+    if _should_inject("updated"):
+        lines.append(f"updated: {date_str}")
+    lines.append(f"cb_source: {source}")
+    lines.append(f"cb_created: {ts}")
+    if session_id:
+        lines.append(f"cb_session: {session_id}")
+    if extra_fields:
+        lines.extend(extra_fields.splitlines())
 
     injection = "\n" + "\n".join(lines)
     return content[:end] + injection + content[end:]
@@ -381,8 +414,20 @@ def write_beat(
     source: str = "hook-extraction",
 ) -> Path | None:
     """Write a single beat to a markdown file. Returns the file path, or None if routing fails."""
+    if _PYTEST_TMPDIR_PATTERN.search(cwd):
+        print(
+            f"[extract_beats] Skipping vault write — pytest temporary directory detected in cwd: {cwd}",
+            file=sys.stderr,
+        )
+        return None
+
     beat_type = beat.get("type", "reference")
-    if beat_type not in _DEFAULT_VALID_BEAT_TYPES:
+    # Allow valid entity types (e.g. 'project', 'archived') to pass through
+    # so document-intake callers can specify the entity type directly.
+    if (
+        beat_type not in _DEFAULT_VALID_BEAT_TYPES
+        and beat_type not in _DEFAULT_VALID_ENTITY_TYPES
+    ):
         beat_type = "reference"
 
     durability = beat.get("durability", "durable")
@@ -443,20 +488,25 @@ def write_beat(
 
     # Use json.dumps for all string fields to safely handle quotes, colons,
     # and special chars. JSON string syntax is valid YAML scalar syntax.
+    created_date = now.strftime("%Y-%m-%d")
     front_matter = f"""---
 id: {beat_id}
 date: {date_str}
-session_id: {json.dumps(session_id)}
+cb_session: {json.dumps(session_id)}
 type: {json.dumps(entity_type)}
 beat_type: {json.dumps(beat_type)}
+durability: {json.dumps(durability)}
 scope: {json.dumps(scope)}
 title: {json.dumps(title)}
+aliases: []
 project: {json.dumps(project_name)}
 cwd: {json.dumps(cwd)}
 tags: {json.dumps(tags)}
 related: {json.dumps(related_wikilinks)}
 status: {json.dumps(status)}
 summary: {json.dumps(summary)}
+created: {created_date}
+updated: {created_date}
 cb_source: {json.dumps(source)}
 cb_created: {date_str}{wm_fields}{uncertain_routing_field}
 ---"""

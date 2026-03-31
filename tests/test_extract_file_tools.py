@@ -447,7 +447,11 @@ class TestCbExtractDailyJournal:
         call_kwargs = mock_run.call_args
         # trigger is passed as positional arg index 2 or keyword
         args, kwargs = call_kwargs
-        trigger = args[2] if len(args) > 2 else kwargs.get("trigger", args[2] if len(args) > 2 else None)
+        trigger = (
+            args[2]
+            if len(args) > 2
+            else kwargs.get("trigger", args[2] if len(args) > 2 else None)
+        )
         assert trigger == "manual"
 
     def test_skipped_session_returns_skipped_message(self, tmp_path, monkeypatch):
@@ -1016,6 +1020,80 @@ class TestCbFileDocumentIntake:
 
         mock_autofile.assert_called_once()
         mock_write.assert_not_called()
+
+
+# ===========================================================================
+# cb_file — entity type pass-through for document intake (WI-111)
+# ===========================================================================
+
+
+class TestCbFileIntakeEntityType:
+    """cb_file document-intake: entity types pass through; beat types are remapped."""
+
+    def test_cb_file_intake_preserves_entity_type(self, tmp_path):
+        """cb_file(title='X', type='project') writes a beat with type='project'."""
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        config = _base_config(vault)
+
+        fake_path = vault / "AI/Claude-Sessions/Test Note.md"
+        fake_path.parent.mkdir(parents=True, exist_ok=True)
+        fake_path.touch()
+
+        mod = _get_file_module()
+        cb_file = _register_file()
+        captured_beats = []
+
+        def capture_write(b, *args, **kwargs):
+            captured_beats.append(dict(b))
+            return fake_path
+
+        with patch.object(mod, "_load_config", return_value=config):
+            with patch.object(mod, "_extract_beats", MagicMock()):
+                with patch.object(mod, "write_beat", side_effect=capture_write):
+                    cb_file(
+                        content="A project-scoped document.",
+                        title="Test Note",
+                        type="project",
+                    )
+
+        assert len(captured_beats) == 1
+        assert captured_beats[0]["type"] == "project"
+
+    def test_cb_file_intake_remaps_beat_type(self, tmp_path):
+        """cb_file(title='X', type='reference') produces a note with entity type 'resource'."""
+        from unittest.mock import patch as std_patch
+
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        inbox = vault / "AI/Claude-Sessions"
+        inbox.mkdir(parents=True, exist_ok=True)
+        config = _base_config(vault)
+
+        mod = _get_file_module()
+        cb_file = _register_file()
+
+        # Do not mock write_beat — let the real implementation run so we can
+        # verify that 'reference' is remapped to entity type 'resource' on disk.
+        # update_search_index is imported lazily inside write_beat; patch it at
+        # its source module so the lazy import picks up the mock.
+        with patch.object(mod, "_load_config", return_value=config):
+            with patch.object(mod, "_extract_beats", MagicMock()):
+                with std_patch(
+                    "cyberbrain.extractors.search_index.update_search_index"
+                ):
+                    cb_file(
+                        content="A reference document.",
+                        title="Remap Test",
+                        type="reference",
+                        # cwd=None -> effective_cwd = Path.home(), bypasses pytest guard
+                    )
+
+        # Find the written file
+        written_files = list(inbox.rglob("*.md"))
+        assert len(written_files) == 1, f"Expected 1 written file, got: {written_files}"
+        content = written_files[0].read_text(encoding="utf-8")
+        assert 'type: "resource"' in content
 
 
 # ===========================================================================

@@ -1542,9 +1542,7 @@ class TestCbConfigureSearchBackendInvalidation:
 
         home, cfg_dir = self._setup_home(tmp_path, monkeypatch)
         cfg_file = cfg_dir / "config.json"
-        cfg_file.write_text(
-            json.dumps({"search_backend": "fts5"}), encoding="utf-8"
-        )
+        cfg_file.write_text(json.dumps({"search_backend": "fts5"}), encoding="utf-8")
 
         # Seed the cache with a sentinel value
         sentinel = object()
@@ -1559,9 +1557,7 @@ class TestCbConfigureSearchBackendInvalidation:
         assert shared_mod._search_backend is sentinel
 
         # Now write a config that changes search_backend
-        cfg_file.write_text(
-            json.dumps({"search_backend": "grep"}), encoding="utf-8"
-        )
+        cfg_file.write_text(json.dumps({"search_backend": "grep"}), encoding="utf-8")
         shared_mod._search_backend = sentinel
 
         with patch.dict(
@@ -1599,17 +1595,13 @@ class TestCbConfigureSearchBackendInvalidation:
         home, cfg_dir = self._setup_home(tmp_path, monkeypatch)
         cfg_file = cfg_dir / "config.json"
         # Start with search_backend=fts5 in config
-        cfg_file.write_text(
-            json.dumps({"search_backend": "fts5"}), encoding="utf-8"
-        )
+        cfg_file.write_text(json.dumps({"search_backend": "fts5"}), encoding="utf-8")
 
         # Manually patch the config loaded by _load_raw (which reads from cfg_file)
         # to simulate a change: we update cfg_file to have search_backend=grep,
         # then call cb_configure with any write-triggering arg.
         # Because _load_raw reads from disk, we update the file directly.
-        cfg_file.write_text(
-            json.dumps({"search_backend": "grep"}), encoding="utf-8"
-        )
+        cfg_file.write_text(json.dumps({"search_backend": "grep"}), encoding="utf-8")
 
         sentinel = object()
         shared_mod._search_backend = sentinel

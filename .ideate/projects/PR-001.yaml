@@ -1,0 +1,20 @@
+id: PR-001
+type: project
+status: active
+appetite: 6
+
+intent: |-
+  A Claude Code plugin providing a structured SDLC workflow — taking rough ideas through planning, execution, review, and refinement.
+
+scope_boundary:
+  in:
+    - "*"
+  out: []
+
+success_criteria: []
+
+horizon:
+  current: PH-001
+  next: []
+  later: []
+

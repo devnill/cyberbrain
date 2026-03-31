@@ -324,7 +324,9 @@ class TestExtendReviewAfter:
 
     def test_returns_false_on_oserror(self, tmp_path):
         missing = tmp_path / "nonexistent.md"
-        result = review_mod._extend_review_after(missing, weeks=4, vault_path=str(tmp_path))
+        result = review_mod._extend_review_after(
+            missing, weeks=4, vault_path=str(tmp_path)
+        )
         assert result is False
 
     def test_returns_false_when_no_field(self, tmp_path):
@@ -530,6 +532,121 @@ class TestCbReviewActions:
             result = _cb_review()(dry_run=False)
         assert (tmp_path / "Knowledge" / "Promoted.md").exists()
         assert "Promoted" in result
+
+    def test_promote_note_contains_aliases_created_updated(self, tmp_path):
+        config, path = self._setup(tmp_path)
+        promoted_content = (
+            "---\ntitle: Promoted\ntype: reference\nsummary: s\ntags: []\n---\n\nBody\n"
+        )
+        decisions = [
+            {
+                "action": "promote",
+                "indices": [0],
+                "rationale": "valuable",
+                "promoted_title": "My Promoted Note",
+                "promoted_path": "Knowledge/Promoted.md",
+                "promoted_content": promoted_content,
+            }
+        ]
+
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch.object(review_mod, "_index_paths"),
+            patch.object(review_mod, "_prune_index"),
+            patch(
+                "cyberbrain.extractors.backends.call_model",
+                return_value=json.dumps(decisions),
+            ),
+            patch("cyberbrain.extractors.backends.BackendError", Exception),
+        ):
+            _cb_review()(dry_run=False)
+
+        written = (tmp_path / "Knowledge" / "Promoted.md").read_text()
+        assert "aliases:" in written
+        assert "created:" in written
+        assert "updated:" in written
+
+    def test_promote_corrects_beat_type_to_entity_type(self, tmp_path):
+        config, path = self._setup(tmp_path)
+        # LLM returns promoted_content with a beat type (insight) instead of an entity type
+        promoted_content = (
+            "---\ntitle: Promoted\ntype: insight\nsummary: s\ntags: []\n---\n\nBody\n"
+        )
+        decisions = [
+            {
+                "action": "promote",
+                "indices": [0],
+                "rationale": "valuable",
+                "promoted_title": "My Promoted Note",
+                "promoted_path": "Knowledge/Promoted.md",
+                "promoted_content": promoted_content,
+            }
+        ]
+
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch.object(review_mod, "_index_paths"),
+            patch.object(review_mod, "_prune_index"),
+            patch(
+                "cyberbrain.extractors.backends.call_model",
+                return_value=json.dumps(decisions),
+            ),
+            patch("cyberbrain.extractors.backends.BackendError", Exception),
+        ):
+            _cb_review()(dry_run=False)
+
+        written = (tmp_path / "Knowledge" / "Promoted.md").read_text()
+        assert 'type: "resource"' in written
+        assert "type: insight" not in written
+
+    def test_promote_strips_ephemeral_fields(self, tmp_path):
+        config, path = self._setup(tmp_path)
+        # LLM returns promoted_content that still contains working-memory-only fields
+        promoted_content = (
+            "---\n"
+            "title: Promoted\n"
+            "type: reference\n"
+            "durability: durable\n"
+            "summary: s\n"
+            "tags: []\n"
+            "cb_ephemeral: true\n"
+            "cb_review_after: 2026-04-01\n"
+            "---\n\n"
+            "Body text.\n"
+        )
+        decisions = [
+            {
+                "action": "promote",
+                "indices": [0],
+                "rationale": "valuable",
+                "promoted_title": "My Promoted Note",
+                "promoted_path": "Knowledge/Promoted.md",
+                "promoted_content": promoted_content,
+            }
+        ]
+
+        with (
+            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "_get_search_backend", return_value=None),
+            patch.object(review_mod, "_load_prompt", return_value="prompt"),
+            patch.object(review_mod, "_index_paths"),
+            patch.object(review_mod, "_prune_index"),
+            patch(
+                "cyberbrain.extractors.backends.call_model",
+                return_value=json.dumps(decisions),
+            ),
+            patch("cyberbrain.extractors.backends.BackendError", Exception),
+        ):
+            _cb_review()(dry_run=False)
+
+        written = (tmp_path / "Knowledge" / "Promoted.md").read_text()
+        assert "cb_ephemeral:" not in written
+        assert "cb_review_after:" not in written
+        assert "durability: durable" in written
 
     def test_promote_skips_path_traversal(self, tmp_path):
         config, path = self._setup(tmp_path)

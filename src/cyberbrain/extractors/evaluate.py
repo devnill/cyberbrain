@@ -71,7 +71,9 @@ class EvalResult:
     metadata: dict = field(default_factory=dict)
 
 
-def _build_config_with_overrides(base_config: "CyberbrainConfig | dict", overrides: dict) -> dict:
+def _build_config_with_overrides(
+    base_config: "CyberbrainConfig | dict", overrides: dict
+) -> dict:
     """Merge variant overrides into a copy of the base config."""
     merged = dict(base_config)
     for key, value in overrides.items():
@@ -160,7 +162,10 @@ def _run_restructure(notes_content: list, config: dict, params: dict) -> str:
 
 
 def _score_with_llm(
-    operation: str, notes_content: list, outputs: list, config: "CyberbrainConfig | dict"
+    operation: str,
+    notes_content: list,
+    outputs: list,
+    config: "CyberbrainConfig | dict",
 ) -> list:
     """Use LLM-as-judge to score variant outputs."""
     system_prompt = load_prompt("evaluate-system.md")
@@ -181,6 +186,7 @@ def _score_with_llm(
 
     try:
         from typing import cast as _cast
+
         raw = call_model(system_prompt, user_message, _cast(dict, config))
         # Strip code fences if present
         import re

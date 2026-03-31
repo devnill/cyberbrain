@@ -1,5 +1,6 @@
 """cb_enrich tool — scan vault and enrich notes with missing metadata."""
 
+import io
 import json
 import re
 import uuid
@@ -26,6 +27,11 @@ _DAILY_JOURNAL_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
 _BATCH_SIZE = 10
 _DEFAULT_ENTITY_TYPES = ["project", "note", "resource", "archived"]
 _BEAT_TYPES = {"decision", "insight", "problem", "reference"}
+
+# Placeholder values written by LLM when it has no real content to offer.
+# Notes containing these values should be re-enriched as if the field were missing.
+_PLACEHOLDER_SUMMARIES: set[str] = {"New accurate summary.", ""}
+_PLACEHOLDER_TAGS: set[str] = {"new-tag", "updated"}
 
 
 def _get_valid_types(vault: Path) -> list[str]:
@@ -95,12 +101,14 @@ def _should_skip(path: Path, vault: Path, content: str) -> bool:
     return False
 
 
-def _needs_enrichment(content: str, valid_types: list[str]) -> tuple[bool, str]:
-    """Return (needs_enrichment, reason). valid_types used for type validation."""
-    if not content.strip().startswith("---"):
-        return True, "no frontmatter"
+def _needs_enrichment(
+    path: Path, fm: dict, valid_types: set[str] | list[str], overwrite: bool
+) -> tuple[bool, str]:
+    """Return (needs_enrichment, reason).
 
-    fm = _parse_frontmatter(content)
+    Accepts a pre-parsed frontmatter dict and the note path (for context).
+    valid_types is used for type validation.
+    """
     if not fm:
         return True, "no frontmatter"
 
@@ -114,6 +122,10 @@ def _needs_enrichment(content: str, valid_types: list[str]) -> tuple[bool, str]:
     if not summary or not str(summary).strip():
         return True, "missing summary"
 
+    # Detect placeholder summary written by LLM when it had no real content
+    if str(summary).strip() in (_PLACEHOLDER_SUMMARIES - {""}):
+        return True, "placeholder summary"
+
     tags = fm.get("tags", [])
     if isinstance(tags, str):
         tags = [t.strip() for t in tags.split(",") if t.strip()]
@@ -121,6 +133,11 @@ def _needs_enrichment(content: str, valid_types: list[str]) -> tuple[bool, str]:
         tags = []
     if not tags:
         return True, "missing tags"
+
+    # Detect placeholder tags written by LLM when it had no real content
+    existing_tag_set = {str(t) for t in tags}
+    if existing_tag_set and existing_tag_set <= _PLACEHOLDER_TAGS:
+        return True, "placeholder tags"
 
     trivial = {"personal", "work", "home", "general"}
     if all(t.lower() in trivial for t in tags):
@@ -136,61 +153,108 @@ def _apply_frontmatter_update(
     overwrite: bool,
     vault_path: str = "",
 ) -> bool:
-    """Apply classification to the note's frontmatter. Returns True on success."""
-    fm = _parse_frontmatter(content)
-    # Check for actual frontmatter: starts with --- and has a closing ---
-    has_fm = content.strip().startswith("---") and content.find("\n---\n", 3) != -1
-    # Malformed: starts with --- but no closing ---
-    if content.strip().startswith("---") and not has_fm:
+    """Apply classification to the note's frontmatter using ruamel.yaml.
+
+    Parses the full frontmatter block, updates fields in-place, and re-serializes.
+    Never appends raw YAML strings — idempotent by design.
+
+    Returns True on success, False on failure.
+    """
+    try:
+        from ruamel.yaml import YAML
+    except ImportError:
+        # Graceful degradation: ruamel.yaml unavailable
         return False
 
-    fields_to_set: dict = {}
+    # Detect frontmatter boundaries
+    stripped = content.lstrip()
+    has_fm = stripped.startswith("---")
+    if has_fm:
+        # Find the closing --- (must be on its own line, after the opening)
+        fm_end = content.find("\n---", 3)
+        if fm_end == -1:
+            # Malformed: opening --- with no closing ---
+            return False
+        # Consume the closing --- line (may be \n---\n or \n--- at EOF)
+        after_close = content[fm_end + 4 :]  # skip "\n---"
+        if after_close and after_close[0] == "\n":
+            body_text = after_close[1:]
+        else:
+            body_text = after_close
+        fm_raw = content[3:fm_end]  # text between opening and closing ---
+    else:
+        fm_raw = ""
+        body_text = content
 
-    if classification.get("type"):
-        if not fm.get("type") or overwrite:
-            fields_to_set["type"] = classification["type"]
+    # Parse existing frontmatter
+    yaml = YAML()
+    yaml.preserve_quotes = True
+    yaml.default_flow_style = False
+    try:
+        fm_data = yaml.load(fm_raw) if fm_raw.strip() else None
+    except Exception:  # intentional: ruamel.yaml can raise many error types
+        return False
 
-    if classification.get("summary"):
-        if not fm.get("summary") or overwrite:
-            fields_to_set["summary"] = classification["summary"]
+    if fm_data is None:
+        fm_data = {}
+    if not isinstance(fm_data, dict):
+        return False
 
+    changed = False
+    now = datetime.now(UTC)
+
+    # --- type ---
+    new_type = classification.get("type")
+    if new_type:
+        existing_type = fm_data.get("type", "")
+        if not existing_type or overwrite:
+            fm_data["type"] = new_type
+            changed = True
+
+    # --- summary ---
+    new_summary = classification.get("summary")
+    if new_summary:
+        existing_summary = str(fm_data.get("summary", "")).strip()
+        is_placeholder = existing_summary in _PLACEHOLDER_SUMMARIES
+        if not existing_summary or is_placeholder or overwrite:
+            fm_data["summary"] = new_summary
+            changed = True
+
+    # --- tags ---
     new_tags = classification.get("tags", [])
     if new_tags:
-        existing_tags = fm.get("tags", [])
+        existing_tags = fm_data.get("tags", [])
         if isinstance(existing_tags, str):
             existing_tags = [t.strip() for t in existing_tags.split(",") if t.strip()]
-        if not existing_tags or overwrite:
-            fields_to_set["tags"] = new_tags
+        existing_tag_set = {str(t) for t in existing_tags} if existing_tags else set()
+        is_placeholder_tags = (
+            bool(existing_tag_set) and existing_tag_set <= _PLACEHOLDER_TAGS
+        )
+        if not existing_tags or is_placeholder_tags or overwrite:
+            fm_data["tags"] = new_tags
+            changed = True
 
-    if not fields_to_set:
+    if not changed and has_fm:
         return True  # nothing to update
 
-    fields_to_set["cb_modified"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
+    # Always stamp cb_modified and updated when we write
+    fm_data["cb_modified"] = now.strftime("%Y-%m-%dT%H:%M:%S")
+    fm_data["updated"] = now.strftime("%Y-%m-%d")
 
-    if has_fm:
-        # Insert new fields before the closing ---
-        # Find the closing --- separator (not the opening one at position 0)
-        fm_end = content.find("\n---\n", 3)
-        if fm_end == -1:
-            # Check if file ends with --- (malformed or empty frontmatter)
-            stripped_end = content.rstrip()
-            if stripped_end.endswith("---"):
-                # Find where the trailing --- starts
-                fm_end = content.rfind("---")
-                if fm_end <= 3:  # Must be after the opening ---
-                    return False
-            else:
-                return False
+    if not has_fm:
+        # Prepend a complete frontmatter block for notes that had none
+        if "id" not in fm_data:
+            fm_data["id"] = str(uuid.uuid4())
 
-        lines_to_add = _format_fm_fields(fields_to_set)
-        new_content = (
-            content[:fm_end] + "\n" + "\n".join(lines_to_add) + content[fm_end:]
-        )
-    else:
-        # Prepend a complete frontmatter block
-        new_id = str(uuid.uuid4())
-        fm_lines = ["---", f"id: {new_id}"] + _format_fm_fields(fields_to_set) + ["---"]
-        new_content = "\n".join(fm_lines) + "\n\n" + content
+    # Serialize the updated frontmatter
+    out = io.StringIO()
+    try:
+        yaml.dump(fm_data, out)
+    except Exception:  # intentional: ruamel.yaml serialization errors
+        return False
+
+    fm_text = out.getvalue().rstrip("\n")
+    new_content = f"---\n{fm_text}\n---\n{body_text}"
 
     try:
         if vault_path and path.exists():
@@ -202,22 +266,6 @@ def _apply_frontmatter_update(
         return True
     except (OSError, ValueError):
         return False
-
-
-def _format_fm_fields(fields: dict) -> list[str]:
-    """Format frontmatter fields as YAML lines."""
-    lines = []
-    if "type" in fields:
-        lines.append(f"type: {fields['type']}")
-    if "summary" in fields:
-        escaped = fields["summary"].replace('"', '\\"')
-        lines.append(f'summary: "{escaped}"')
-    if "tags" in fields:
-        tags_str = "[" + ", ".join(fields["tags"]) + "]"
-        lines.append(f"tags: {tags_str}")
-    if "cb_modified" in fields:
-        lines.append(f"cb_modified: {fields['cb_modified']}")
-    return lines
 
 
 def register(mcp: FastMCP) -> None:
@@ -317,7 +365,11 @@ def register(mcp: FastMCP) -> None:
                 skipped += 1
                 continue
 
-            needs, reason = _needs_enrichment(content, valid_types)
+            if not content.strip().startswith("---"):
+                fm: dict = {}
+            else:
+                fm = _parse_frontmatter(content)
+            needs, reason = _needs_enrichment(f, fm, valid_types, overwrite)
             if needs or overwrite:
                 needs_enrichment.append(
                     (f, content, reason if needs else "overwrite mode")
@@ -423,7 +475,9 @@ def register(mcp: FastMCP) -> None:
                         gate_skipped.append((f, cls, verdict))
                         continue
 
-                success = _apply_frontmatter_update(f, content, cls, overwrite, vault_path=config["vault_path"])
+                success = _apply_frontmatter_update(
+                    f, content, cls, overwrite, vault_path=config["vault_path"]
+                )
                 if success:
                     enriched.append((f, cls))
                 else:

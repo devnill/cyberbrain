@@ -1,6 +1,5 @@
 """Tests for tests/_dependency_map.py."""
 
-import ast
 import textwrap
 from pathlib import Path
 
@@ -10,7 +9,9 @@ from tests._dependency_map import _REPO_ROOT, TestMapper
 class TestExtractImports:
     """Unit tests for _extract_imports() covering ast.Import nodes."""
 
-    def _make_mapper_with_source(self, source: str, tmp_path: Path) -> tuple["TestMapper", Path]:
+    def _make_mapper_with_source(
+        self, source: str, tmp_path: Path
+    ) -> tuple["TestMapper", Path]:
         test_file = tmp_path / "test_fake.py"
         test_file.write_text(textwrap.dedent(source))
         m = TestMapper()
@@ -120,7 +121,9 @@ class TestTestMapper:
         """restructure/pipeline.py changes should trigger test_restructure_tool.py."""
         m = TestMapper()
         m.build()
-        result = m.get_tests_for(Path("src/cyberbrain/mcp/tools/restructure/pipeline.py"))
+        result = m.get_tests_for(
+            Path("src/cyberbrain/mcp/tools/restructure/pipeline.py")
+        )
         assert "tests/test_restructure_tool.py" in result
 
     def test_shared_maps_to_test_mcp_server(self):

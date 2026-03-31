@@ -17,6 +17,7 @@ def __getattr__(name: str):  # noqa: N807 — PEP 562 lazy module attributes
         return _config_path_fn()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
+
 PROJECT_CONFIG_NAME = "cyberbrain.local.json"
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
@@ -64,7 +65,9 @@ class CyberbrainConfig(TypedDict, total=False):
 def load_global_config() -> CyberbrainConfig:
     import cyberbrain.extractors.config as _self
 
-    _cfg_path = _self.GLOBAL_CONFIG_PATH  # goes through __getattr__ or test-patched attribute
+    _cfg_path = (
+        _self.GLOBAL_CONFIG_PATH
+    )  # goes through __getattr__ or test-patched attribute
     if not _cfg_path.exists():
         print(
             f"[extract_beats] Global config not found at {_cfg_path}. "

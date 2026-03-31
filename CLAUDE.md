@@ -21,7 +21,7 @@ Read `specs/plan/overview.md` for current focus. The `specs/` directory uses the
 
 A knowledge capture and retrieval system for LLM interactions. It automatically extracts durable knowledge ("beats") from Claude sessions and stores them as structured Obsidian markdown notes, making that knowledge searchable and injectable into future sessions.
 
-The system exposes an MCP server with eleven tools (`cb_extract`, `cb_file`, `cb_recall`, `cb_read`, `cb_setup`, `cb_enrich`, `cb_configure`, `cb_status`, `cb_restructure`, `cb_review`, `cb_reindex`), three hooks (PreCompact extraction, SessionEnd extraction, SessionEnd reindex) for automatic capture, and CLI import scripts for Claude and ChatGPT data exports. The MCP server is the single interface — no slash command skills.
+The system exposes an MCP server with twelve tools (`cb_extract`, `cb_file`, `cb_recall`, `cb_read`, `cb_setup`, `cb_enrich`, `cb_configure`, `cb_status`, `cb_restructure`, `cb_review`, `cb_reindex`, `cb_audit`), three hooks (PreCompact extraction, SessionEnd extraction, SessionEnd reindex) for automatic capture, and CLI import scripts for Claude and ChatGPT data exports. The MCP server is the single interface — no slash command skills.
 
 ---
 
@@ -144,11 +144,13 @@ Beat routing:
 | `src/cyberbrain/prompts/restructure-audit-system.md` / `restructure-audit-user.md` | Restructure audit prompts — topical fit and quality checks |
 | `src/cyberbrain/prompts/restructure-group-system.md` / `restructure-group-user.md` | Restructure grouping prompts — LLM-driven semantic clustering |
 | `src/cyberbrain/mcp/tools/reindex.py` | `cb_reindex` tool — prune stale index entries or full rebuild |
+| `src/cyberbrain/mcp/tools/audit.py` | `cb_audit` tool — read-only vault schema compliance audit; 8 checks; saves report to `~/.claude/cyberbrain/audit-report.json` |
 | `src/cyberbrain/prompts/review-system.md` / `review-user.md` | Working memory review LLM prompts |
 | `src/cyberbrain/prompts/synthesize-system.md` / `synthesize-user.md` | Recall synthesis prompts — multi-note summarization for `cb_read(synthesize=True)` |
 | `src/cyberbrain/prompts/evaluate-system.md` | Extraction evaluation prompt — used by `evaluate.py` for comparing alternative outputs |
 | `src/cyberbrain/prompts/quality-gate-system.md` | Quality gate prompt — LLM judge for validating extraction and enrichment output |
 | `scripts/import.py` | Unified import for Claude Desktop and ChatGPT data exports |
+| `scripts/repair_vault_schema.py` | Vault schema repair script — fixes type, aliases, created, durability, status fields; default dry-run, use --apply to write |
 | `tests/` | Test suite — unit and integration tests with mocked LLM calls |
 
 ### Beat Types
@@ -227,7 +229,7 @@ The `claude-code` backend strips all five unconditionally and uses `start_new_se
 
 **Filename character constraint:** Beat titles (used as vault filenames) must not contain `#`, `[`, `]`, or `^`. These characters are valid on the filesystem but break Obsidian wikilink resolution — Obsidian uses `#` as a heading anchor separator and `^` as a block reference marker inside link syntax. The `make_filename()` function in `src/cyberbrain/extractors/vault.py` strips them, and the extraction and autofile prompts instruct the LLM not to generate them. When writing prompts or testing, verify titles avoid these characters (e.g. use "CSharp" not "C#").
 
-**Soft delete (trash):** All vault note deletions go through `_move_to_trash()` in `src/cyberbrain/mcp/shared.py`. Notes are moved to the `trash_folder` (default `.trash`, relative to vault root) instead of being permanently deleted. The vault-relative folder structure is preserved inside the trash folder. If a file already exists at the destination, a numeric suffix (`_1`, `_2`, ...) is appended to avoid clobbering. Obsidian ignores dotfolders by default, so `.trash` is invisible in the vault UI.
+**Soft delete (trash):** All vault note deletions go through `_move_to_trash()` in `src/cyberbrain/mcp/shared.py`. Notes are moved to the `trash_folder` (default `.trash`, relative to vault root) instead of being permanently deleted. The vault-relative folder structure is preserved inside the trash folder. If a file already exists at the destination, a numeric suffix (`_1`, `_2`, ...) is appended to avoid clobbering. Obsidian ignores dotfolders by default, so `.trash` is invisible in the vault UI. Exception: standalone CLI scripts in `scripts/` (e.g. `repair_vault_schema.py`) cannot import from the MCP layer without pulling in heavy dependencies — they implement equivalent inline trash logic with the same semantics.
 
 **Restructure grouping strategies:** `cb_restructure` in `folder_hub` mode supports pluggable clustering via the `grouping` parameter:
 - `auto` (default) — embedding hierarchical clustering with LLM fallback if no embeddings available

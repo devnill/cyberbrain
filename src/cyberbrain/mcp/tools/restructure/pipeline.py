@@ -37,6 +37,7 @@ from cyberbrain.mcp.tools.restructure.format import (
     _append_errata_log,
     _build_folder_context,
     _build_vault_structure,
+    _correct_entity_type_in_content,
     _format_flag_output,
     _format_folder_hub_block,
     _format_gate_verdicts,
@@ -500,12 +501,22 @@ def register(mcp: FastMCP) -> None:
                 out = vault / final_hub_path
                 now2 = datetime.now(UTC)
                 ts2 = now2.strftime("%Y-%m-%dT%H:%M:%S")
-                provenance = f"\ncb_source: cb-restructure\ncb_created: {ts2}"
+                _today2 = datetime.now().strftime("%Y-%m-%d")
+                provenance = (
+                    f"\naliases: []"
+                    f"\ncreated: {_today2}"
+                    f"\nupdated: {_today2}"
+                    f"\ncb_source: cb-restructure"
+                    f"\ncb_created: {ts2}"
+                )
                 if hub_content.startswith("---"):
                     end = hub_content.find("\n---", 3)
                     if end != -1:
                         hub_content = hub_content[:end] + provenance + hub_content[end:]
 
+                hub_content, type_warn = _correct_entity_type_in_content(hub_content)
+                if type_warn:
+                    result_lines.append(f"  Warning: Folder hub note — {type_warn}")
                 result_lines.extend(
                     _validate_frontmatter(hub_content, "Folder hub note")
                 )
@@ -746,7 +757,11 @@ def register(mcp: FastMCP) -> None:
                         )
                         continue
                     out_path = vault / note_path_rel
+                    _today_split = datetime.now().strftime("%Y-%m-%d")
                     provenance_lines = (
+                        f"\naliases: []"
+                        f"\ncreated: {_today_split}"
+                        f"\nupdated: {_today_split}"
                         f"\ncb_source: cb-restructure"
                         f"\ncb_created: {ts}"
                         f"\ncb_split_from: {json.dumps(source_note['title'])}"
@@ -759,6 +774,13 @@ def register(mcp: FastMCP) -> None:
                                 + provenance_lines
                                 + note_content[end:]
                             )
+                    note_content, type_warn = _correct_entity_type_in_content(
+                        note_content
+                    )
+                    if type_warn:
+                        result_lines.append(
+                            f"  Warning: Split note {note_path_rel} — {type_warn}"
+                        )
                     result_lines.extend(
                         _validate_frontmatter(
                             note_content, f"Split note {note_path_rel}"
@@ -806,6 +828,32 @@ def register(mcp: FastMCP) -> None:
                     )
                     continue
                 hub_abs = vault / str(hub_path_rel)
+                _today_ssf = datetime.now().strftime("%Y-%m-%d")
+                hub_provenance = (
+                    f"\naliases: []"
+                    f"\ncreated: {_today_ssf}"
+                    f"\nupdated: {_today_ssf}"
+                    f"\ncb_source: cb-restructure"
+                    f"\ncb_created: {ts}"
+                )
+                if hub_content.startswith("---"):
+                    _end_hub = hub_content.find("\n---", 3)
+                    if _end_hub != -1:
+                        hub_content = (
+                            hub_content[:_end_hub]
+                            + hub_provenance
+                            + hub_content[_end_hub:]
+                        )
+                hub_content, type_warn = _correct_entity_type_in_content(hub_content)
+                if type_warn:
+                    result_lines.append(
+                        f"  Warning: split-subfolder hub note {note_idx} — {type_warn}"
+                    )
+                result_lines.extend(
+                    _validate_frontmatter(
+                        hub_content, f"Split-subfolder hub note {note_idx}"
+                    )
+                )
                 try:
                     write_vault_note(hub_abs, hub_content, str(vault))
                 except ValueError:
@@ -826,6 +874,34 @@ def register(mcp: FastMCP) -> None:
                         )
                         continue
                     out_path = vault / note_path_rel
+                    note_provenance_ssf = (
+                        f"\naliases: []"
+                        f"\ncreated: {_today_ssf}"
+                        f"\nupdated: {_today_ssf}"
+                        f"\ncb_source: cb-restructure"
+                        f"\ncb_created: {ts}"
+                        f"\ncb_split_from: {json.dumps(source_note['title'])}"
+                    )
+                    if note_content.startswith("---"):
+                        _end_note = note_content.find("\n---", 3)
+                        if _end_note != -1:
+                            note_content = (
+                                note_content[:_end_note]
+                                + note_provenance_ssf
+                                + note_content[_end_note:]
+                            )
+                    note_content, type_warn_sf = _correct_entity_type_in_content(
+                        note_content
+                    )
+                    if type_warn_sf:
+                        result_lines.append(
+                            f"  Warning: split-subfolder note {note_path_rel} — {type_warn_sf}"
+                        )
+                    result_lines.extend(
+                        _validate_frontmatter(
+                            note_content, f"Split-subfolder note {note_path_rel}"
+                        )
+                    )
                     try:
                         write_vault_note(out_path, note_content, str(vault))
                     except ValueError:

@@ -28,7 +28,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from cyberbrain.extractors.search_backends import SearchBackend
 
-from cyberbrain.extractors.state import index_scan_marker_path as _index_scan_marker_path
+from cyberbrain.extractors.state import (
+    index_scan_marker_path as _index_scan_marker_path,
+)
 
 
 def __getattr__(name: str):  # noqa: N807 — PEP 562 lazy module attributes
@@ -62,6 +64,7 @@ def _parse_note_metadata(path: Path) -> dict:
         }
     except Exception:  # intentional: frontmatter parse failure is non-fatal; empty metadata degrades gracefully
         return {}
+
 
 # Module-level backend cache: one backend instance per (vault_path, backend_key) pair.
 # Avoids re-loading the usearch index on every note write.

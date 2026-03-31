@@ -65,7 +65,6 @@ from cyberbrain.extractors.run_log import (
 )
 from cyberbrain.extractors.transcript import parse_jsonl_transcript
 from cyberbrain.extractors.vault import (
-    _DEFAULT_VALID_BEAT_TYPES,
     _DEFAULT_VALID_ENTITY_TYPES,
     _is_within_vault,
     build_vault_titles_set,
@@ -378,7 +377,7 @@ class TestWriteBeat:
         assert content.startswith("---")
         assert 'type: "resource"' in content  # decision maps to resource entity type
         assert 'beat_type: "decision"' in content
-        assert 'session_id: "sess001"' in content
+        assert 'cb_session: "sess001"' in content
         assert '"auth"' in content  # tags are JSON-serialized
         assert '"backend"' in content
 
@@ -532,8 +531,9 @@ class TestAutofileBeat:
         assert path is not None
         assert path.exists()
         written = path.read_text(encoding="utf-8")
-        # Provenance fields are injected into frontmatter; verify core content preserved
-        assert "type: insight" in written  # LLM-provided content preserved as-is
+        # Provenance fields are injected into frontmatter; beat types are remapped
+        # to vault entity types (e.g. insight → resource) before writing.
+        assert "type: resource" in written  # beat type remapped to entity type
         assert "## Test" in written
         assert "cb_source: hook-extraction" in written
         assert "cb_created:" in written
@@ -2012,6 +2012,7 @@ class TestMain:
 
         self.vault = tmp_path / "vault"
         self.vault.mkdir()
+        self.cwd = "/Users/test/project"
         (self.vault / "AI" / "Claude-Sessions").mkdir(parents=True)
 
         log_dir = tmp_path / "logs"
@@ -2170,7 +2171,7 @@ class TestMain:
                         "--session-id",
                         "sess-write-test",
                         "--cwd",
-                        str(self.vault),
+                        self.cwd,
                     ]
                 )
 
@@ -2230,7 +2231,7 @@ class TestMain:
                 "--session-id",
                 "sess-json-input",
                 "--cwd",
-                str(self.vault),
+                self.cwd,
             ]
         )
 
@@ -2304,7 +2305,7 @@ class TestMain:
                         "--session-id",
                         "sess-journal",
                         "--cwd",
-                        str(self.vault),
+                        self.cwd,
                     ]
                 )
 
@@ -2503,7 +2504,7 @@ class TestMain:
                             "--session-id",
                             "sess-autofile-fallback",
                             "--cwd",
-                            str(self.vault),
+                            self.cwd,
                         ]
                     )
 
@@ -2564,7 +2565,7 @@ class TestMain:
                             "--session-id",
                             "sess-write-err",
                             "--cwd",
-                            str(self.vault),
+                            self.cwd,
                         ]
                     )
 
@@ -2635,6 +2636,7 @@ class TestRunExtractionOrchestration:
 
         self.vault = tmp_path / "vault"
         self.vault.mkdir()
+        self.cwd = "/Users/test/project"
         (self.vault / "AI" / "Claude-Sessions").mkdir(parents=True)
 
         log_dir = tmp_path / "logs"
@@ -2686,7 +2688,7 @@ class TestRunExtractionOrchestration:
             None,
             "sess-explicit-config",
             "manual",
-            str(self.vault),
+            self.cwd,
             config=self.config,
             beats=[beat],
         )
@@ -2713,13 +2715,13 @@ class TestRunExtractionOrchestration:
             None,
             "sess-fallback-config",
             "manual",
-            str(self.vault),
+            self.cwd,
             config=None,
             beats=[beat],
         )
 
         assert len(resolve_called) == 1
-        assert resolve_called[0] == str(self.vault)
+        assert resolve_called[0] == self.cwd
         assert result["beats_written"] == 1
 
     def test_beats_parameter_skips_llm_extraction(self, monkeypatch):
@@ -2739,7 +2741,7 @@ class TestRunExtractionOrchestration:
             None,
             "sess-prebeats",
             "manual",
-            str(self.vault),
+            self.cwd,
             config=self.config,
             beats=[beat],
         )
@@ -2757,7 +2759,7 @@ class TestRunExtractionOrchestration:
             None,
             "sess-prebeats-vault",
             "manual",
-            str(self.vault),
+            self.cwd,
             config=self.config,
             beats=[beat],
         )

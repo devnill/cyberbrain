@@ -1615,7 +1615,12 @@ class TestApplyFrontmatterUpdate:
         _apply_frontmatter_update(path, path.read_text(), cls, overwrite=False)
 
         content = path.read_text()
-        assert '\\"double quotes\\"' in content or '"Use' in content
+        # ruamel.yaml produces valid YAML — verify the value round-trips correctly
+        # (may use escaped quotes, flow scalars, or unquoted — all are valid YAML)
+        from cyberbrain.extractors.frontmatter import parse_frontmatter
+
+        fm = parse_frontmatter(content)
+        assert fm.get("summary") == 'Use "double quotes" carefully.'
 
     def test_returns_true_early_when_fields_to_set_is_empty(self, tmp_path):
         """Line 153: when nothing needs setting, returns True without touching the file."""
@@ -1840,52 +1845,72 @@ class TestGetValidTypes:
 class TestNeedsEnrichmentEdgeCases:
     """Cover _needs_enrichment branches not exercised by the candidate detection tests."""
 
-    def test_comma_separated_tags_string_is_recognised(self):
+    def test_comma_separated_tags_string_is_recognised(self, tmp_path):
         """Line 90: tags stored as a comma-separated string are parsed correctly."""
+        from cyberbrain.extractors.frontmatter import parse_frontmatter
         from cyberbrain.mcp.tools.enrich import _needs_enrichment
 
+        path = tmp_path / "note.md"
         content = "---\ntype: decision\nsummary: Test summary.\ntags: fastapi, python\n---\nBody."
-        needs, reason = _needs_enrichment(content, ["decision", "insight"])
+        path.write_text(content)
+        fm = parse_frontmatter(content)
+        needs, reason = _needs_enrichment(path, fm, ["decision", "insight"], False)
         assert needs is False
         assert reason == ""
 
-    def test_empty_frontmatter_dict_returns_needs_enrichment(self):
+    def test_empty_frontmatter_dict_returns_needs_enrichment(self, tmp_path):
         """Line 102: frontmatter block parses to empty dict → treated as no frontmatter."""
+        from cyberbrain.extractors.frontmatter import parse_frontmatter
         from cyberbrain.mcp.tools.enrich import _needs_enrichment
 
         # Valid YAML but yields an empty dict (just ---)
+        path = tmp_path / "note.md"
         content = "---\n---\n\nBody text here."
-        needs, reason = _needs_enrichment(content, ["decision", "insight"])
+        path.write_text(content)
+        fm = parse_frontmatter(content)
+        needs, reason = _needs_enrichment(path, fm, ["decision", "insight"], False)
         assert needs is True
 
-    def test_invalid_type_returns_needs_enrichment(self):
+    def test_invalid_type_returns_needs_enrichment(self, tmp_path):
         """Line 116: type present but not in valid_types list → flagged."""
+        from cyberbrain.extractors.frontmatter import parse_frontmatter
         from cyberbrain.mcp.tools.enrich import _needs_enrichment
 
+        path = tmp_path / "note.md"
         content = (
             "---\ntype: work-notes\nsummary: Summary.\ntags: [testing]\n---\nBody."
         )
-        needs, reason = _needs_enrichment(content, ["decision", "insight"])
+        path.write_text(content)
+        fm = parse_frontmatter(content)
+        needs, reason = _needs_enrichment(path, fm, ["decision", "insight"], False)
         assert needs is True
         assert "invalid type" in reason
 
-    def test_missing_summary_returns_needs_enrichment(self):
+    def test_missing_summary_returns_needs_enrichment(self, tmp_path):
         """Line 118: type is valid, tags present, but no summary → flagged."""
+        from cyberbrain.extractors.frontmatter import parse_frontmatter
         from cyberbrain.mcp.tools.enrich import _needs_enrichment
 
+        path = tmp_path / "note.md"
         content = "---\ntype: decision\ntags: [python]\n---\nBody."
-        needs, reason = _needs_enrichment(content, ["decision", "insight"])
+        path.write_text(content)
+        fm = parse_frontmatter(content)
+        needs, reason = _needs_enrichment(path, fm, ["decision", "insight"], False)
         assert needs is True
         assert "summary" in reason
 
-    def test_all_generic_tags_returns_needs_enrichment(self):
+    def test_all_generic_tags_returns_needs_enrichment(self, tmp_path):
         """Line 124: all tags are trivially generic (personal, work, etc.) → flagged."""
+        from cyberbrain.extractors.frontmatter import parse_frontmatter
         from cyberbrain.mcp.tools.enrich import _needs_enrichment
 
+        path = tmp_path / "note.md"
         content = (
             "---\ntype: decision\nsummary: Summary.\ntags: [personal, work]\n---\nBody."
         )
-        needs, reason = _needs_enrichment(content, ["decision", "insight"])
+        path.write_text(content)
+        fm = parse_frontmatter(content)
+        needs, reason = _needs_enrichment(path, fm, ["decision", "insight"], False)
         assert needs is True
         assert "generic" in reason
 
@@ -2119,13 +2144,17 @@ class TestShouldSkipEdgeCases:
 class TestNeedsEnrichmentNonListTags:
     """Cover _needs_enrichment when tags field is not a str or list."""
 
-    def test_numeric_tags_treated_as_empty(self):
+    def test_numeric_tags_treated_as_empty(self, tmp_path):
         """Line 118: tags value that is neither str nor list → treated as empty."""
+        from cyberbrain.extractors.frontmatter import parse_frontmatter
         from cyberbrain.mcp.tools.enrich import _needs_enrichment
 
         # YAML parses `tags: 42` as int
+        path = tmp_path / "note.md"
         content = "---\ntype: decision\nsummary: A summary.\ntags: 42\n---\nBody."
-        needs, reason = _needs_enrichment(content, ["decision", "insight"])
+        path.write_text(content)
+        fm = parse_frontmatter(content)
+        needs, reason = _needs_enrichment(path, fm, ["decision", "insight"], False)
         assert needs is True
         assert "tags" in reason
 

@@ -8,13 +8,16 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from cyberbrain.extractors.state import config_path, runs_log_path, search_db_path, search_manifest_path
+from cyberbrain.extractors.state import (
+    config_path,
+    runs_log_path,
+    search_db_path,
+    search_manifest_path,
+)
 from cyberbrain.mcp.shared import (
     _invalidate_search_backend,
     _load_config,
 )
-
-
 
 
 def _read_index_stats(config: dict) -> dict:
@@ -450,9 +453,7 @@ def register(mcp: FastMCP) -> None:
 
             _save_raw(cfg)
             # Invalidate cached search backend if relevant keys changed
-            if any(
-                cfg.get(k) != _old_backend_values[k] for k in _BACKEND_CACHE_KEYS
-            ):
+            if any(cfg.get(k) != _old_backend_values[k] for k in _BACKEND_CACHE_KEYS):
                 _invalidate_search_backend()
             result = "Configuration updated:\n" + "\n".join(f"  - {c}" for c in changed)
             if vault_path is not None:

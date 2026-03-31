@@ -33,6 +33,29 @@ Rules:
   Match the beat's topic to the folder whose existing notes are most topically similar.
   Do not create a new folder unless no existing folder's examples match the beat's topic.
 
+## Scope-aware routing
+
+The beat's `scope` field is a strong signal for initial routing:
+
+- **scope: general** — This beat describes world knowledge, not tied to a specific project.
+  Route to `Knowledge/<domain>/` or a domain-appropriate folder (e.g., `Personal/Resources/`).
+  The inbox (AI/Claude-Sessions or configured inbox) is a **fallback only** when no Knowledge
+  subfolder matches the topic.
+
+- **scope: project** — This beat is about a specific project's codebase, decisions, or state.
+  Route to the project's area folder (e.g., `Work/Areas/<project>/`, `Projects/<project>/`).
+  The inbox is a **fallback only** when the project area folder can't be identified.
+
+### Examples
+
+A beat with `scope: general` about Python subprocess encoding:
+→ Route to `Knowledge/Python/` or `Resources/Python/`, NOT to `AI/Claude-Sessions/`
+
+A beat with `scope: project` about an auth service decision:
+→ Route to `Projects/Auth-Service/` or the project's configured vault_folder
+
+Only route to the inbox when the beat's topic doesn't match any existing folder.
+
 ## Confidence scoring
 
 Include a `confidence` field (0.0 to 1.0) and a `rationale` field (1-2 sentences) in your response:

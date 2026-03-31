@@ -31,9 +31,9 @@ if [ -z "$TRANSCRIPT_PATH" ] || [ ! -f "$TRANSCRIPT_PATH" ]; then
 fi
 
 # Deduplication check: skip if already captured by PreCompact hook.
-# The extractor logs to ~/.claude/logs/cb-extract.log; check it here as a
+# The extractor logs to ~/.claude/cyberbrain/logs/cb-extract.log; check it here as a
 # fast pre-flight so we don't spawn the extractor unnecessarily.
-EXTRACT_LOG="$HOME/.claude/logs/cb-extract.log"
+EXTRACT_LOG="$HOME/.claude/cyberbrain/logs/cb-extract.log"
 TAB="$(printf '\t')"
 if [ -n "$SESSION_ID" ] && [ -f "$EXTRACT_LOG" ]; then
   if grep -qF "${TAB}${SESSION_ID}${TAB}" "$EXTRACT_LOG" 2>/dev/null; then

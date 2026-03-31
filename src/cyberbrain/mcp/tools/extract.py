@@ -13,7 +13,6 @@ from cyberbrain.mcp.shared import (
     BackendError,
     _load_config,
     parse_jsonl_transcript,
-    _relpath,
 )
 
 

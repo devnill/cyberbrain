@@ -62,5 +62,9 @@ def subprocess_cwd() -> Path:
     return _base()
 
 
+def audit_report_path() -> Path:
+    return _base() / "audit-report.json"
+
+
 def prompts_dir_legacy() -> Path:
     return _base() / "prompts"

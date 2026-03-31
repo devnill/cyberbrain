@@ -175,6 +175,98 @@ class TestValidateFrontmatter:
 
 
 # ===========================================================================
+# _correct_entity_type_in_content
+# ===========================================================================
+
+
+class TestCorrectEntityTypeInContent:
+    def test_decision_remapped_to_resource(self):
+        content = "---\ntitle: X\ntype: decision\nsummary: S\ntags: []\n---\n\nBody.\n"
+        corrected, warning = rst_format._correct_entity_type_in_content(content)
+        assert 'type: "resource"' in corrected
+        assert "type: decision" not in corrected
+        assert warning is not None
+        assert "decision" in warning
+        assert "resource" in warning
+
+    def test_insight_remapped_to_resource(self):
+        content = "---\ntitle: X\ntype: insight\nsummary: S\ntags: []\n---\n"
+        corrected, warning = rst_format._correct_entity_type_in_content(content)
+        assert 'type: "resource"' in corrected
+        assert warning is not None
+
+    def test_problem_remapped_to_note(self):
+        content = "---\ntitle: X\ntype: problem\nsummary: S\ntags: []\n---\n"
+        corrected, warning = rst_format._correct_entity_type_in_content(content)
+        assert 'type: "note"' in corrected
+        assert warning is not None
+
+    def test_reference_remapped_to_resource(self):
+        content = "---\ntitle: X\ntype: reference\nsummary: S\ntags: []\n---\n"
+        corrected, warning = rst_format._correct_entity_type_in_content(content)
+        # reference is already a beat type but maps to resource
+        assert 'type: "resource"' in corrected
+        assert warning is not None
+
+    def test_entity_type_unchanged(self):
+        content = "---\ntitle: X\ntype: resource\nsummary: S\ntags: []\n---\n"
+        corrected, warning = rst_format._correct_entity_type_in_content(content)
+        assert corrected == content
+        assert warning is None
+
+    def test_no_type_field_unchanged(self):
+        content = "---\ntitle: X\nsummary: S\ntags: []\n---\n"
+        corrected, warning = rst_format._correct_entity_type_in_content(content)
+        assert corrected == content
+        assert warning is None
+
+    def test_no_frontmatter_unchanged(self):
+        content = "Just body text, no frontmatter."
+        corrected, warning = rst_format._correct_entity_type_in_content(content)
+        assert corrected == content
+        assert warning is None
+
+    def test_beat_type_and_working_memory_both_corrected(self):
+        """A note with a beat type AND working-memory durability gets both remapped."""
+        content = "---\ntitle: X\ntype: decision\ndurability: working-memory\nsummary: S\ntags: []\n---\n\nBody.\n"
+        corrected, warning = rst_format._correct_entity_type_in_content(content)
+        assert 'type: "resource"' in corrected
+        assert "type: decision" not in corrected
+        assert 'durability: "durable"' in corrected
+        assert "durability: working-memory" not in corrected
+        assert warning is not None
+        assert "decision" in warning
+        assert "working-memory" in warning
+
+    def test_working_memory_corrected_when_type_already_entity(self):
+        """A note already with an entity type but working-memory durability gets durability corrected."""
+        content = "---\ntitle: X\ntype: resource\ndurability: working-memory\nsummary: S\ntags: []\n---\n"
+        corrected, warning = rst_format._correct_entity_type_in_content(content)
+        assert 'durability: "durable"' in corrected
+        assert "durability: working-memory" not in corrected
+        assert warning is not None
+        assert "working-memory" in warning
+
+    def test_decision_remapped_with_json_quoted_input(self):
+        """JSON-quoted input (as written by write_beat) is correctly remapped."""
+        content = '---\ntitle: X\ntype: "decision"\ndurability: "durable"\n---\n'
+        corrected, warning = rst_format._correct_entity_type_in_content(content)
+        assert 'type: "resource"' in corrected
+        assert 'type: "decision"' not in corrected
+        assert warning is not None
+
+    def test_working_memory_durability_preserved_with_json_input(self):
+        """JSON-quoted working-memory note: type is remapped, durability NOT preserved (WM→durable)."""
+        content = '---\ntitle: X\ntype: "insight"\ndurability: "working-memory"\nsummary: S\ntags: []\n---\n'
+        corrected, warning = rst_format._correct_entity_type_in_content(content)
+        assert 'type: "resource"' in corrected
+        assert 'type: "insight"' not in corrected
+        assert 'durability: "durable"' in corrected
+        assert "working-memory" not in corrected
+        assert warning is not None
+
+
+# ===========================================================================
 # _read_vault_prefs
 # ===========================================================================
 
@@ -631,6 +723,79 @@ class TestExecuteClusterDecisions:
         )
         assert result_lines == []
 
+    def test_merge_note_contains_aliases_created_updated(self, tmp_path):
+        cluster = self._cluster(tmp_path, ["A", "B"])
+        merged_content = (
+            "---\ntitle: Merged\ntype: reference\nsummary: S\ntags: []\n---\n\nbody\n"
+        )
+        decisions = [
+            {
+                "cluster_index": 0,
+                "action": "merge",
+                "merged_title": "Merged",
+                "merged_path": "Merged.md",
+                "merged_content": merged_content,
+                "rationale": "",
+            }
+        ]
+        result_lines, errata, written = [], [], []
+        rst_execute._execute_cluster_decisions(
+            decisions, [cluster], tmp_path, "ts", result_lines, errata, written
+        )
+        written_content = (tmp_path / "Merged.md").read_text()
+        assert "aliases:" in written_content
+        assert "created:" in written_content
+        assert "updated:" in written_content
+
+    def test_hub_spoke_note_contains_aliases_created_updated(self, tmp_path):
+        cluster = self._cluster(tmp_path, ["A", "B"])
+        hub_content = (
+            "---\ntitle: Hub\ntype: reference\nsummary: S\ntags: []\n---\n\nhub body\n"
+        )
+        decisions = [
+            {
+                "cluster_index": 0,
+                "action": "hub-spoke",
+                "hub_title": "Hub",
+                "hub_path": "Hub.md",
+                "hub_content": hub_content,
+                "rationale": "",
+            }
+        ]
+        result_lines, errata, written = [], [], []
+        rst_execute._execute_cluster_decisions(
+            decisions, [cluster], tmp_path, "ts", result_lines, errata, written
+        )
+        written_content = (tmp_path / "Hub.md").read_text()
+        assert "aliases:" in written_content
+        assert "created:" in written_content
+        assert "updated:" in written_content
+
+    def test_subfolder_hub_note_contains_aliases_created_updated(self, tmp_path):
+        cluster = self._cluster(tmp_path, ["A", "B"])
+        hub_content = (
+            "---\ntitle: Hub\ntype: reference\nsummary: S\ntags: []\n---\n\nbody\n"
+        )
+        decisions = [
+            {
+                "cluster_index": 0,
+                "action": "subfolder",
+                "subfolder_path": "sub",
+                "hub_title": "Hub",
+                "hub_path": "sub/Hub.md",
+                "hub_content": hub_content,
+                "rationale": "",
+            }
+        ]
+        result_lines, errata, written = [], [], []
+        rst_execute._execute_cluster_decisions(
+            decisions, [cluster], tmp_path, "ts", result_lines, errata, written
+        )
+        written_content = (tmp_path / "sub" / "Hub.md").read_text()
+        assert "aliases:" in written_content
+        assert "created:" in written_content
+        assert "updated:" in written_content
+
 
 # ===========================================================================
 # _format_preview_output
@@ -982,6 +1147,79 @@ class TestCbRestructureExecute:
             result = _cb_restructure()(dry_run=False, split_threshold=100)
         assert (tmp_path / "PartA.md").exists()
         assert "split" in result.lower()
+        written = (tmp_path / "PartA.md").read_text()
+        assert "aliases:" in written
+        assert "created:" in written
+        assert "updated:" in written
+
+    def test_split_subfolder_execution(self, tmp_path):
+        big_content = (
+            "---\ntitle: Big\ntype: reference\nsummary: S\ntags: []\n---\n\n"
+            + "x" * 4000
+        )
+        (tmp_path / "Big.md").write_text(big_content)
+
+        hub_content = "---\ntitle: BigHub\ntype: reference\nsummary: S\ntags: []\n---\n\nhub body\n"
+        part_content = (
+            "---\ntitle: Part A\ntype: reference\nsummary: S\ntags: []\n---\n\nbody\n"
+        )
+        decision = {
+            "note_index": 0,
+            "action": "split-subfolder",
+            "rationale": "",
+            "hub_content": hub_content,
+            "hub_path": "sub/BigHub.md",
+            "subfolder_path": "sub",
+            "output_notes": [
+                {"title": "Part A", "path": "sub/PartA.md", "content": part_content}
+            ],
+        }
+
+        with (
+            patch.object(
+                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+            ),
+            patch.object(rst_pipeline, "_get_search_backend", return_value=None),
+            patch.object(rst_pipeline, "_index_paths"),
+            patch.object(rst_pipeline, "_prune_index"),
+            patch.object(rst_pipeline, "_load_prompt", return_value="p"),
+            patch.object(rst_pipeline, "_build_clusters", return_value=[]),
+            patch.object(rst_pipeline, "_call_audit_notes", return_value=[]),
+            patch.object(rst_pipeline, "_call_decisions", return_value=[decision]),
+            patch.object(
+                rst_generate,
+                "_call_generate_split",
+                return_value={
+                    "hub_content": hub_content,
+                    "hub_path": "sub/BigHub.md",
+                    "subfolder_path": "sub",
+                    "output_notes": [
+                        {
+                            "title": "Part A",
+                            "path": "sub/PartA.md",
+                            "content": part_content,
+                        }
+                    ],
+                },
+            ),
+        ):
+            result = _cb_restructure()(dry_run=False, split_threshold=100)
+
+        assert "split" in result.lower()
+        hub_written = (tmp_path / "sub" / "BigHub.md").read_text()
+        assert "aliases:" in hub_written
+        assert "created:" in hub_written
+        assert "updated:" in hub_written
+        assert "cb_source: cb-restructure" in hub_written
+        assert "cb_created:" in hub_written
+
+        part_written = (tmp_path / "sub" / "PartA.md").read_text()
+        assert "aliases:" in part_written
+        assert "created:" in part_written
+        assert "updated:" in part_written
+        assert "cb_source: cb-restructure" in part_written
+        assert "cb_created:" in part_written
+        assert "cb_split_from:" in part_written
 
     def test_split_skips_path_traversal(self, tmp_path):
         big_content = (

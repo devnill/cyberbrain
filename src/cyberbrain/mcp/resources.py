@@ -31,6 +31,14 @@ A personal knowledge vault — notes extracted from past Claude sessions, filed 
 formatting, routing, and deduplication. Writing raw files bypasses vault conventions and
 makes notes unsearchable.
 
+## When to call cb_file
+- When the user says "save this", "remember this", "file this", or "capture this"
+- When a durable insight, decision, or reference emerges that should survive the session
+- Omit `title` for single-beat capture: cb_file calls the LLM to extract and classify the beat automatically
+- Provide `title` for document intake mode: the content is filed directly without LLM classification (use when the user provides a complete document or structured reference)
+- Set `durability="working-memory"` for current project state unlikely to matter in six months (open bugs, in-flight refactors, temporary workarounds)
+- Set `durability="durable"` (or omit, as it is the default) for knowledge that passes the six-month test
+
 ## When to call cb_read
 - When cb_recall surfaces a note you want to read in full
 - When the user names a specific note they want to retrieve
@@ -46,6 +54,37 @@ makes notes unsearchable.
 - When vault health looks wrong (missing path, no notes indexed)
 - At session start if vault is not configured
 
+## When to call cb_audit
+- When the user asks about vault health, schema compliance, or curation quality
+- When troubleshooting note routing issues (wrong folder, missing fields)
+- When investigating whether frontmatter is consistent across notes
+- cb_audit is read-only and saves a detailed report to ~/.claude/cyberbrain/audit-report.json
+
+## When to call cb_setup
+- When setting up a new vault for the first time
+- When the vault structure has changed and the CLAUDE.md needs regenerating
+- When the user asks to (re)analyze the vault layout or update vault guidance
+
+## When to call cb_enrich
+- When notes are missing frontmatter fields (type, tags, aliases)
+- When backfilling metadata on a batch of existing notes
+- When the user asks to improve or standardize note metadata
+
+## When to call cb_restructure
+- When notes in a folder become disorganized, redundant, or overlapping
+- When the user asks to merge, split, or reorganize vault notes
+- When a folder needs a hub page to group related notes
+
+## When to call cb_review
+- When working-memory notes are past their review date
+- When the user wants to promote, extend, or delete temporary notes
+- When cleaning up stale in-progress or working-memory notes
+
+## When to call cb_reindex
+- When the search index is stale or returning incorrect results
+- When notes have been added or removed outside of cyberbrain tools
+- When the user asks to rebuild or prune the search index
+
 ## Tool selection
 | User intent | Tool |
 |---|---|
@@ -55,6 +94,12 @@ makes notes unsearchable.
 | "Process this transcript" | cb_extract |
 | "Is everything healthy?" | cb_status |
 | "Change vault / settings" | cb_configure |
+| "Audit vault schema / compliance" | cb_audit |
+| "Set up / regenerate vault CLAUDE.md" | cb_setup |
+| "Enrich / backfill note metadata" | cb_enrich |
+| "Merge, split, or reorganize notes" | cb_restructure |
+| "Review working-memory notes" | cb_review |
+| "Rebuild or prune search index" | cb_reindex |
 """
 
 

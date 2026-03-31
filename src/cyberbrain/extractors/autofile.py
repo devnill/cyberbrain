@@ -16,7 +16,9 @@ from cyberbrain.extractors.backends import BackendError, call_model
 from cyberbrain.extractors.config import load_prompt
 from cyberbrain.extractors.frontmatter import parse_frontmatter, read_frontmatter_tags
 from cyberbrain.extractors.vault import (
+    _DEFAULT_VALID_BEAT_TYPES,
     _is_within_vault,
+    _resolve_entity_type,
     _wm_frontmatter_fields,
     build_vault_titles_set,
     inject_provenance,
@@ -51,8 +53,6 @@ def _update_cb_modified(note_path: Path, now) -> None:
     yaml = YAML()
     yaml.preserve_quotes = True
     try:
-        import io
-
         fm = yaml.load(fm_text)
     except (
         Exception
@@ -63,6 +63,7 @@ def _update_cb_modified(note_path: Path, now) -> None:
         return
 
     fm["cb_modified"] = now.strftime("%Y-%m-%dT%H:%M:%S")
+    fm["updated"] = now.strftime("%Y-%m-%d")
 
     import io
 
@@ -111,8 +112,6 @@ def _merge_relations_into_note(note_path: Path, new_relations: list) -> None:
     yaml = YAML()
     yaml.preserve_quotes = True
     try:
-        import io
-
         fm = yaml.load(fm_text)
     except (
         Exception
@@ -426,6 +425,32 @@ def autofile_beat(
         content = inject_provenance(
             content, source, session_id, now, extra_fields=extra_fields
         )
+
+        # Validate and remap beat types to entity types in the LLM-generated content
+        fm = parse_frontmatter(content)
+        fm_type = fm.get("type", "")
+        if fm_type in _DEFAULT_VALID_BEAT_TYPES:
+            correct_type = _resolve_entity_type(fm_type, durability)
+            end = content.find("\n---", 3)
+            if end != -1:
+                fm_block = content[:end]
+                body_block = content[end:]
+                fm_block = re.sub(
+                    r"^type:\s*.+$",
+                    f"type: {correct_type}",
+                    fm_block,
+                    count=1,
+                    flags=re.MULTILINE,
+                )
+                content = fm_block + body_block
+            else:
+                content = re.sub(
+                    r"^type:\s*.+$",
+                    f"type: {correct_type}",
+                    content,
+                    count=1,
+                    flags=re.MULTILINE,
+                )
 
         # Collision handling: check if target already exists
         if output_path.exists():

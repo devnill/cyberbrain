@@ -1,11 +1,59 @@
 """Output formatters and content builders for cb_restructure."""
 
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
-from cyberbrain.mcp.shared import _parse_frontmatter, update_vault_note, write_vault_note
+from cyberbrain.extractors.vault import _BEAT_TO_ENTITY_TYPE
+from cyberbrain.mcp.shared import (
+    _parse_frontmatter,
+    update_vault_note,
+    write_vault_note,
+)
 
 _REQUIRED_FM_FIELDS = ("type", "summary", "tags")
+
+
+def _correct_entity_type_in_content(content: str) -> tuple[str, str | None]:
+    """If type: is a beat type, remap to entity type.  Also ensure durability
+    is 'durable' for restructured/promoted notes (working-memory → durable).
+
+    Returns (corrected_content, warning_or_None).
+    If the content has no type: field, or the type is already an entity type,
+    the content is returned unchanged with warning=None.
+    """
+    fm = _parse_frontmatter(content)
+    corrected = content
+    warning_parts: list[str] = []
+
+    # Apply type correction if needed
+    fm_type = fm.get("type", "")
+    if fm_type in _BEAT_TO_ENTITY_TYPE:
+        correct = _BEAT_TO_ENTITY_TYPE[fm_type]
+        corrected = re.sub(
+            r"^type:\s*.+$",
+            f'type: "{correct}"',
+            corrected,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        warning_parts.append(f"type '{fm_type}' corrected to '{correct}'")
+
+    # Also ensure durability is durable for restructured/promoted notes
+    fm_durability = fm.get("durability", "")
+    if fm_durability == "working-memory":
+        corrected = re.sub(
+            r"^durability:\s*.+$",
+            'durability: "durable"',
+            corrected,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        warning_parts.append("durability 'working-memory' corrected to 'durable'")
+
+    if warning_parts:
+        return corrected, "; ".join(warning_parts)
+    return content, None
 
 
 def _validate_frontmatter(content: str, label: str) -> list[str]:
@@ -469,6 +517,29 @@ def _format_preview_output(
                 lines.append(
                     f"### Large Note {note_idx} ({source['title']}): Split into {len(output_notes)} notes"
                 )
+                for spec in output_notes:
+                    lines.append(
+                        f"- **{spec.get('title', '')}** → `{spec.get('path', '')}`"
+                    )
+                    content = spec.get("content", "")
+                    if len(content) > 2000:
+                        content = content[:2000] + "\n...[truncated]"
+                    lines.append(f"\n```markdown\n{content}\n```\n")
+            elif action == "split-subfolder":
+                hub_title = decision.get("hub_title", "")
+                subfolder_path = decision.get("subfolder_path", "")
+                hub_path_val = decision.get("hub_path", "")
+                hub_content = decision.get("hub_content", "")
+                output_notes = decision.get("output_notes", [])
+                if len(hub_content) > 2000:
+                    hub_content = hub_content[:2000] + "\n...[truncated]"
+                lines.append(
+                    f"### Large Note {note_idx} ({source['title']}): Split-Subfolder → **{hub_title}**"
+                )
+                lines.append(f"New folder: `{subfolder_path}`")
+                lines.append(f"Hub: `{hub_path_val}`\n")
+                lines.append(f"```markdown\n{hub_content}\n```\n")
+                lines.append(f"Output notes ({len(output_notes)}):")
                 for spec in output_notes:
                     lines.append(
                         f"- **{spec.get('title', '')}** → `{spec.get('path', '')}`"
