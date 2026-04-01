@@ -1,0 +1,38 @@
+id: WI-008
+type: work_item
+title: Update QUICKSTART.md and README.md for new onboarding flow
+status: done
+complexity: small
+scope:
+  - path: QUICKSTART.md
+    op: modify
+  - path: README.md
+    op: modify
+depends: []
+blocks: []
+criteria:
+  - "QUICKSTART.md lists uv as a prerequisite (e.g., 'Prerequisites: uv (brew install uv)')"
+  - QUICKSTART.md Configure section directs users to run /cyberbrain:config as the primary setup path
+  - QUICKSTART.md moves manual config.json editing to an 'Advanced' or 'Manual Configuration' subsection
+  - README.md references /cyberbrain:config for first-time setup in its installation/configuration section
+  - No other sections of QUICKSTART.md or README.md are modified beyond the configuration/prerequisites sections
+domain: onboarding
+phase: null
+notes: |-
+  Documentation updates to reflect the new guided setup flow.
+
+  QUICKSTART.md changes:
+  - Add 'Prerequisites: uv — brew install uv' before the Install section
+  - Replace the Configure section with: 'Run /cyberbrain:config in Claude Code. This walks you through vault path selection, folder structure, and default preferences.'
+  - Move the existing manual config.json instructions to a 'Manual Configuration' subsection for advanced users
+
+  README.md changes:
+  - In the installation/getting-started section, reference /cyberbrain:config as the setup entry point
+  - Keep technical details about config.json format for developers, but make /cyberbrain:config the recommended path
+
+  Read both files before modifying to understand current structure.
+resolution: null
+cycle_created: null
+cycle_modified: null
+content_hash: dbf136641cea101f8b1b006ddcd38b52b99a912e8f6a92c4e854268c2599fdaf
+token_count: 426

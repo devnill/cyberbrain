@@ -1,0 +1,13 @@
+id: interview-refine-2
+type: interview
+title: Refinement Interview — Post-Review Corrections (Cycle 1)
+date: 2026-03-31
+entries:
+  - question: Review findings exist from Cycle 1 (2 critical, 5 significant, 3 minor). Address, defer, or dismiss?
+    answer: Address all of them.
+    domain: null
+  - question: Does GP-01 (Low friction setup) still hold?
+    answer: Yes, confirmed implicitly — all findings are GP-01 violations being fixed.
+    domain: null
+content_hash: 03a1c4de1824f28777e23b79186c300142807cee0df76799ad80176bb450cf55
+token_count: 114

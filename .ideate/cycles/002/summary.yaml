@@ -1,0 +1,47 @@
+id: summary
+type: cycle_summary
+cycle: 2
+content: |-
+  # Review Summary — Cycle 2
+
+  ## Overview
+  The cycle 1 critical findings are resolved. Plugin manifest is wired, cb_configure/cb_status handle fresh installs, hooks check for uv, and docs reference /cyberbrain:config. Three significant findings remain: the prefs path in cb_configure still propagates ConfigError, the SKILL.md ordering risks overwriting preferences, and the orient prompt crashes on fresh installs.
+
+  ## Phase Convergence
+  Phase: PH-001
+  Cycles completed: 2 / 5 (threshold)
+  Convergence status: Converging
+  Trend: Critical findings dropped from 2 to 0. Significant findings dropped from 5 to 3. The remaining significant findings are smaller in scope than those fixed.
+
+  ## Project Progress
+  No success criteria defined in project artifacts.
+
+  ## Significant Findings
+  - [code-reviewer] cb_configure prefs path (reset_prefs/show_prefs/set_prefs) propagates raw ConfigError on fresh install instead of returning actionable guidance — relates to: GP-01
+  - [code-reviewer] SKILL.md Phase 4.2 calls reset_prefs before cb_setup(write=True) — cb_setup may overwrite the preferences section when generating CLAUDE.md — relates to: WI-001, WI-005
+  - [gap-analyst] orient prompt and cyberbrain://guide resource raise unhandled ConfigError on fresh install — _get_guide() in resources.py has no try/except — relates to: GP-01
+
+  ## Minor Findings
+  - [code-reviewer] working_memory_ttl typed as int in CyberbrainConfig but used as dict at runtime (pre-existing) — relates to: cross-cutting -> carry-forward
+  - [code-reviewer] README tool count says 11, should be 12; cb_audit missing from table — relates to: cross-cutting -> carry-forward
+  - [code-reviewer] QUICKSTART tools table missing cb_reindex and cb_audit — relates to: cross-cutting -> carry-forward
+  - [code-reviewer] QUICKSTART incorrect path for Claude Desktop prompt (prompts/ vs src/cyberbrain/prompts/) — relates to: cross-cutting -> carry-forward
+  - [code-reviewer] session-end-reindex.sh missing else clause for cyberbrain-reindex not found — relates to: WI-007 -> carry-forward
+  - [spec-reviewer] README 'Setting up with...' sections still lead with manual config.json — relates to: WI-008 -> carry-forward
+  - [gap-analyst] pre-compact uv check only in plugin mode, not non-plugin — relates to: WI-007 -> carry-forward
+
+  ## Suggestions
+  - [gap-analyst] Backend/model should eventually be configurable through the skill (out of scope this cycle)
+  - [gap-analyst] Power-user settings (proactive_recall, quality_gate, etc.) not exposed in skill menu
+
+  ## Findings Requiring User Input
+  None — all findings can be resolved from existing context.
+
+  ## Proposed Refinement Plan
+  3 significant findings remain. A short refinement cycle is recommended:
+  1. Catch ConfigError in cb_configure prefs path (manage.py — surgical fix)
+  2. Reorder SKILL.md Phase 4 to run cb_setup before reset_prefs
+  3. Catch ConfigError in resources.py _get_guide() — return minimal guide on fresh install
+  Estimated: 1-2 work items, small complexity. No architecture changes.
+content_hash: 485383c827536c922aea738e58d2a4b24b518faa77a9d1618025f89df6eb828e
+token_count: 776

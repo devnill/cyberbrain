@@ -9,7 +9,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
-from cyberbrain.mcp.shared import _load_config
+from cyberbrain.mcp.shared import require_config
 
 
 def _run_analyzer(vault: Path) -> dict:
@@ -228,7 +228,7 @@ def register(mcp: FastMCP) -> None:
         """
         from cyberbrain.extractors.backends import call_model
 
-        config = _load_config()
+        config = require_config()
         resolved_vault = vault_path or config.get("vault_path", "")
         if not resolved_vault:
             raise ToolError(

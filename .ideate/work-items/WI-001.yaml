@@ -1,0 +1,46 @@
+id: WI-001
+type: work_item
+title: Create /cyberbrain:config skill
+status: done
+complexity: medium
+scope:
+  - path: skills/config/SKILL.md
+    op: create
+depends:
+  - WI-002
+blocks: []
+criteria:
+  - "skills/config/SKILL.md exists with user-invocable: true frontmatter"
+  - "Skill detects first-run (no config) and guides user through: vault path selection, PKMS preference interview (PARA/flat/developer/custom or skip), vault creation via cb_configure, CLAUDE.md generation via cb_setup"
+  - Skill detects existing config and shows current settings with option to change vault_path, backend, inbox, and other config fields via cb_configure
+  - PKMS interview is 2-3 questions max; skip option defaults to PARA
+  - Skill is discoverable as /cyberbrain:config in the command palette
+domain: onboarding
+phase: null
+notes: |-
+  The skill is a SKILL.md prompt file, not code. It orchestrates existing MCP tools (cb_configure, cb_setup, cb_status) through conversational flow.
+
+  First-run flow:
+  1. Call cb_status() or cb_configure() to detect config state
+  2. If no config: ask user for vault path (suggest ~/Documents/Cyberbrain or let them choose)
+  3. Ask PKMS preference: 'How do you organize your notes?' with options:
+     - 'I don't / I'm new to this' -> PARA defaults
+     - 'PARA (Projects/Areas/Resources/Archives)' -> PARA template
+     - 'Flat / minimal' -> inbox-only structure
+     - 'Developer / project-focused' -> project-oriented template
+     - 'I have a system - let me describe it' -> custom
+  4. Call cb_configure(create_vault=path, template=choice) to create dirs and set config
+  5. Call cb_setup to generate vault CLAUDE.md
+  6. Confirm setup complete, show what was created
+
+  Subsequent config flow:
+  1. Call cb_configure() to show current config
+  2. Ask what to change
+  3. Call cb_configure with appropriate parameters
+
+  Reference: ideate skills at /Users/dan/code/ideate/skills/ for SKILL.md format. Guardrail skills at /Users/dan/code/guardrail/skills/ for simpler examples.
+resolution: null
+cycle_created: null
+cycle_modified: null
+content_hash: 35dddce7c13d2c4689a353eda750eb4a186d67f10d442379ced2217d671644a2
+token_count: 540

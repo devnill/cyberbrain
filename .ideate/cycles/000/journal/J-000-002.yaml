@@ -1,0 +1,13 @@
+id: J-000-002
+type: journal_entry
+phase: execute
+date: 2026-03-31
+cycle_created: 0
+title: work-item-complete
+content: "## [execute] 2026-03-31 — Work item WI-002: Add vault scaffolding to
+  cb_configure\\nStatus: complete with rework\\nRework: 1 significant, 2 minor
+  findings fixed from incremental review.\\nSignificant:
+  inbox/working_memory_folder used direct assignment instead of setdefault
+  (inconsistent with backend/model pattern). Fixed to use setdefault.\\nMinor:
+  template validation reordered before filesystem checks; test added for config
+  preservation behavior."

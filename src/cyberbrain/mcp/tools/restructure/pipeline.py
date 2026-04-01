@@ -14,9 +14,9 @@ from cyberbrain.mcp.shared import (
     _get_search_backend,
     _index_paths,
     _is_within_vault,
-    _load_config,
     _move_to_trash,
     _prune_index,
+    require_config,
     write_vault_note,
 )
 from cyberbrain.mcp.shared import (
@@ -163,16 +163,10 @@ def register(mcp: FastMCP) -> None:
             get_model_for_tool,
         )
 
-        config = _load_config()
+        config = require_config()
         vault_path_str = config.get("vault_path", "")
-        if not vault_path_str:
-            raise ToolError(
-                "No vault configured. Run cb_configure(vault_path=...) first."
-            )
 
         vault = Path(vault_path_str).expanduser().resolve()
-        if not vault.exists():
-            raise ToolError(f"Vault path does not exist: {vault}")
 
         scan_root = vault / folder if folder else vault
         if not scan_root.exists():

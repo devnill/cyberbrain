@@ -1,8 +1,11 @@
 """Cyberbrain MCP resource and prompts — behavioral guide and session orientation."""
 
+import json
+
 from fastmcp import FastMCP
 from fastmcp.prompts import Message
 
+from cyberbrain.extractors.config import ConfigError
 from cyberbrain.mcp.shared import _load_config
 
 
@@ -105,7 +108,13 @@ makes notes unsearchable.
 
 def _get_guide() -> str:
     """Build the behavioral guide from current config."""
-    config = _load_config()
+    try:
+        config = _load_config()
+    except (ConfigError, json.JSONDecodeError):
+        return (
+            "Cyberbrain is not configured yet. "
+            "Run /cyberbrain:config to set up your vault."
+        )
     proactive = config.get("proactive_recall", True)
     if proactive:
         recall_instruction = (

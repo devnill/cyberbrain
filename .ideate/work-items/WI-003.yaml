@@ -1,0 +1,53 @@
+id: WI-003
+type: work_item
+title: First-run config guard in MCP tool layer
+status: done
+complexity: small
+scope:
+  - path: src/cyberbrain/mcp/shared.py
+    op: modify
+  - path: src/cyberbrain/mcp/tools/extract.py
+    op: modify
+  - path: src/cyberbrain/mcp/tools/file.py
+    op: modify
+  - path: src/cyberbrain/mcp/tools/recall.py
+    op: modify
+  - path: src/cyberbrain/mcp/tools/enrich.py
+    op: modify
+  - path: src/cyberbrain/mcp/tools/reindex.py
+    op: modify
+  - path: src/cyberbrain/mcp/tools/review.py
+    op: modify
+  - path: src/cyberbrain/mcp/tools/setup.py
+    op: modify
+  - path: src/cyberbrain/mcp/tools/audit.py
+    op: modify
+  - path: src/cyberbrain/mcp/tools/restructure/pipeline.py
+    op: modify
+depends: []
+blocks: []
+criteria:
+  - A shared guard function in shared.py checks if config exists and vault_path is set
+  - "Guard raises ToolError with message: 'Cyberbrain is not configured. Run /cyberbrain:config to set up your vault.'"
+  - All cb_* tools except cb_configure and cb_status call the guard before any other logic
+  - cb_configure and cb_status remain accessible without configuration
+  - "Guard checks: config file exists, vault_path is set and non-placeholder, vault_path directory exists"
+  - If config exists but vault_path is invalid, guard message includes the specific issue
+  - All existing tests pass; new tests verify guard triggers on missing config and passes on valid config
+domain: onboarding
+phase: null
+notes: |-
+  Add a function to shared.py like:
+
+  def require_config(cwd: str = '') -> dict:
+      '''Load config or raise ToolError if not configured.'''
+      # Try loading config, catch failures, raise ToolError with actionable message
+
+  Then replace _load_config() calls in each tool with require_config(). The existing _load_config() stays for cb_configure and cb_status which handle missing config gracefully.
+
+  The current _load_config in shared.py calls resolve_config which calls load_global_config. Check the actual error path in MCP context before implementing.
+resolution: null
+cycle_created: null
+cycle_modified: null
+content_hash: 3742f55094a401e95263218e2dcda5276506c9879f6c24b47073694cfca81183
+token_count: 545

@@ -1,0 +1,19 @@
+id: execution-strategy
+type: execution_strategy
+title: Execution Strategy — Cycle 2 Corrections
+mode: full_parallel
+parallelism:
+  max_concurrent: 2
+  worktree: false
+review_cadence: after_all
+groups:
+  - name: All Fixes
+    items:
+      - WI-009
+      - WI-010
+    order: 1
+    notes: Zero file overlap, zero dependencies. Execute in parallel.
+agent_config:
+  model: sonnet
+content_hash: 7df9632ab53666877912aeeefddfd33da24cb014dbd178ea75b2e9a7432d90bd
+token_count: 93

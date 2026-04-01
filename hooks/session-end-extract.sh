@@ -4,7 +4,7 @@
 # without having been compacted. Skips sessions already captured by PreCompact.
 # Receives hook context JSON on stdin; invokes the Python extractor.
 #
-# The extractor runs detached (setsid + background) so it survives Claude Code
+# The extractor runs detached (nohup + background) so it survives Claude Code
 # exiting. Output goes to ~/.claude/logs/cb-session-end.log instead of stderr
 # (stderr is discarded once the session closes).
 
@@ -43,6 +43,22 @@ fi
 
 SESSION_END_LOG="$HOME/.claude/logs/cb-session-end.log"
 mkdir -p "$(dirname "$SESSION_END_LOG")"
+
+# Pre-flight: check config exists before launching detached extractor.
+CYBERBRAIN_CONFIG="$HOME/.claude/cyberbrain/config.json"
+if [ ! -f "$CYBERBRAIN_CONFIG" ]; then
+  echo "session-end-extract: Cyberbrain config not found at $CYBERBRAIN_CONFIG. Run /cyberbrain:config in Claude Code to set up." >> "$SESSION_END_LOG" 2>&1
+  exit 0
+fi
+
+# Add common uv/Homebrew locations to PATH
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
+# Pre-flight: check uv is available before attempting plugin-mode launch.
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && ! command -v uv >/dev/null 2>&1; then
+  echo "cyberbrain: uv not found. Install via: brew install uv" >> "$SESSION_END_LOG" 2>&1
+  exit 0
+fi
 
 # Invoke extractor via uv if CLAUDE_PLUGIN_ROOT is set (plugin mode), else fall back to installed path
 # Run detached: nohup + background lets extraction continue after Claude Code exits.

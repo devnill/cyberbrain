@@ -24,6 +24,10 @@ PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 REQUIRED_GLOBAL_FIELDS = ["vault_path", "inbox"]
 
 
+class ConfigError(Exception):
+    """Raised when the global config is missing or invalid."""
+
+
 class CyberbrainConfig(TypedDict, total=False):
     vault_path: str
     inbox: str
@@ -69,24 +73,20 @@ def load_global_config() -> CyberbrainConfig:
         _self.GLOBAL_CONFIG_PATH
     )  # goes through __getattr__ or test-patched attribute
     if not _cfg_path.exists():
-        print(
-            f"[extract_beats] Global config not found at {_cfg_path}. "
-            "Create it with vault_path and inbox.",
-            file=sys.stderr,
+        raise ConfigError(
+            f"Cyberbrain config not found at {_cfg_path}. "
+            "Run /cyberbrain:config in Claude Code to set up."
         )
-        sys.exit(0)
 
     with open(_cfg_path) as f:
         config = json.load(f)
 
     missing = [k for k in REQUIRED_GLOBAL_FIELDS if not config.get(k)]
     if missing:
-        print(
-            f"[extract_beats] Global config missing fields: {missing}. "
-            f"Edit {_cfg_path}.",
-            file=sys.stderr,
+        raise ConfigError(
+            f"Cyberbrain config at {_cfg_path} is missing required fields: {missing}. "
+            "Run /cyberbrain:config in Claude Code to reconfigure."
         )
-        sys.exit(0)
 
     vault_path = Path(config["vault_path"]).expanduser().resolve()
 
@@ -95,23 +95,19 @@ def load_global_config() -> CyberbrainConfig:
         str(config["vault_path"]) == "/path/to/your/ObsidianVault"
         or not vault_path.exists()
     ):
-        print(
-            f"[extract_beats] vault_path '{config['vault_path']}' is a placeholder or does not exist. "
-            f"Edit {_cfg_path} with your real vault path.",
-            file=sys.stderr,
+        raise ConfigError(
+            f"vault_path '{config['vault_path']}' is a placeholder or does not exist. "
+            "Run /cyberbrain:config in Claude Code to set your real vault path."
         )
-        sys.exit(0)
 
     # Reject home directory or filesystem root — indicates misconfiguration
     home = Path.home().resolve()
     root = Path("/").resolve()
     if vault_path == home or vault_path == root:
-        print(
-            f"[extract_beats] vault_path must not be your home directory or filesystem root. "
-            f"Edit {_cfg_path}.",
-            file=sys.stderr,
+        raise ConfigError(
+            "vault_path must not be your home directory or filesystem root. "
+            "Run /cyberbrain:config in Claude Code to reconfigure."
         )
-        sys.exit(0)
 
     config["vault_path"] = str(vault_path)
     return config  # type: ignore[return-value]

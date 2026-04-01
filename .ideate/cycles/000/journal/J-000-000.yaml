@@ -1,0 +1,14 @@
+id: J-000-000
+type: journal_entry
+phase: refine
+date: 2026-03-31
+cycle_created: 0
+title: refinement-complete
+content: "## [refine] 2026-03-31 — Refinement planning completed\\nTrigger: new
+  requirements — first real-world user test revealed broken
+  onboarding\\nPrinciples changed: GP-01 created (Low friction setup)\\nNew work
+  items: WI-001–WI-004\\nAddresses four onboarding failures: silent dependency
+  errors, missing user-invocable skills, no guided setup flow, no vault creation
+  path for users without Obsidian. Creates /cyberbrain:config skill, adds vault
+  scaffolding to cb_configure, adds first-run config guard to all MCP tools, and
+  fixes silent error handling in hooks and CLI."

@@ -1,0 +1,11 @@
+id: J-000-012
+type: journal_entry
+phase: refine
+date: 2026-03-31
+cycle_created: 0
+title: refinement-complete
+content: "## [refine] 2026-03-31 — Refinement planning completed (cycle 2
+  corrections)\\nTrigger: Cycle 2 review findings (0 critical, 3
+  significant)\\nPrinciples changed: none\\nNew work items:
+  WI-009\\u2013WI-010\\nFixes: ConfigError handling in manage.py prefs path +
+  resources.py _get_guide(), SKILL.md Phase 4 ordering."

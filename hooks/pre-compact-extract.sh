@@ -25,7 +25,15 @@ if [ -z "$TRANSCRIPT_PATH" ] || [ ! -f "$TRANSCRIPT_PATH" ]; then
   exit 0
 fi
 
+# Add common uv/Homebrew locations to PATH
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
 # Invoke extractor via uv if CLAUDE_PLUGIN_ROOT is set (plugin mode), else fall back to installed path
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && ! command -v uv >/dev/null 2>&1; then
+  echo "cyberbrain: uv not found. Install via: brew install uv" >&2
+  exit 0
+fi
+
 if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
   uv run --directory "$CLAUDE_PLUGIN_ROOT" python -m cyberbrain.extractors.extract_beats \
     --transcript "$TRANSCRIPT_PATH" \
@@ -33,6 +41,7 @@ if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
     --trigger "$TRIGGER" \
     --cwd "$CWD" \
     2>&1
+  EXTRACTOR_EXIT=$?
 elif command -v cyberbrain-extract >/dev/null 2>&1; then
   cyberbrain-extract \
     --transcript "$TRANSCRIPT_PATH" \
@@ -40,9 +49,14 @@ elif command -v cyberbrain-extract >/dev/null 2>&1; then
     --trigger "$TRIGGER" \
     --cwd "$CWD" \
     2>&1
+  EXTRACTOR_EXIT=$?
 else
   echo "pre-compact-extract: cyberbrain not found, skipping" >&2
   exit 0
+fi
+
+if [ "${EXTRACTOR_EXIT:-0}" -ne 0 ]; then
+  echo "pre-compact-extract: extractor failed (exit ${EXTRACTOR_EXIT}). Check config at ~/.claude/cyberbrain/config.json. Run /cyberbrain:config in Claude Code to set up." >&2
 fi
 
 # The extractor writes its own log entry to ~/.claude/logs/cb-extract.log.

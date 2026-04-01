@@ -11,10 +11,10 @@ Covers the gaps not reached by test_mcp_server.py:
 
 All vault I/O uses tmp_path. No real LLM calls.
 
-Critical patching note: tools/recall.py does `from cyberbrain.mcp.shared import _load_config,
+Critical patching note: tools/recall.py does `from cyberbrain.mcp.shared import require_config,
 _get_search_backend, ...` which creates LOCAL bindings in the tools.recall module.
-Patching must target tools.recall._load_config / tools.recall._get_search_backend,
-NOT shared._load_config / shared._get_search_backend.
+Patching must target tools.recall.require_config / tools.recall._get_search_backend,
+NOT shared.require_config / shared._get_search_backend.
 """
 
 import json
@@ -215,7 +215,7 @@ class TestCbRecallGrepFallback:
 
         mod = _get_recall_module()
         cb_recall, _ = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_get_search_backend", return_value=None):
                 result = cb_recall(query="jwt authentication")
 
@@ -229,7 +229,7 @@ class TestCbRecallGrepFallback:
 
         mod = _get_recall_module()
         cb_recall, _ = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_get_search_backend", return_value=None):
                 result = cb_recall(query="xyzzy unicorn dragonfly")
 
@@ -257,7 +257,7 @@ class TestCbRecallGrepFallback:
 
         mod = _get_recall_module()
         cb_recall, _ = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_get_search_backend", return_value=mock_backend):
                 result = cb_recall(query="python typing hints")
 
@@ -282,7 +282,7 @@ class TestCbRecallGrepFallback:
 
         mod = _get_recall_module()
         cb_recall, _ = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_get_search_backend", return_value=None):
                 result = cb_recall(query="greptoken")
 
@@ -311,7 +311,7 @@ class TestCbRecallGrepFallback:
 
         mod = _get_recall_module()
         cb_recall, _ = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_get_search_backend", return_value=mock_backend):
                 result = cb_recall(query="emptytoken")
 
@@ -349,7 +349,7 @@ class TestCbRecallCardFormatting:
 
         mod = _get_recall_module()
         cb_recall, _ = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_get_search_backend", return_value=mock_backend):
                 output = cb_recall(query="fastapi python")
 
@@ -380,7 +380,7 @@ class TestCbRecallCardFormatting:
 
         mod = _get_recall_module()
         cb_recall, _ = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_get_search_backend", return_value=mock_backend):
                 output = cb_recall(query="hermes project")
 
@@ -399,7 +399,7 @@ class TestCbRecallCardFormatting:
 
         mod = _get_recall_module()
         cb_recall, _ = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_get_search_backend", return_value=mock_backend):
                 output = cb_recall(query="missing note")
 
@@ -448,7 +448,7 @@ class TestCbRecallCardFormatting:
 
         mod = _get_recall_module()
         cb_recall, _ = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_get_search_backend", return_value=mock_backend):
                 output = cb_recall(query="note content test", max_results=5)
 
@@ -488,7 +488,7 @@ class TestCbRecallCardFormatting:
 
         mod = _get_recall_module()
         cb_recall, _ = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_get_search_backend", return_value=mock_backend):
                 output = cb_recall(query="related links test")
 
@@ -509,7 +509,7 @@ class TestCbRecallCardFormatting:
 
         mod = _get_recall_module()
         cb_recall, _ = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_get_search_backend", return_value=mock_backend):
                 output = cb_recall(query="ghost notes query")
 
@@ -542,7 +542,7 @@ class TestCbRead:
 
         mod = _get_recall_module()
         _, cb_read = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             result = cb_read(identifier="Projects/JWT Auth.md")
 
         assert "JWT" in result
@@ -566,7 +566,7 @@ class TestCbRead:
 
         mod = _get_recall_module()
         _, cb_read = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             result = cb_read(identifier="Decision Log")
 
         assert "Decision Log" in result
@@ -589,7 +589,7 @@ class TestCbRead:
 
         mod = _get_recall_module()
         _, cb_read = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_find_note_by_title", return_value=note):
                 result = cb_read(identifier="Auth Note")
 
@@ -605,7 +605,7 @@ class TestCbRead:
 
         mod = _get_recall_module()
         _, cb_read = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_find_note_by_title", return_value=None):
                 with pytest.raises(ToolError, match="not found"):
                     cb_read(identifier="totally-nonexistent-note.md")
@@ -629,7 +629,7 @@ class TestCbRead:
 
         mod = _get_recall_module()
         _, cb_read = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch(
                 "pathlib.Path.read_text", side_effect=OSError("permission denied")
             ):
@@ -653,7 +653,7 @@ class TestCbRead:
 
         mod = _get_recall_module()
         _, cb_read = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             result = cb_read(identifier="My Decision.md")
 
         assert "Source:" in result
@@ -668,7 +668,7 @@ class TestCbRead:
 
         mod = _get_recall_module()
         _, cb_read = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_find_note_by_title", return_value=None):
                 with pytest.raises(ToolError, match="not found"):
                     cb_read(identifier="../../etc/passwd")
@@ -691,7 +691,7 @@ class TestCbRead:
 
         mod = _get_recall_module()
         _, cb_read = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             result = cb_read(identifier="Titled Note.md")
 
         assert "My Special Title" in result
@@ -755,7 +755,7 @@ class TestCbRecallSynthesis:
         mock_verdict.passed = True
 
         with (
-            patch.object(mod, "_load_config", return_value=config),
+            patch.object(mod, "require_config", return_value=config),
             patch.object(mod, "_get_search_backend", return_value=mock_backend),
             patch.object(mod, "_load_prompt", return_value="prompt"),
             patch.object(
@@ -795,7 +795,7 @@ class TestCbRecallSynthesis:
         cb_recall, _ = _register()
 
         with (
-            patch.object(mod, "_load_config", return_value=config),
+            patch.object(mod, "require_config", return_value=config),
             patch.object(mod, "_get_search_backend", return_value=mock_backend),
         ):
             output = cb_recall(query="test content notes", synthesize=False)
@@ -815,7 +815,7 @@ class TestCbRecallSynthesis:
         mock_verdict.passed = True
 
         with (
-            patch.object(mod, "_load_config", return_value=config),
+            patch.object(mod, "require_config", return_value=config),
             patch.object(mod, "_get_search_backend", return_value=mock_backend),
             patch.object(mod, "_load_prompt", return_value="prompt"),
             patch.object(mod, "_call_claude_code_backend", return_value="Synthesis."),
@@ -842,7 +842,7 @@ class TestCbRecallSynthesis:
         cb_recall, _ = _register()
 
         with (
-            patch.object(mod, "_load_config", return_value=config),
+            patch.object(mod, "require_config", return_value=config),
             patch.object(mod, "_get_search_backend", return_value=mock_backend),
             patch.object(mod, "_load_prompt", return_value="prompt"),
             patch.object(
@@ -866,7 +866,7 @@ class TestCbRecallSynthesis:
         mock_verdict.rationale = "Hallucinated content detected"
 
         with (
-            patch.object(mod, "_load_config", return_value=config),
+            patch.object(mod, "require_config", return_value=config),
             patch.object(mod, "_get_search_backend", return_value=mock_backend),
             patch.object(mod, "_load_prompt", return_value="prompt"),
             patch.object(
@@ -896,7 +896,7 @@ class TestCbRecallSynthesis:
 
         # Remove quality_gate from sys.modules so import fails inside the function
         with (
-            patch.object(mod, "_load_config", return_value=config),
+            patch.object(mod, "require_config", return_value=config),
             patch.object(mod, "_get_search_backend", return_value=mock_backend),
             patch.object(mod, "_load_prompt", return_value="prompt"),
             patch.object(
@@ -928,7 +928,7 @@ class TestCbRecallSynthesis:
             return "System prompt."
 
         with (
-            patch.object(mod, "_load_config", return_value=config),
+            patch.object(mod, "require_config", return_value=config),
             patch.object(mod, "_get_search_backend", return_value=mock_backend),
             patch.object(mod, "_load_prompt", side_effect=track_load_prompt),
             patch.object(mod, "_call_claude_code_backend", return_value="Synthesis."),
@@ -993,7 +993,7 @@ class TestCbRecallSynthesis:
         mock_verdict.passed = True
 
         with (
-            patch.object(mod, "_load_config", return_value=config),
+            patch.object(mod, "require_config", return_value=config),
             patch.object(mod, "_get_search_backend", return_value=mock_backend),
             patch.object(
                 mod, "_load_prompt", return_value="{query}\n{note_count}\n{notes_block}"
@@ -1047,7 +1047,7 @@ class TestCbReadMultiIdentifier:
 
         mod = _get_recall_module()
         _, cb_read = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             result = cb_read(identifier="My Note.md")
 
         assert "My Note" in result
@@ -1073,7 +1073,7 @@ class TestCbReadMultiIdentifier:
 
         mod = _get_recall_module()
         _, cb_read = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             result = cb_read(identifier="NoteA.md|NoteB.md")
 
         assert "Note A" in result
@@ -1097,7 +1097,7 @@ class TestCbReadMultiIdentifier:
         mod = _get_recall_module()
         _, cb_read = _register()
         with (
-            patch.object(mod, "_load_config", return_value=config),
+            patch.object(mod, "require_config", return_value=config),
             patch.object(mod, "_find_note_by_title", return_value=None),
         ):
             result = cb_read(identifier="Good.md|nonexistent-note")
@@ -1116,7 +1116,7 @@ class TestCbReadMultiIdentifier:
         mod = _get_recall_module()
         _, cb_read = _register()
         with (
-            patch.object(mod, "_load_config", return_value=config),
+            patch.object(mod, "require_config", return_value=config),
             patch.object(mod, "_find_note_by_title", return_value=None),
         ):
             with pytest.raises(ToolError, match="No notes found"):
@@ -1142,7 +1142,7 @@ class TestCbReadMultiIdentifier:
 
         mod = _get_recall_module()
         _, cb_read = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             result = cb_read(identifier="Long.md|Short.md", synthesize=False)
 
         # Full 3000-char body should not appear
@@ -1167,7 +1167,7 @@ class TestCbReadMultiIdentifier:
         mod = _get_recall_module()
         _, cb_read = _register()
         pipe_list = "|".join(f"Note{i}.md" for i in range(12))
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             result = cb_read(identifier=pipe_list)
 
         # Notes 10 and 11 are beyond the limit and should not appear
@@ -1194,7 +1194,7 @@ class TestCbReadMultiIdentifier:
 
         mod = _get_recall_module()
         _, cb_read = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             # Truncate at 100 chars — long_body (500) should be truncated
             result = cb_read(
                 identifier="A.md|B.md", synthesize=False, max_chars_per_note=100
@@ -1224,7 +1224,7 @@ class TestCbReadMultiIdentifier:
 
         mod = _get_recall_module()
         _, cb_read = _register()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             result = cb_read(
                 identifier="Big.md|Small.md", synthesize=False, max_chars_per_note=0
             )
@@ -1257,7 +1257,7 @@ class TestCbReadSynthesize:
         mod = _get_recall_module()
         _, cb_read = _register()
         with (
-            patch.object(mod, "_load_config", return_value=config),
+            patch.object(mod, "require_config", return_value=config),
             patch.object(
                 mod, "_synthesize_recall", return_value="Synthesized solo."
             ) as mock_synth,
@@ -1287,7 +1287,7 @@ class TestCbReadSynthesize:
         mod = _get_recall_module()
         _, cb_read = _register()
         with (
-            patch.object(mod, "_load_config", return_value=config),
+            patch.object(mod, "require_config", return_value=config),
             patch.object(
                 mod, "_synthesize_recall", return_value="Synthesized both."
             ) as mock_synth,
@@ -1316,7 +1316,7 @@ class TestCbReadSynthesize:
         mod = _get_recall_module()
         _, cb_read = _register()
         with (
-            patch.object(mod, "_load_config", return_value=config),
+            patch.object(mod, "require_config", return_value=config),
             patch.object(
                 mod, "_synthesize_recall", return_value="Generic synthesis."
             ) as mock_synth,

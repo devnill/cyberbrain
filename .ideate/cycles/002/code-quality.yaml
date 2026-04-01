@@ -1,0 +1,8 @@
+id: code-quality
+type: review_output
+reviewer: code-reviewer
+verdict: Fail
+summary: "S1: prefs path propagates ConfigError. S2: reset_prefs before cb_setup ordering risk. M1-M5: docs/lint issues."
+cycle: 2
+content_hash: 130da6c27e9339fb8b675d0ff64328c58dc8427895c66f339618966d232d9eef
+token_count: 51

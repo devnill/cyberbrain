@@ -1,0 +1,11 @@
+id: GP-01
+type: guiding_principle
+title: Low friction setup
+description: A new user must go from plugin install to working extraction in under two minutes with no prior knowledge of cyberbrain, Obsidian, or PKMS concepts. Every failure state must surface an actionable next step — never fail silently. Configuration should be guided, not manual.
+rationale: First real-world user test revealed that the current setup requires too much prior knowledge and fails silently when prerequisites are missing. Users abandon tools that don't work on first try.
+status: active
+cycle_created: 1
+cycle_modified: 1
+amendment_history: []
+content_hash: 45306d1fffee3d86aedb2a6ce15293fca89caa50ffb9ef0add7f947945fdb9c1
+token_count: 155

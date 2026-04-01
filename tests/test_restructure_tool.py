@@ -903,25 +903,18 @@ class TestFormatPreviewOutput:
 
 
 class TestCbRestructureValidation:
-    def test_raises_when_no_vault(self):
-        with patch.object(
-            rst_pipeline, "_load_config", return_value={"vault_path": ""}
-        ):
-            with pytest.raises(ToolError, match="No vault configured"):
-                _cb_restructure()()
-
-    def test_raises_when_vault_not_exist(self, tmp_path):
+    def test_raises_when_not_configured(self):
         with patch.object(
             rst_pipeline,
-            "_load_config",
-            return_value={"vault_path": str(tmp_path / "missing")},
+            "require_config",
+            side_effect=ToolError("Cyberbrain is not configured. Run /cyberbrain:config to set up your vault."),
         ):
-            with pytest.raises(ToolError, match="does not exist"):
+            with pytest.raises(ToolError, match="not configured"):
                 _cb_restructure()()
 
     def test_raises_when_folder_not_found(self, tmp_path):
         with patch.object(
-            rst_pipeline, "_load_config", return_value={"vault_path": str(tmp_path)}
+            rst_pipeline, "require_config", return_value={"vault_path": str(tmp_path)}
         ):
             with pytest.raises(ToolError, match="Folder not found"):
                 _cb_restructure()(folder="nonexistent")
@@ -932,7 +925,7 @@ class TestCbRestructureValidation:
         # Simulate path traversal via symlink or absolute path via folder param
         with patch.object(
             rst_pipeline,
-            "_load_config",
+            "require_config",
             return_value={"vault_path": str(tmp_path / "vault")},
         ):
             # vault doesn't exist → raises "Vault path does not exist"
@@ -941,21 +934,21 @@ class TestCbRestructureValidation:
 
     def test_raises_folder_hub_without_folder(self, tmp_path):
         with patch.object(
-            rst_pipeline, "_load_config", return_value={"vault_path": str(tmp_path)}
+            rst_pipeline, "require_config", return_value={"vault_path": str(tmp_path)}
         ):
             with pytest.raises(ToolError, match="folder_hub requires"):
                 _cb_restructure()(folder_hub=True)
 
     def test_raises_hub_path_without_folder_hub(self, tmp_path):
         with patch.object(
-            rst_pipeline, "_load_config", return_value={"vault_path": str(tmp_path)}
+            rst_pipeline, "require_config", return_value={"vault_path": str(tmp_path)}
         ):
             with pytest.raises(ToolError, match="hub_path is only used"):
                 _cb_restructure()(hub_path="hub.md")
 
     def test_raises_dry_run_and_preview_together(self, tmp_path):
         with patch.object(
-            rst_pipeline, "_load_config", return_value={"vault_path": str(tmp_path)}
+            rst_pipeline, "require_config", return_value={"vault_path": str(tmp_path)}
         ):
             with pytest.raises(ToolError, match="mutually exclusive"):
                 _cb_restructure()(dry_run=True, preview=True)
@@ -964,7 +957,7 @@ class TestCbRestructureValidation:
         sub = tmp_path / "sub"
         sub.mkdir()
         with patch.object(
-            rst_pipeline, "_load_config", return_value={"vault_path": str(tmp_path)}
+            rst_pipeline, "require_config", return_value={"vault_path": str(tmp_path)}
         ):
             with pytest.raises(ToolError, match="outside the vault"):
                 _cb_restructure()(
@@ -974,7 +967,7 @@ class TestCbRestructureValidation:
     def test_returns_info_when_no_notes(self, tmp_path):
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value={"vault_path": str(tmp_path)}
+                rst_pipeline, "require_config", return_value={"vault_path": str(tmp_path)}
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -1001,7 +994,7 @@ class TestCbRestructureNormalDryRun:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value={"vault_path": str(tmp_path)}
+                rst_pipeline, "require_config", return_value={"vault_path": str(tmp_path)}
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -1017,7 +1010,7 @@ class TestCbRestructureNormalDryRun:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value={"vault_path": str(tmp_path)}
+                rst_pipeline, "require_config", return_value={"vault_path": str(tmp_path)}
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -1042,7 +1035,7 @@ class TestCbRestructureFolderHubDryRun:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value={"vault_path": str(tmp_path)}
+                rst_pipeline, "require_config", return_value={"vault_path": str(tmp_path)}
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -1091,7 +1084,7 @@ class TestCbRestructureExecute:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -1125,7 +1118,7 @@ class TestCbRestructureExecute:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -1177,7 +1170,7 @@ class TestCbRestructureExecute:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -1242,7 +1235,7 @@ class TestCbRestructureExecute:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -1269,7 +1262,7 @@ class TestCbRestructureExecute:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -1295,7 +1288,7 @@ class TestCbRestructureExecute:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -1321,7 +1314,7 @@ class TestCbRestructureExecute:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -1342,7 +1335,7 @@ class TestCbRestructureExecute:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -1363,7 +1356,7 @@ class TestCbRestructureExecute:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -1388,7 +1381,7 @@ class TestCbRestructureExecute:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -1440,7 +1433,7 @@ class TestCbRestructureFolderHubExecute:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -1468,7 +1461,7 @@ class TestCbRestructureFolderHubExecute:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -1495,7 +1488,7 @@ class TestCbRestructureFolderHubExecute:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -2580,7 +2573,7 @@ class TestCbRestructureFolderHubDryRunNoClusters:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -2605,7 +2598,7 @@ class TestCbRestructureFolderHubDryRunNoClusters:
         notes = rst_collect._collect_notes(sub, tmp_path, [])
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -2653,7 +2646,7 @@ class TestCbRestructureFolderHubPreview:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -2698,7 +2691,7 @@ class TestCbRestructureFolderHubPreview:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -2754,7 +2747,7 @@ class TestCbRestructureFolderHubPreview:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -2814,7 +2807,7 @@ class TestCbRestructureFolderHubPreview:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -2874,7 +2867,7 @@ class TestCbRestructureFolderHubPreview:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -2934,7 +2927,7 @@ class TestCbRestructureFolderHubPreview:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -2980,7 +2973,7 @@ class TestCbRestructureFolderHubPreview:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3019,7 +3012,7 @@ class TestCbRestructureFolderHubPreview:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3066,7 +3059,7 @@ class TestCbRestructureFolderHubPreview:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3112,7 +3105,7 @@ class TestCbRestructureFolderHubPreview:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3166,7 +3159,7 @@ class TestCbRestructureFolderHubExecuteEdgeCases:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3200,7 +3193,7 @@ class TestCbRestructureFolderHubExecuteEdgeCases:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3237,7 +3230,7 @@ class TestCbRestructureFolderHubExecuteEdgeCases:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3264,7 +3257,7 @@ class TestCbRestructureFolderHubExecuteEdgeCases:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3288,7 +3281,7 @@ class TestCbRestructureFolderHubExecuteEdgeCases:
         # With no clusters, call_model is only called once (for phase 2)
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3324,7 +3317,7 @@ class TestCbRestructureFolderHubExecuteEdgeCases:
         # With no clusters, call_model is only called once (for phase 2)
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3364,7 +3357,7 @@ class TestCbRestructureFolderHubExecuteEdgeCases:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3410,7 +3403,7 @@ class TestCbRestructureNormalExecuteExtra:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3451,7 +3444,7 @@ class TestCbRestructureNormalExecuteExtra:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3491,7 +3484,7 @@ class TestCbRestructureNormalExecuteExtra:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3533,7 +3526,7 @@ class TestCbRestructureNormalExecuteExtra:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3561,7 +3554,7 @@ class TestCbRestructureNormalExecuteExtra:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3595,7 +3588,7 @@ class TestCbRestructureNormalExecuteExtra:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3636,7 +3629,7 @@ class TestCbRestructureNormalExecuteExtra:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3679,7 +3672,7 @@ class TestCbRestructureNormalExecuteExtra:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3727,7 +3720,7 @@ class TestCbRestructureNormalExecuteExtra:
         }
 
         with (
-            patch.object(rst_pipeline, "_load_config", return_value=config),
+            patch.object(rst_pipeline, "require_config", return_value=config),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
             patch.object(rst_pipeline, "_prune_index"),
@@ -3754,7 +3747,7 @@ class TestCbRestructureNormalExecuteExtra:
         # Phase 1 (cluster) returns invalid JSON — should raise ToolError with "cluster phase"
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3798,7 +3791,7 @@ class TestCbRestructureNormalExecuteExtra:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -3846,7 +3839,7 @@ class TestCbRestructureNormalExecuteExtra:
         ]
 
         with (
-            patch.object(rst_pipeline, "_load_config", return_value=config),
+            patch.object(rst_pipeline, "require_config", return_value=config),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
             patch.object(rst_pipeline, "_prune_index"),
@@ -3886,7 +3879,7 @@ class TestCbRestructureNormalExecuteExtra:
         ]
 
         with (
-            patch.object(rst_pipeline, "_load_config", return_value=config),
+            patch.object(rst_pipeline, "require_config", return_value=config),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
             patch.object(rst_pipeline, "_prune_index"),
@@ -4578,7 +4571,7 @@ class TestCbRestructureQualityGateIntegration:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),
@@ -4622,7 +4615,7 @@ class TestCbRestructureQualityGateIntegration:
         with (
             patch.object(
                 rst_pipeline,
-                "_load_config",
+                "require_config",
                 return_value=self._base_config(tmp_path, gate_enabled=False),
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
@@ -4676,7 +4669,7 @@ class TestCbRestructureQualityGateIntegration:
 
         with (
             patch.object(
-                rst_pipeline, "_load_config", return_value=self._base_config(tmp_path)
+                rst_pipeline, "require_config", return_value=self._base_config(tmp_path)
             ),
             patch.object(rst_pipeline, "_get_search_backend", return_value=None),
             patch.object(rst_pipeline, "_index_paths"),

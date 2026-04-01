@@ -1,0 +1,10 @@
+id: interview-refine-3
+type: interview
+title: Refinement Interview — Post-Review Corrections (Cycle 2)
+date: 2026-03-31
+entries:
+  - question: Cycle 2 review found 3 significant findings. Address all?
+    answer: Yes — user invoked /ideate:refine immediately after review.
+    domain: null
+content_hash: 7411fe94b1b847340e9a28b2e9ce213d0f53ab5f1b594bbcb510ecbea4b0a235
+token_count: 72

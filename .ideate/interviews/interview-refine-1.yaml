@@ -1,0 +1,31 @@
+id: interview-refine-1
+type: interview
+title: Refinement Interview — Onboarding & First-Run Experience
+date: 2026-03-31
+entries:
+  - question: What triggered this refinement?
+    answer: "A friend tried cyberbrain and it did not work. Four issues surfaced: (1) uv is required but missing deps show no error, (2) skills showed as /plugin:cyberbrain:cyberbrain:orient instead of /cyberbrain:orient, (3) configuration is not obvious — need low friction onboarding, (4) user had no Obsidian — need guided first-time setup."
+    domain: null
+  - question: Should orient be a user-invocable skill?
+    answer: No. Orient is an MCP command/resource, not a user skill. Skills invoke tools. We don't need skills for direct MCP commands.
+    domain: null
+  - question: What skills should exist?
+    answer: /cyberbrain:config is the entry point for both first-time setup and subsequent configuration. Just config for this refinement.
+    domain: null
+  - question: How should first-run detection work?
+    answer: Auto-detect on first MCP tool call. If not configured, return instructions pointing to /cyberbrain:config.
+    domain: null
+  - question: How far should the no-Obsidian path go?
+    answer: Minimal. Create folder structure at user-chosen path. Obsidian is optional but follow Obsidian idioms. Obsidian is the human interface, cyberbrain is the LLM interface.
+    domain: null
+  - question: What about the PKMS interview depth?
+    answer: Gauge preference on PKMS structure. Easy for someone who doesn't know what PKMS is to get started. If someone is familiar, give them a jumpstart. Option to skip interview and use PARA defaults.
+    domain: null
+  - question: How should errors be handled?
+    answer: Clear error messages showing why setup is failing. When things are not set up, broken, or otherwise unable to run, fail fast and surface mitigation steps.
+    domain: null
+  - question: Should low friction setup be a guiding principle?
+    answer: Yes.
+    domain: null
+content_hash: eca0a23cf8e1c679dcba59bcc512e2afa84f8f91a672d5ebea0f6fe7a8febdb1
+token_count: 495

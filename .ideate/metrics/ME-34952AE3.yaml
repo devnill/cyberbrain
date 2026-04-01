@@ -1,0 +1,20 @@
+id: ME-34952AE3
+type: metrics_event
+event_name: unknown
+timestamp: 2026-03-31T11:00:00Z
+skill: execute
+phase: 6b
+cycle: null
+agent_type: worker
+model: sonnet
+work_item: WI-003
+wall_clock_ms: 3997453
+turns_used: 166
+context_files_read: []
+input_tokens: null
+output_tokens: null
+cache_read_tokens: null
+cache_write_tokens: null
+mcp_tools_called:
+  - ideate_get_work_item_context
+  - ideate_assemble_context

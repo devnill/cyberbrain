@@ -11,8 +11,8 @@ from pydantic import Field
 from cyberbrain.extractors.extract_beats import run_extraction
 from cyberbrain.mcp.shared import (
     BackendError,
-    _load_config,
     parse_jsonl_transcript,
+    require_config,
 )
 
 
@@ -56,7 +56,7 @@ def register(mcp: FastMCP) -> None:
             raise ToolError(f"Transcript file not found: {transcript_path}")
 
         effective_cwd = cwd or str(Path.home())
-        config = _load_config(effective_cwd)
+        config = require_config(effective_cwd)
 
         effective_session_id = session_id or transcript_file.stem
 

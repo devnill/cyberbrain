@@ -1,0 +1,28 @@
+id: WI-010
+type: work_item
+title: "Reorder SKILL.md Phase 4: cb_setup before reset_prefs"
+status: done
+complexity: small
+scope:
+  - path: skills/config/SKILL.md
+    op: modify
+depends: []
+blocks: []
+criteria:
+  - SKILL.md Phase 4 runs cb_setup (phase 1 + phase 2) BEFORE cb_configure(reset_prefs=True)
+  - The reset_prefs step is the last step before the confirmation message
+  - "Phase 4 ordering is: 4.1 create vault, 4.2 cb_setup() analysis, 4.3 cb_setup(answers=..., write=True), 4.4 cb_configure(reset_prefs=True), 4.5 confirm complete"
+domain: onboarding
+phase: null
+notes: |-
+  Reorder Phase 4 sections in skills/config/SKILL.md:
+
+  Current order: 4.1 create vault, 4.2 reset_prefs, 4.3 cb_setup, 4.4 confirm
+  New order: 4.1 create vault, 4.2 cb_setup() (analysis + questions), 4.3 cb_setup(answers=..., write=True) (generate CLAUDE.md), 4.4 cb_configure(reset_prefs=True) (append prefs to generated CLAUDE.md), 4.5 confirm complete
+
+  This ensures cb_setup generates the CLAUDE.md first, then reset_prefs appends the preferences section to it, preventing cb_setup from overwriting preferences.
+resolution: null
+cycle_created: null
+cycle_modified: null
+content_hash: 75d962a2da4c5463d8c3a3651093536c2ab8d0cfe03429dcf1f839cc262c1381
+token_count: 314

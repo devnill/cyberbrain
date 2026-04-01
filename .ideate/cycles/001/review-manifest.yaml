@@ -1,0 +1,12 @@
+id: review-manifest
+type: review_manifest
+cycle: 1
+manifest: |-
+  | # | Title | File Scope | Incremental Verdict | Findings (C/S/M) |
+  |---|-------|------------|---------------------|------------------|
+  | 1 | Create /cyberbrain:config skill | skills/config/SKILL.md | None | — |
+  | 2 | Add vault scaffolding to cb_configure | src/cyberbrain/mcp/tools/manage.py | None | — |
+  | 3 | First-run config guard in MCP tool layer | src/cyberbrain/mcp/shared.py + 9 tool files | None | — |
+  | 4 | Fix silent error handling in hooks and CLI | src/cyberbrain/extractors/config.py, extract_beats.py, 3 hooks | None | — |
+content_hash: 6790f5234db406cc00ea03f94fb1a17aeff3a72c25aaceeeb72c79337dd2ce3f
+token_count: 153

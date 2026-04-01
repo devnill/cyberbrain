@@ -1,0 +1,48 @@
+id: WI-004
+type: work_item
+title: Fix silent error handling in hooks and CLI
+status: done
+complexity: small
+scope:
+  - path: src/cyberbrain/extractors/extract_beats.py
+    op: modify
+  - path: src/cyberbrain/extractors/config.py
+    op: modify
+  - path: hooks/pre-compact-extract.sh
+    op: modify
+  - path: hooks/session-end-extract.sh
+    op: modify
+  - path: hooks/session-end-reindex.sh
+    op: modify
+depends: []
+blocks: []
+criteria:
+  - config.py load_global_config raises a ConfigError exception instead of calling sys.exit when config is missing or invalid
+  - extract_beats.py CLI entry point catches ConfigError and exits with status 1 and stderr message
+  - Hook scripts still exit 0 (required by Claude Code hook contract) but log clear actionable messages
+  - "Hook error messages include: what failed, why, and how to fix (e.g., 'Config not found. Run /cyberbrain:config to set up.')"
+  - MCP callers of config loading get exceptions they can convert to ToolError
+  - All existing tests pass; tests updated for new exception behavior in config.py
+domain: onboarding
+phase: null
+notes: |-
+  The key change is in config.py load_global_config(). Currently it calls sys.exit(0) on missing config, which:
+  - Hides failures in hook context (exit 0 = success)
+  - Makes it impossible for MCP callers to catch the error
+
+  Change load_global_config to raise a ConfigError (new exception class in config.py). Then:
+  - extract_beats.py main() catches ConfigError and does sys.exit(1) with stderr message
+  - MCP shared.py catches ConfigError and raises ToolError
+  - Hooks continue to exit 0 (Claude Code hook contract) but the error is logged clearly
+
+  Hook log locations:
+  - pre-compact: stderr goes to terminal
+  - session-end: output goes to ~/.claude/logs/cb-session-end.log
+  - session-end-reindex: output goes to ~/.claude/cyberbrain/logs/cb-reindex.log
+
+  Ensure error messages in these logs are actionable: 'Cyberbrain config not found at ~/.claude/cyberbrain/config.json. Run /cyberbrain:config in Claude Code to set up.'
+resolution: null
+cycle_created: null
+cycle_modified: null
+content_hash: bc4564aab12f8203cc0e1ac9ddcfea678fb837dba20b53fbe4e566d7e223433f
+token_count: 548

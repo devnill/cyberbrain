@@ -1,0 +1,32 @@
+id: WI-011
+type: work_item
+title: Fix create_vault ordering + catch JSONDecodeError in manage.py and resources.py
+status: done
+complexity: small
+scope:
+  - path: src/cyberbrain/mcp/tools/manage.py
+    op: modify
+  - path: src/cyberbrain/mcp/resources.py
+    op: modify
+depends: []
+blocks: []
+criteria:
+  - create_vault next-steps message in manage.py lists cb_setup before reset_prefs (matching SKILL.md Phase 4 ordering)
+  - cb_configure no-args path catches (ConfigError, json.JSONDecodeError)
+  - cb_configure prefs path catches (ConfigError, json.JSONDecodeError)
+  - cb_status catches (ConfigError, json.JSONDecodeError)
+  - _get_guide() in resources.py catches (ConfigError, json.JSONDecodeError)
+  - All existing tests pass
+domain: onboarding
+phase: null
+notes: |-
+  Two fixes:
+
+  1. manage.py ~line 400: The create_vault response next-steps currently say '1. reset_prefs, 2. cb_setup'. Swap to '1. cb_setup, 2. reset_prefs' to match SKILL.md Phase 4 ordering.
+
+  2. manage.py + resources.py: At each _load_config() try/except, change 'except ConfigError:' to 'except (ConfigError, json.JSONDecodeError):'. There are 3 sites in manage.py (no-args ~line 589, prefs ~line 303, cb_status ~line 698) and 1 in resources.py (_get_guide). Import json.JSONDecodeError or use json module already imported.
+resolution: null
+cycle_created: null
+cycle_modified: null
+content_hash: db66aa9ddd696d88e7287f848d1f48218d56be342e00a950ad48ef4cd1cdebeb
+token_count: 364

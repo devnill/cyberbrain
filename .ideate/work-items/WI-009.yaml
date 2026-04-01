@@ -1,0 +1,34 @@
+id: WI-009
+type: work_item
+title: Catch ConfigError in manage.py prefs path and resources.py
+status: done
+complexity: small
+scope:
+  - path: src/cyberbrain/mcp/tools/manage.py
+    op: modify
+  - path: src/cyberbrain/mcp/resources.py
+    op: modify
+depends: []
+blocks: []
+criteria:
+  - cb_configure(reset_prefs=True) on a fresh install returns actionable guidance instead of raising ConfigError
+  - cb_configure(show_prefs=True) on a fresh install returns actionable guidance instead of raising ConfigError
+  - cb_configure(set_prefs='...') on a fresh install returns actionable guidance instead of raising ConfigError
+  - _get_guide() in resources.py catches ConfigError and returns a minimal guide directing to /cyberbrain:config
+  - orient prompt works on fresh install without raising
+  - All existing tests pass; new tests verify prefs path and _get_guide handle missing config
+domain: onboarding
+phase: null
+notes: |-
+  Two fixes:
+
+  1. manage.py prefs path (~line 302): Wrap _load_config() in try/except ConfigError. On ConfigError return actionable message. Same pattern as the no-args path at line 582-593.
+
+  2. resources.py _get_guide(): Wrap _load_config() in try/except ConfigError. On ConfigError return a minimal guide: 'Cyberbrain is not configured yet. Run /cyberbrain:config to set up your vault.'
+
+  Import ConfigError from cyberbrain.extractors.config in resources.py.
+resolution: null
+cycle_created: null
+cycle_modified: null
+content_hash: 456aa0f070888b28cec0a13fd8fbf4ea6d0ba2a4ced95c891c0386929bcbfb87
+token_count: 385

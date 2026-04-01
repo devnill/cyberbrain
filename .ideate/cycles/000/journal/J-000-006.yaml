@@ -1,0 +1,12 @@
+id: J-000-006
+type: journal_entry
+phase: execute
+date: 2026-03-31
+cycle_created: 0
+title: work-item-complete
+content: "## [execute] 2026-03-31 — Work item WI-004: Fix silent error handling
+  in hooks and CLI (review)\\nStatus: complete with rework\\nRework: 3 minor
+  findings fixed from incremental review.\\nMinor: removed bare f-string prefix
+  (ruff F541), fixed stale setsid comment in session-end hook. M3 (_load_config
+  not catching ConfigError) noted as known tension — cb_configure/cb_status
+  intentionally use _load_config for graceful missing-config handling."

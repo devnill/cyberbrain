@@ -1,0 +1,6 @@
+id: review-manifest
+type: review_manifest
+cycle: 2
+manifest: 8 work items, all done. WI-001-004 from cycle 1 (onboarding foundation). WI-005-008 from cycle 2 (post-review corrections). Focus this review on WI-005-008 and cross-cutting integration of all 8 items.
+content_hash: 98a27b32830e3252977634b9e10d0fda5f550e584fd4929e9d7b9c695eaffe46
+token_count: 65

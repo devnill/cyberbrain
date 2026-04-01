@@ -1,0 +1,36 @@
+id: WI-006
+type: work_item
+title: Fix cb_configure and cb_status fresh install handling + lint cleanup
+status: done
+complexity: small
+scope:
+  - path: src/cyberbrain/mcp/tools/manage.py
+    op: modify
+  - path: src/cyberbrain/mcp/tools/reindex.py
+    op: modify
+depends: []
+blocks: []
+criteria:
+  - cb_configure() with no args on a fresh install (no config.json) returns a structured response showing '(not configured)' status instead of raising ConfigError
+  - cb_status() on a fresh install returns a structured response instead of raising ConfigError
+  - Both tools catch ConfigError from _load_config() and return actionable guidance pointing to /cyberbrain:config
+  - reindex.py has no unused imports (Path and ToolError removed if unused)
+  - manage.py _read_prefs_section uses import re instead of __import__('re')
+  - All existing tests pass; new tests verify cb_configure and cb_status handle missing config gracefully
+domain: onboarding
+phase: null
+notes: |-
+  Three fixes in manage.py + one in reindex.py:
+
+  1. cb_configure no-args path (manage.py ~line 580): Wrap _load_config() call in try/except for ConfigError (imported from cyberbrain.extractors.config). On ConfigError, construct a minimal response showing vault as '(not configured)' with guidance to run /cyberbrain:config. The existing code at line 584 already handles vault_path='(not set)' — the fix prevents the exception from propagating before reaching that logic.
+
+  2. cb_status (manage.py): Same pattern — wrap _load_config() in try/except ConfigError, return a structured 'not configured' response with guidance.
+
+  3. _read_prefs_section (manage.py ~line 100): Replace __import__('re').finditer(...) with a local import re and re.finditer(...).
+
+  4. reindex.py: Remove unused Path import (line 3) and unused ToolError import (line 7) if they are no longer referenced after the redundant vault checks were removed in WI-003.
+resolution: null
+cycle_created: null
+cycle_modified: null
+content_hash: f8994fcf2c1711af8887cc25329d50960a0e1371fbed313fc06e352adf53082e
+token_count: 515

@@ -92,7 +92,7 @@ class TestToolContract:
         self.mcp = FastMCP("cyberbrain-test")
         with patch.object(manage_mod, "_load_config", return_value=BASE_CONFIG):
             manage_mod.register(self.mcp)
-        with patch.object(recall_mod, "_load_config", return_value=BASE_CONFIG):
+        with patch.object(recall_mod, "require_config", return_value=BASE_CONFIG):
             recall_mod.register(self.mcp)
 
     def test_cb_status_dispatches(self, tmp_path):
@@ -104,6 +104,6 @@ class TestToolContract:
 
     def test_cb_recall_dispatches(self, tmp_path):
         config = {**BASE_CONFIG, "vault_path": str(tmp_path)}
-        with patch.object(recall_mod, "_load_config", return_value=config):
+        with patch.object(recall_mod, "require_config", return_value=config):
             result = _run(self.mcp.call_tool("cb_recall", {"query": "test"}))
         assert result is not None

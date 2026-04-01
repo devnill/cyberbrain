@@ -33,20 +33,34 @@ import cyberbrain.extractors.config as config_mod
 
 
 class TestLoadGlobalConfig:
-    def test_exits_when_config_file_missing(self, tmp_path):
-        missing = tmp_path / "no_config.json"
-        with patch.object(config_mod, "GLOBAL_CONFIG_PATH", missing):
-            with pytest.raises(SystemExit):
-                config_mod.load_global_config()
+    # Note: these tests use the string-based patch target
+    # "cyberbrain.extractors.config.GLOBAL_CONFIG_PATH" rather than
+    # patch.object(config_mod, ...) to stay resilient to module cache clearing
+    # done by test_extract_beats.py at collection time.
 
-    def test_exits_when_required_field_missing(self, tmp_path):
+    def test_raises_config_error_when_config_file_missing(self, tmp_path):
+        import cyberbrain.extractors.config as _cfg
+        from cyberbrain.extractors.config import ConfigError
+
+        missing = tmp_path / "no_config.json"
+        with patch.object(_cfg, "GLOBAL_CONFIG_PATH", missing):
+            with pytest.raises(ConfigError):
+                _cfg.load_global_config()
+
+    def test_raises_config_error_when_required_field_missing(self, tmp_path):
+        import cyberbrain.extractors.config as _cfg
+        from cyberbrain.extractors.config import ConfigError
+
         cfg = tmp_path / "config.json"
         cfg.write_text(json.dumps({"vault_path": ""}))
-        with patch.object(config_mod, "GLOBAL_CONFIG_PATH", cfg):
-            with pytest.raises(SystemExit):
-                config_mod.load_global_config()
+        with patch.object(_cfg, "GLOBAL_CONFIG_PATH", cfg):
+            with pytest.raises(ConfigError):
+                _cfg.load_global_config()
 
-    def test_exits_for_placeholder_vault_path(self, tmp_path):
+    def test_raises_config_error_for_placeholder_vault_path(self, tmp_path):
+        import cyberbrain.extractors.config as _cfg
+        from cyberbrain.extractors.config import ConfigError
+
         cfg = tmp_path / "config.json"
         cfg.write_text(
             json.dumps(
@@ -56,11 +70,14 @@ class TestLoadGlobalConfig:
                 }
             )
         )
-        with patch.object(config_mod, "GLOBAL_CONFIG_PATH", cfg):
-            with pytest.raises(SystemExit):
-                config_mod.load_global_config()
+        with patch.object(_cfg, "GLOBAL_CONFIG_PATH", cfg):
+            with pytest.raises(ConfigError):
+                _cfg.load_global_config()
 
-    def test_exits_when_vault_path_does_not_exist(self, tmp_path):
+    def test_raises_config_error_when_vault_path_does_not_exist(self, tmp_path):
+        import cyberbrain.extractors.config as _cfg
+        from cyberbrain.extractors.config import ConfigError
+
         cfg = tmp_path / "config.json"
         cfg.write_text(
             json.dumps(
@@ -70,11 +87,14 @@ class TestLoadGlobalConfig:
                 }
             )
         )
-        with patch.object(config_mod, "GLOBAL_CONFIG_PATH", cfg):
-            with pytest.raises(SystemExit):
-                config_mod.load_global_config()
+        with patch.object(_cfg, "GLOBAL_CONFIG_PATH", cfg):
+            with pytest.raises(ConfigError):
+                _cfg.load_global_config()
 
-    def test_exits_when_vault_is_home_directory(self, tmp_path):
+    def test_raises_config_error_when_vault_is_home_directory(self, tmp_path):
+        import cyberbrain.extractors.config as _cfg
+        from cyberbrain.extractors.config import ConfigError
+
         cfg = tmp_path / "config.json"
         home = Path.home()
         cfg.write_text(
@@ -85,11 +105,14 @@ class TestLoadGlobalConfig:
                 }
             )
         )
-        with patch.object(config_mod, "GLOBAL_CONFIG_PATH", cfg):
-            with pytest.raises(SystemExit):
-                config_mod.load_global_config()
+        with patch.object(_cfg, "GLOBAL_CONFIG_PATH", cfg):
+            with pytest.raises(ConfigError):
+                _cfg.load_global_config()
 
-    def test_exits_when_vault_is_filesystem_root(self, tmp_path):
+    def test_raises_config_error_when_vault_is_filesystem_root(self, tmp_path):
+        import cyberbrain.extractors.config as _cfg
+        from cyberbrain.extractors.config import ConfigError
+
         cfg = tmp_path / "config.json"
         cfg.write_text(
             json.dumps(
@@ -99,11 +122,13 @@ class TestLoadGlobalConfig:
                 }
             )
         )
-        with patch.object(config_mod, "GLOBAL_CONFIG_PATH", cfg):
-            with pytest.raises(SystemExit):
-                config_mod.load_global_config()
+        with patch.object(_cfg, "GLOBAL_CONFIG_PATH", cfg):
+            with pytest.raises(ConfigError):
+                _cfg.load_global_config()
 
     def test_returns_config_with_resolved_vault_path(self, tmp_path):
+        import cyberbrain.extractors.config as _cfg
+
         vault = tmp_path / "vault"
         vault.mkdir()
         cfg = tmp_path / "config.json"
@@ -116,17 +141,20 @@ class TestLoadGlobalConfig:
                 }
             )
         )
-        with patch.object(config_mod, "GLOBAL_CONFIG_PATH", cfg):
-            result = config_mod.load_global_config()
+        with patch.object(_cfg, "GLOBAL_CONFIG_PATH", cfg):
+            result = _cfg.load_global_config()
         assert result["vault_path"] == str(vault.resolve())
         assert result["inbox"] == "AI/Inbox"
 
-    def test_exits_when_vault_path_missing_from_config(self, tmp_path):
+    def test_raises_config_error_when_vault_path_missing_from_config(self, tmp_path):
+        import cyberbrain.extractors.config as _cfg
+        from cyberbrain.extractors.config import ConfigError
+
         cfg = tmp_path / "config.json"
         cfg.write_text(json.dumps({"inbox": "AI/Inbox"}))
-        with patch.object(config_mod, "GLOBAL_CONFIG_PATH", cfg):
-            with pytest.raises(SystemExit):
-                config_mod.load_global_config()
+        with patch.object(_cfg, "GLOBAL_CONFIG_PATH", cfg):
+            with pytest.raises(ConfigError):
+                _cfg.load_global_config()
 
 
 class TestFindProjectConfig:

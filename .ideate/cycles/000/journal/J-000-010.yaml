@@ -1,0 +1,21 @@
+id: J-000-010
+type: journal_entry
+phase: execute
+date: 2026-03-31
+cycle_created: 0
+title: group-complete
+content: "## [execute] 2026-03-31 — Group 1 complete (post-review
+  corrections)\\n\\nWI-005: Fix plugin manifest and SKILL.md error handler —
+  complete\\n- Added \\\"skills\\\": \\\"./skills\\\" to plugin.json\\n- Fixed
+  SKILL.md error handler to use correct cb_setup signatures\\n\\nWI-006: Fix
+  cb_configure/cb_status fresh install + lint — complete\\n- cb_configure
+  no-args catches ConfigError, returns structured '(not configured)'
+  response\\n- cb_status catches ConfigError, returns structured setup
+  guidance\\n- Removed stale imports from reindex.py\\n- Replaced
+  __import__('re') with import re in manage.py\\n- 10 new tests
+  added\\n\\nWI-007: Add uv availability check to hooks — complete\\n- All 3
+  hooks check command -v uv before uv run calls\\n- Actionable messages logged
+  to appropriate destinations\\n\\nWI-008: Update QUICKSTART.md and README.md —
+  complete\\n- Added uv prerequisite to QUICKSTART.md\\n- /cyberbrain:config is
+  now the primary setup path in both docs\\n- Manual config moved to Advanced
+  subsection\\n\\nAll 1487 tests pass."

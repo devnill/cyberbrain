@@ -13,7 +13,7 @@ from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from cyberbrain.extractors.state import audit_report_path, search_db_path
-from cyberbrain.mcp.shared import _load_config
+from cyberbrain.mcp.shared import require_config
 
 # Characters that break Obsidian wikilink resolution
 _INVALID_FILENAME_CHARS = re.compile(r"[#\[\]\^]")
@@ -379,18 +379,9 @@ def register(mcp: FastMCP) -> None:
 
         Pass folder='Projects/my-project' to limit the scan to one subfolder.
         """
-        config = _load_config()
+        config = require_config()
         vault_path = config.get("vault_path", "")
-        if not vault_path:
-            raise ToolError(
-                "vault_path is not configured. Run cb_configure(vault_path=...) first."
-            )
         vault = Path(vault_path)
-        if not vault.exists():
-            raise ToolError(
-                f"vault_path does not exist: {vault_path}. "
-                "Run cb_configure(vault_path=...) to set a valid path."
-            )
 
         # Validate folder param is within vault
         if folder:

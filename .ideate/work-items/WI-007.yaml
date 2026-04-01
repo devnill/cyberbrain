@@ -1,0 +1,43 @@
+id: WI-007
+type: work_item
+title: Add uv availability check to hooks
+status: done
+complexity: small
+scope:
+  - path: hooks/pre-compact-extract.sh
+    op: modify
+  - path: hooks/session-end-extract.sh
+    op: modify
+  - path: hooks/session-end-reindex.sh
+    op: modify
+depends: []
+blocks: []
+criteria:
+  - All three hooks check for uv availability before calling uv run
+  - "If uv is not found, hooks log an actionable message: 'cyberbrain: uv not found. Install via: brew install uv'"
+  - Hooks still exit 0 after logging the uv-missing message (Claude Code hook contract)
+  - The uv check uses command -v uv or similar POSIX-portable test
+  - Existing hook behavior is preserved when uv is available
+domain: onboarding
+phase: null
+notes: |-
+  Add a uv availability guard to each hook, early in execution before any uv run call.
+
+  Pattern:
+  ```bash
+  if ! command -v uv >/dev/null 2>&1; then
+    echo "cyberbrain: uv not found. Install via: brew install uv" >&2
+    exit 0
+  fi
+  ```
+
+  For session-end-extract.sh and session-end-reindex.sh, the message should go to their respective log files (same pattern as the existing config pre-flight check).
+
+  For pre-compact-extract.sh, the message goes to stderr (same as existing error messages in that hook).
+
+  The check should run BEFORE the CLAUDE_PLUGIN_ROOT branch, since uv is needed in both plugin and non-plugin modes. Check mcp/start.sh for the existing uv-finding logic as a reference — it searches common locations. For hooks, a simple command -v uv is sufficient since the hook runs in the user's shell environment.
+resolution: null
+cycle_created: null
+cycle_modified: null
+content_hash: c6debb8d9d09453f1bba0c2f5215b239849ddd025c4b2fc5dbac0ff23372f051
+token_count: 433

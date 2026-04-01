@@ -1,0 +1,13 @@
+id: J-000-013
+type: journal_entry
+phase: execute
+date: 2026-03-31
+cycle_created: 0
+title: group-complete
+content: "## [execute] 2026-03-31 — Cycle 2 corrections complete\\n\\nWI-009:
+  Catch ConfigError in manage.py prefs + resources.py — complete\\n- manage.py
+  prefs path catches ConfigError, returns actionable guidance\\n- resources.py
+  _get_guide() catches ConfigError, returns minimal guide\\n- 11 new tests
+  added\\n\\nWI-010: Reorder SKILL.md Phase 4 — complete\\n- Phase 4 now: create
+  vault -> cb_setup analysis -> cb_setup write -> reset_prefs ->
+  confirm\\n\\nAll 1497 tests pass."

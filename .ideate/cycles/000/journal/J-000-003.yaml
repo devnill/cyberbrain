@@ -1,0 +1,15 @@
+id: J-000-003
+type: journal_entry
+phase: execute
+date: 2026-03-31
+cycle_created: 0
+title: work-item-complete
+content: "## [execute] 2026-03-31 — Work item WI-003: First-run config guard in
+  MCP tool layer\\nStatus: complete with rework\\nRework: 1 significant, 3 minor
+  findings fixed from incremental review.\\nSignificant: ConfigError from
+  _resolve_config could escape require_config as unhandled exception. Added
+  home/root pre-check and broad except catch around _resolve_config
+  call.\\nMinor: stale test method names renamed, stale patching comment
+  updated, dead vault existence checks removed from 5 tool files (reindex,
+  enrich, review, audit, restructure/pipeline). Tests updated to reflect
+  guard-based validation."

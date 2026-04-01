@@ -29,7 +29,7 @@ from cyberbrain.extractors.backends import (
     DEFAULT_BACKEND,
     BackendError,
 )
-from cyberbrain.extractors.config import resolve_config
+from cyberbrain.extractors.config import ConfigError, resolve_config
 from cyberbrain.extractors.extractor import extract_beats
 from cyberbrain.extractors.run_log import (
     is_session_already_extracted,
@@ -256,7 +256,11 @@ def main():
         print("[extract_beats] Provide --transcript or --beats-json.", file=sys.stderr)
         sys.exit(1)
 
-    config: dict = resolve_config(args.cwd)  # type: ignore[assignment]  # CyberbrainConfig is a TypedDict (dict subclass)
+    try:
+        config: dict = resolve_config(args.cwd)  # type: ignore[assignment]  # CyberbrainConfig is a TypedDict (dict subclass)
+    except ConfigError as e:
+        print(f"[extract_beats] Configuration error: {e}", file=sys.stderr)
+        sys.exit(1)
     autofile_enabled = config.get("autofile", False)
 
     # Derive session ID from transcript filename stem if possible

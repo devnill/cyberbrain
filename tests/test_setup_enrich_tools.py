@@ -224,8 +224,8 @@ def refresh_enrich_module():
     _shared._extract_beats = _mock_eb.extract_beats
     _shared.RUNS_LOG_PATH = "/tmp/fake-runs.log"
     # Patch captured references in tool modules
-    _setup_mod._load_config = _shared._load_config
-    _enrich_mod._load_config = _shared._load_config
+    _setup_mod.require_config = _shared._load_config
+    _enrich_mod.require_config = _shared._load_config
     # Re-register tools
     _fake_mcp = FakeMCP()
     _setup_mod.register(_fake_mcp)
@@ -256,7 +256,7 @@ class TestCbSetupConfigErrors:
     def test_raises_when_no_vault_configured(self):
         """ToolError when vault_path is not set and config has no vault_path."""
         with patch(
-            "cyberbrain.mcp.tools.setup._load_config", return_value={"vault_path": ""}
+            "cyberbrain.mcp.tools.setup.require_config", return_value={"vault_path": ""}
         ):
             with pytest.raises(ToolError, match="No vault path"):
                 cb_setup()
@@ -265,7 +265,7 @@ class TestCbSetupConfigErrors:
         """ToolError when the vault directory doesn't exist on disk."""
         nonexistent = str(tmp_path / "no-such-vault")
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config",
+            "cyberbrain.mcp.tools.enrich.require_config",
             return_value=_vault_config(nonexistent),
         ):
             with pytest.raises(ToolError, match="does not exist"):
@@ -277,7 +277,7 @@ class TestCbSetupConfigErrors:
         This allows cb_setup to analyze a vault other than the one in config.
         """
         config = _vault_config(str(tmp_path / "other-vault"))
-        with patch("cyberbrain.mcp.tools.enrich._load_config", return_value=config):
+        with patch("cyberbrain.mcp.tools.enrich.require_config", return_value=config):
             with patch(
                 "cyberbrain.mcp.tools.setup._run_analyzer",
                 return_value={"total_notes": 0},
@@ -352,7 +352,7 @@ tags: [jwt, auth]
             ],
         }
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config",
+            "cyberbrain.mcp.tools.enrich.require_config",
             return_value=self._phase1_config(vault),
         ):
             with patch(
@@ -380,7 +380,7 @@ tags: [jwt, auth]
         fenced = f"```json\n{json.dumps(analysis)}\n```"
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config",
+            "cyberbrain.mcp.tools.enrich.require_config",
             return_value=self._phase1_config(vault),
         ):
             with patch(
@@ -401,7 +401,7 @@ tags: [jwt, auth]
     def test_returns_raw_output_when_model_returns_non_json(self, vault):
         """If the model returns non-JSON, the raw output is returned (graceful degradation)."""
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config",
+            "cyberbrain.mcp.tools.enrich.require_config",
             return_value=self._phase1_config(vault),
         ):
             with patch(
@@ -432,7 +432,7 @@ tags: [jwt, auth]
             return '{"archetype": "developer", "questions": []}'
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config",
+            "cyberbrain.mcp.tools.enrich.require_config",
             return_value=self._phase1_config(vault),
         ):
             with patch(
@@ -455,7 +455,7 @@ tags: [jwt, auth]
     def test_gracefully_handles_analyzer_failure(self, vault):
         """If analyze_vault throws, cb_setup continues with the error report."""
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config",
+            "cyberbrain.mcp.tools.enrich.require_config",
             return_value=self._phase1_config(vault),
         ):
             with patch(
@@ -476,7 +476,7 @@ tags: [jwt, auth]
     def test_raises_tool_error_on_backend_error(self, vault):
         """If the backend raises an exception, ToolError is raised."""
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config",
+            "cyberbrain.mcp.tools.enrich.require_config",
             return_value=self._phase1_config(vault),
         ):
             with patch(
@@ -534,7 +534,7 @@ class TestCbSetupPhase2:
     def test_returns_preview_when_write_false(self, vault):
         """Phase 2 with write=False returns the content but does not write the file."""
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.mcp.tools.setup._run_analyzer",
@@ -560,7 +560,7 @@ class TestCbSetupPhase2:
     def test_dry_run_returns_content_without_writing(self, vault):
         """dry_run=True shows the content but never writes."""
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.mcp.tools.setup._run_analyzer",
@@ -587,7 +587,7 @@ class TestCbSetupPhase2:
     def test_writes_claude_md_when_write_true(self, vault):
         """Phase 2 with write=True creates CLAUDE.md at the vault root."""
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.mcp.tools.setup._run_analyzer",
@@ -622,7 +622,7 @@ class TestCbSetupPhase2:
             return '{"archetype": "developer", "questions": []}'
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.mcp.tools.setup._run_analyzer",
@@ -641,7 +641,7 @@ class TestCbSetupPhase2:
     def test_raises_tool_error_on_generation_failure(self, vault):
         """If the backend fails in Phase 2, ToolError is raised."""
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.mcp.tools.setup._run_analyzer",
@@ -685,7 +685,7 @@ class TestCbEnrichCandidateDetection:
         write_note(vault, "No Frontmatter.md", "# Just a heading\n\nBody text.")
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             result = cb_enrich(dry_run=True)
 
@@ -707,7 +707,7 @@ Body.
 """,
         )
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             result = cb_enrich(dry_run=True)
 
@@ -742,7 +742,7 @@ Body.
 """,
         )
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             result = cb_enrich(dry_run=True)
 
@@ -764,7 +764,7 @@ Body.
 """,
         )
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             result = cb_enrich(dry_run=True)
 
@@ -785,7 +785,7 @@ Body.
 """,
         )
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             result = cb_enrich(dry_run=True)
 
@@ -807,7 +807,7 @@ Body.
 """,
         )
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             result = cb_enrich(dry_run=True)
 
@@ -829,15 +829,15 @@ Body.
             file=sys.stderr,
         )
         print(
-            f"DEBUG: _enrich_mod._load_config = {_enrich_mod._load_config}",
+            f"DEBUG: _enrich_mod.require_config = {_enrich_mod.require_config}",
             file=sys.stderr,
         )
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ) as mock_load:
             print(f"DEBUG: mock_load = {mock_load}", file=sys.stderr)
             print(
-                f"DEBUG: _enrich_mod._load_config after patch = {_enrich_mod._load_config}",
+                f"DEBUG: _enrich_mod.require_config after patch = {_enrich_mod.require_config}",
                 file=sys.stderr,
             )
             result = cb_enrich(dry_run=True)
@@ -856,7 +856,7 @@ Body.
 """,
         )
         with patch.object(
-            _enrich_mod, "_load_config", return_value=self._config(vault)
+            _enrich_mod, "require_config", return_value=self._config(vault)
         ):
             result = cb_enrich(dry_run=True)
 
@@ -877,7 +877,7 @@ type: moc
 """,
         )
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             result = cb_enrich(dry_run=True)
 
@@ -889,7 +889,7 @@ type: moc
             write_note(vault, f"Note {i}.md", f"# Note {i}\n\nNo frontmatter.")
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             result = cb_enrich(dry_run=True, limit=2)
 
@@ -908,14 +908,14 @@ type: moc
         # new_note already has current mtime
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             result = cb_enrich(dry_run=True, since="2020-01-01")
 
         # Both old and new notes should be included (epoch is before 2020)
         # But since epoch (1970) is before 2020, let's use a future date to filter
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             result_filtered = cb_enrich(dry_run=True, since="2030-01-01")
 
@@ -953,21 +953,21 @@ Body.
 
     def test_dry_run_shows_dry_run_header(self, vault):
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             result = cb_enrich(dry_run=True)
         assert "[DRY RUN]" in result
 
     def test_dry_run_shows_valid_types(self, vault):
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             result = cb_enrich(dry_run=True)
         assert "Valid types:" in result
 
     def test_dry_run_no_files_written_message(self, vault):
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             result = cb_enrich(dry_run=True)
         assert "No files were modified" in result
@@ -989,7 +989,7 @@ Body.
 """,
         )
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config",
+            "cyberbrain.mcp.tools.enrich.require_config",
             return_value=_vault_config(str(v)),
         ):
             result = cb_enrich(dry_run=True)
@@ -1043,7 +1043,7 @@ class TestCbEnrichNormalMode:
         ]
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.extractors.backends.call_model",
@@ -1090,7 +1090,7 @@ class TestCbEnrichNormalMode:
         ]
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.extractors.backends.call_model",
@@ -1132,7 +1132,7 @@ class TestCbEnrichNormalMode:
         ]
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.extractors.backends.call_model",
@@ -1161,7 +1161,7 @@ class TestCbEnrichNormalMode:
         ]
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.extractors.backends.call_model",
@@ -1176,7 +1176,7 @@ class TestCbEnrichNormalMode:
         write_note(vault, "Unclassifiable.md", "# Note\n\nNo frontmatter.")
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.extractors.backends.call_model",
@@ -1205,7 +1205,7 @@ class TestCbEnrichNormalMode:
         ]
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.extractors.backends.call_model",
@@ -1217,11 +1217,12 @@ class TestCbEnrichNormalMode:
         assert "Enriched:     1" in result
 
     def test_raises_tool_error_when_vault_not_configured(self):
-        """ToolError when vault_path is missing from config."""
+        """ToolError when require_config detects missing vault."""
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value={"vault_path": ""}
+            "cyberbrain.mcp.tools.enrich.require_config",
+            side_effect=ToolError("Cyberbrain is not configured. Run /cyberbrain:config to set up your vault."),
         ):
-            with pytest.raises(ToolError, match="No vault configured"):
+            with pytest.raises(ToolError, match="not configured"):
                 cb_enrich()
 
     def test_raises_tool_error_for_invalid_since_date(self, tmp_path):
@@ -1229,7 +1230,7 @@ class TestCbEnrichNormalMode:
         v = tmp_path / "v"
         v.mkdir()
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config",
+            "cyberbrain.mcp.tools.enrich.require_config",
             return_value=_vault_config(str(v)),
         ):
             with pytest.raises(ToolError, match="Invalid date"):
@@ -1255,7 +1256,7 @@ class TestCbEnrichNormalMode:
         ]
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.extractors.backends.call_model",
@@ -1313,7 +1314,7 @@ class TestCbEnrichQualityGate:
         fail_verdict.confidence = 0.3
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.extractors.backends.call_model",
@@ -1361,7 +1362,7 @@ class TestCbEnrichQualityGate:
         pass_verdict.confidence = 0.9
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.extractors.backends.call_model",
@@ -1393,7 +1394,7 @@ class TestCbEnrichQualityGate:
         ]
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config",
+            "cyberbrain.mcp.tools.enrich.require_config",
             return_value=self._config(vault, gate_enabled=False),
         ):
             with patch(
@@ -1453,7 +1454,7 @@ class TestCbEnrichQualityGate:
             return fail_verdict
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.extractors.backends.call_model",
@@ -1494,7 +1495,7 @@ class TestCbEnrichQualityGate:
         fail_verdict.confidence = 0.3
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.extractors.backends.call_model",
@@ -1721,11 +1722,11 @@ class TestCbEnrichAdditionalCoverage:
         return _vault_config(str(vault))
 
     def test_raises_tool_error_when_vault_does_not_exist(self, tmp_path):
-        """Line 234: ToolError when vault_path is configured but dir does not exist."""
+        """ToolError when require_config detects vault dir does not exist."""
         nonexistent = str(tmp_path / "ghost-vault")
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config",
-            return_value=_vault_config(nonexistent),
+            "cyberbrain.mcp.tools.enrich.require_config",
+            side_effect=ToolError(f"vault_path '{nonexistent}' does not exist on disk. Run /cyberbrain:config to update your vault path."),
         ):
             with pytest.raises(ToolError, match="does not exist"):
                 cb_enrich()
@@ -1741,7 +1742,7 @@ class TestCbEnrichAdditionalCoverage:
         write_note(vault, "New.md", "# New\n\nNo frontmatter.")
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             # Filter to future date — excludes everything
             result = cb_enrich(dry_run=True, since="2099-01-01")
@@ -1753,7 +1754,7 @@ class TestCbEnrichAdditionalCoverage:
         write_note(vault, "Unparseable.md", "# Note\n\nNo frontmatter.")
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.extractors.backends.call_model",
@@ -1769,7 +1770,7 @@ class TestCbEnrichAdditionalCoverage:
         write_note(vault, "ErrorNote.md", "# Note\n\nNo frontmatter.")
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.extractors.backends.call_model",
@@ -1787,7 +1788,7 @@ class TestCbEnrichAdditionalCoverage:
             {"type": "reference", "summary": "Summary.", "tags": ["tag"], "skip": False}
         ]
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.extractors.backends.call_model",
@@ -1983,7 +1984,7 @@ class TestCbSetupAdditionalCoverage:
         mock_av = MagicMock()
         mock_av.analyze_vault.side_effect = ValueError("No notes found")
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch.dict(sys.modules, {"analyze_vault": mock_av}):
                 with patch(
@@ -2032,7 +2033,7 @@ class TestCbSetupAdditionalCoverage:
         mock_av = MagicMock()
         mock_av.analyze_vault.side_effect = ValueError("no yaml")
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch.dict(sys.modules, {"analyze_vault": mock_av}):
                 with patch(
@@ -2216,7 +2217,7 @@ class TestCbEnrichMoreEdgeCases:
             return original_read_text(self, **kwargs)
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch.object(Path, "read_text", patched_read_text):
                 result = cb_enrich(dry_run=True)
@@ -2228,7 +2229,7 @@ class TestCbEnrichMoreEdgeCases:
         write_note(vault, "NonList.md", "# Note\n\nNo frontmatter.")
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.extractors.backends.call_model",
@@ -2253,7 +2254,7 @@ Body.
 """,
         )
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             result = cb_enrich()
 
@@ -2343,7 +2344,7 @@ class TestCbSetupMoreCoverage:
         claude_md_content = "# Vault Overview\n\nContent.\n"
 
         with patch(
-            "cyberbrain.mcp.tools.enrich._load_config", return_value=self._config(vault)
+            "cyberbrain.mcp.tools.enrich.require_config", return_value=self._config(vault)
         ):
             with patch(
                 "cyberbrain.mcp.tools.setup._run_analyzer",

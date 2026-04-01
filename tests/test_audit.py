@@ -1085,16 +1085,14 @@ class TestCheck7RelationIntegrity:
 
 
 class TestCbAuditToolError:
-    def test_raises_tool_error_when_vault_path_empty(self):
-        """cb_audit raises ToolError when vault_path is not configured."""
-        with patch.object(audit_mod, "_load_config", return_value={"vault_path": ""}):
-            with pytest.raises(ToolError, match="vault_path is not configured"):
-                _cb_audit()()
-
-    def test_raises_tool_error_when_vault_path_absent(self):
-        """cb_audit raises ToolError when vault_path key is missing entirely."""
-        with patch.object(audit_mod, "_load_config", return_value={}):
-            with pytest.raises(ToolError, match="vault_path is not configured"):
+    def test_raises_tool_error_when_not_configured(self):
+        """cb_audit raises ToolError when require_config detects missing vault."""
+        with patch.object(
+            audit_mod,
+            "require_config",
+            side_effect=ToolError("Cyberbrain is not configured. Run /cyberbrain:config to set up your vault."),
+        ):
+            with pytest.raises(ToolError, match="not configured"):
                 _cb_audit()()
 
 
@@ -1116,7 +1114,7 @@ class TestCbAuditReportWrite:
         config = _config(str(vault), search_db_path=db_path)
 
         with (
-            patch.object(audit_mod, "_load_config", return_value=config),
+            patch.object(audit_mod, "require_config", return_value=config),
             patch(
                 "cyberbrain.mcp.tools.audit.audit_report_path", return_value=report_path
             ),

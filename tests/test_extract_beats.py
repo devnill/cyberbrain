@@ -107,18 +107,21 @@ class TestLoadGlobalConfig:
         assert Path(config["vault_path"]).is_absolute()
 
     def test_exits_cleanly_when_config_missing(self, temp_home, monkeypatch):
-        """Missing config file produces sys.exit(0), not an exception."""
+        """Missing config file raises ConfigError."""
+        from cyberbrain.extractors.config import ConfigError
+
         missing_path = temp_home / ".claude" / "cyberbrain.json"
         monkeypatch.setattr(_config_module, "GLOBAL_CONFIG_PATH", missing_path)
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(ConfigError):
             load_global_config()
-        assert exc_info.value.code == 0
 
     def test_exits_cleanly_when_required_fields_missing(
         self, temp_vault, temp_home, monkeypatch
     ):
-        """Config missing required fields produces sys.exit(0)."""
+        """Config missing required fields raises ConfigError."""
+        from cyberbrain.extractors.config import ConfigError
+
         config_dir = temp_home / ".claude"
         config_dir.mkdir(parents=True, exist_ok=True)
         # vault_path present but inbox missing
@@ -129,9 +132,8 @@ class TestLoadGlobalConfig:
             _config_module, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json"
         )
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(ConfigError):
             load_global_config()
-        assert exc_info.value.code == 0
 
     def test_vault_path_resolved_to_absolute(self, temp_vault, temp_home, monkeypatch):
         """vault_path is always returned as an absolute path string."""
@@ -150,7 +152,9 @@ class TestLoadGlobalConfig:
         assert os.path.isabs(config["vault_path"])
 
     def test_rejects_vault_path_equal_to_home_directory(self, temp_home, monkeypatch):
-        """vault_path set to the home directory produces sys.exit(0) with a clear error."""
+        """vault_path set to the home directory raises ConfigError with a clear message."""
+        from cyberbrain.extractors.config import ConfigError
+
         config_dir = temp_home / ".claude"
         config_dir.mkdir(parents=True, exist_ok=True)
         config_data = {
@@ -163,12 +167,13 @@ class TestLoadGlobalConfig:
         )
         # temp_home fixture already sets HOME env var so Path.home() returns temp_home
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(ConfigError):
             load_global_config()
-        assert exc_info.value.code == 0
 
     def test_rejects_vault_path_equal_to_filesystem_root(self, temp_home, monkeypatch):
-        """vault_path set to '/' produces sys.exit(0) with a clear error."""
+        """vault_path set to '/' raises ConfigError with a clear message."""
+        from cyberbrain.extractors.config import ConfigError
+
         config_dir = temp_home / ".claude"
         config_dir.mkdir(parents=True, exist_ok=True)
         config_data = {
@@ -180,9 +185,8 @@ class TestLoadGlobalConfig:
             _config_module, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json"
         )
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(ConfigError):
             load_global_config()
-        assert exc_info.value.code == 0
 
 
 class TestFindProjectConfig:
@@ -807,7 +811,9 @@ class TestVaultPathValidation:
     """Vault path validation rejects dangerous configurations."""
 
     def test_rejects_nonexistent_vault_path(self, temp_home, monkeypatch):
-        """A vault_path that does not exist on disk produces sys.exit(0)."""
+        """A vault_path that does not exist on disk raises ConfigError."""
+        from cyberbrain.extractors.config import ConfigError
+
         config_dir = temp_home / ".claude"
         config_dir.mkdir(parents=True, exist_ok=True)
         (config_dir / "cyberbrain.json").write_text(
@@ -822,9 +828,8 @@ class TestVaultPathValidation:
             _config_module, "GLOBAL_CONFIG_PATH", config_dir / "cyberbrain.json"
         )
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(ConfigError):
             load_global_config()
-        assert exc_info.value.code == 0
 
 
 # ===========================================================================
@@ -1524,10 +1529,11 @@ class TestConfigEdgeCases:
 
     def test_exits_when_vault_path_is_placeholder(self, temp_home, monkeypatch):
         """
-        The literal placeholder '/path/to/your/ObsidianVault' triggers an exit,
-        not an error, because it means the user hasn't configured the tool yet.
+        The literal placeholder '/path/to/your/ObsidianVault' raises ConfigError,
+        because it means the user hasn't configured the tool yet.
         """
         import cyberbrain.extractors.config as _cfg
+        from cyberbrain.extractors.config import ConfigError
 
         config_dir = temp_home / ".claude" / "cyberbrain"
         config_dir.mkdir(parents=True, exist_ok=True)
@@ -1538,17 +1544,18 @@ class TestConfigEdgeCases:
         )
         monkeypatch.setattr("cyberbrain.extractors.config.GLOBAL_CONFIG_PATH", cfg_file)
 
-        with pytest.raises(SystemExit):
+        with pytest.raises(ConfigError):
             _cfg.load_global_config()
 
     def test_exits_when_vault_path_is_home_directory(
         self, temp_home, temp_vault, monkeypatch
     ):
         """
-        Setting vault_path to the home directory is rejected — it's a
+        Setting vault_path to the home directory raises ConfigError — it's a
         misconfiguration that would make the whole filesystem look like a vault.
         """
         import cyberbrain.extractors.config as _cfg
+        from cyberbrain.extractors.config import ConfigError
 
         config_dir = temp_home / ".claude" / "cyberbrain"
         config_dir.mkdir(parents=True, exist_ok=True)
@@ -1560,7 +1567,7 @@ class TestConfigEdgeCases:
         monkeypatch.setattr("cyberbrain.extractors.config.GLOBAL_CONFIG_PATH", cfg_file)
         # Patch Path.home() so it returns temp_home — making vault_path == home
         with patch("pathlib.Path.home", return_value=temp_home.resolve()):
-            with pytest.raises(SystemExit):
+            with pytest.raises(ConfigError):
                 _cfg.load_global_config()
 
     def test_find_project_config_stops_at_home_directory(self, temp_home, monkeypatch):

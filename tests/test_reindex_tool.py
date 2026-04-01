@@ -69,22 +69,13 @@ def _cb_reindex():
 
 
 class TestCbReindexNoVault:
-    def test_raises_when_vault_path_empty(self):
-        with patch.object(reindex_mod, "_load_config", return_value={"vault_path": ""}):
-            with pytest.raises(ToolError, match="No vault configured"):
-                _cb_reindex()()
-
-    def test_raises_when_vault_path_missing_from_config(self):
-        with patch.object(reindex_mod, "_load_config", return_value={}):
-            with pytest.raises(ToolError, match="No vault configured"):
-                _cb_reindex()()
-
-    def test_raises_when_vault_path_does_not_exist(self, tmp_path):
-        nonexistent = str(tmp_path / "no_such_vault")
+    def test_raises_when_not_configured(self):
         with patch.object(
-            reindex_mod, "_load_config", return_value={"vault_path": nonexistent}
+            reindex_mod,
+            "require_config",
+            side_effect=ToolError("Cyberbrain is not configured. Run /cyberbrain:config to set up your vault."),
         ):
-            with pytest.raises(ToolError, match="No vault configured"):
+            with pytest.raises(ToolError, match="not configured"):
                 _cb_reindex()()
 
 
@@ -97,7 +88,7 @@ class TestCbReindexNoBackend:
     def test_returns_info_when_backend_is_none(self, tmp_path):
         config = {"vault_path": str(tmp_path)}
         with (
-            patch.object(reindex_mod, "_load_config", return_value=config),
+            patch.object(reindex_mod, "require_config", return_value=config),
             patch.object(reindex_mod, "_get_search_backend", return_value=None),
         ):
             result = _cb_reindex()()
@@ -115,7 +106,7 @@ class TestCbReindexRebuild:
         config = {"vault_path": str(tmp_path)}
         backend = MagicMock()
         with (
-            patch.object(reindex_mod, "_load_config", return_value=config),
+            patch.object(reindex_mod, "require_config", return_value=config),
             patch.object(reindex_mod, "_get_search_backend", return_value=backend),
             patch.object(reindex_mod.search_index, "build_full_index") as mock_build,
         ):
@@ -135,7 +126,7 @@ class TestCbReindexPrune:
         config = {"vault_path": str(tmp_path)}
         backend = MagicMock()
         with (
-            patch.object(reindex_mod, "_load_config", return_value=config),
+            patch.object(reindex_mod, "require_config", return_value=config),
             patch.object(reindex_mod, "_get_search_backend", return_value=backend),
             patch.object(reindex_mod, "_prune_index", return_value=5) as mock_prune,
         ):
@@ -148,7 +139,7 @@ class TestCbReindexPrune:
         config = {"vault_path": str(tmp_path)}
         backend = MagicMock()
         with (
-            patch.object(reindex_mod, "_load_config", return_value=config),
+            patch.object(reindex_mod, "require_config", return_value=config),
             patch.object(reindex_mod, "_get_search_backend", return_value=backend),
             patch.object(reindex_mod, "_prune_index", return_value=0),
         ):
@@ -166,7 +157,7 @@ class TestCbReindexNoOp:
         config = {"vault_path": str(tmp_path)}
         backend = MagicMock()
         with (
-            patch.object(reindex_mod, "_load_config", return_value=config),
+            patch.object(reindex_mod, "require_config", return_value=config),
             patch.object(reindex_mod, "_get_search_backend", return_value=backend),
         ):
             result = _cb_reindex()(prune=False, rebuild=False)

@@ -1097,6 +1097,127 @@ class TestCbStatus:
         # Should not show "due for review" when nothing is due
         assert "due for review" not in result
 
+
+# ===========================================================================
+# cb_configure — fresh install (no config.json) ConfigError handling
+# ===========================================================================
+
+
+class TestCbConfigureNoConfig:
+    """Verify cb_configure() with no args handles missing config gracefully."""
+
+    def test_no_args_config_error_returns_structured_response(self):
+        """cb_configure() with no args on a fresh install returns guidance, not an exception."""
+        from cyberbrain.extractors.config import ConfigError as _ConfigError
+
+        with patch.object(
+            manage_mod, "_load_config", side_effect=_ConfigError("no config")
+        ):
+            result = _cb_configure()()
+        assert isinstance(result, str)
+        assert "not configured" in result.lower()
+
+    def test_no_args_config_error_shows_vault_label(self):
+        """The not-configured response includes the Vault label showing '(not configured)'."""
+        from cyberbrain.extractors.config import ConfigError as _ConfigError
+
+        with patch.object(
+            manage_mod, "_load_config", side_effect=_ConfigError("no config")
+        ):
+            result = _cb_configure()()
+        assert "(not configured)" in result
+
+    def test_no_args_config_error_shows_setup_guidance(self):
+        """The not-configured response points to /cyberbrain:config."""
+        from cyberbrain.extractors.config import ConfigError as _ConfigError
+
+        with patch.object(
+            manage_mod, "_load_config", side_effect=_ConfigError("no config")
+        ):
+            result = _cb_configure()()
+        assert "/cyberbrain:config" in result
+
+    def test_no_args_config_error_shows_discover_option(self):
+        """The not-configured response includes the discover option."""
+        from cyberbrain.extractors.config import ConfigError as _ConfigError
+
+        with patch.object(
+            manage_mod, "_load_config", side_effect=_ConfigError("no config")
+        ):
+            result = _cb_configure()()
+        assert "discover=True" in result
+
+    def test_no_args_config_error_shows_header(self):
+        """The not-configured response includes the Configuration header."""
+        from cyberbrain.extractors.config import ConfigError as _ConfigError
+
+        with patch.object(
+            manage_mod, "_load_config", side_effect=_ConfigError("no config")
+        ):
+            result = _cb_configure()()
+        assert "Cyberbrain Configuration" in result
+
+
+# ===========================================================================
+# cb_status — fresh install (no config.json) ConfigError handling
+# ===========================================================================
+
+
+class TestCbStatusNoConfig:
+    """Verify cb_status() on a fresh install handles missing config gracefully."""
+
+    def test_config_error_returns_structured_response(self):
+        """cb_status() on a fresh install returns guidance, not an exception."""
+        from cyberbrain.extractors.config import ConfigError as _ConfigError
+
+        with patch.object(
+            manage_mod, "_load_config", side_effect=_ConfigError("no config")
+        ):
+            result = _cb_status()()
+        assert isinstance(result, str)
+        assert "not" in result.lower()
+
+    def test_config_error_shows_status_header(self):
+        """The not-configured response includes the Status header."""
+        from cyberbrain.extractors.config import ConfigError as _ConfigError
+
+        with patch.object(
+            manage_mod, "_load_config", side_effect=_ConfigError("no config")
+        ):
+            result = _cb_status()()
+        assert "Cyberbrain Status" in result
+
+    def test_config_error_shows_setup_guidance(self):
+        """The not-configured response points to /cyberbrain:config."""
+        from cyberbrain.extractors.config import ConfigError as _ConfigError
+
+        with patch.object(
+            manage_mod, "_load_config", side_effect=_ConfigError("no config")
+        ):
+            result = _cb_status()()
+        assert "/cyberbrain:config" in result
+
+    def test_config_error_shows_discover_option(self):
+        """The not-configured response includes the discover option."""
+        from cyberbrain.extractors.config import ConfigError as _ConfigError
+
+        with patch.object(
+            manage_mod, "_load_config", side_effect=_ConfigError("no config")
+        ):
+            result = _cb_status()()
+        assert "discover=True" in result
+
+    def test_config_error_does_not_raise(self):
+        """cb_status() must not propagate ConfigError to the caller."""
+        from cyberbrain.extractors.config import ConfigError as _ConfigError
+
+        with patch.object(
+            manage_mod, "_load_config", side_effect=_ConfigError("no config")
+        ):
+            # Should complete without raising
+            result = _cb_status()()
+        assert result  # non-empty string
+
     def test_oserror_reading_runs_log(self, tmp_path):
         """cb_status should not crash if reading the runs log raises OSError."""
         cfg = {**BASE_CONFIG, "vault_path": ""}
@@ -1637,3 +1758,302 @@ class TestCbConfigureSearchBackendInvalidation:
         # Call directly on shared_mod to avoid stale references from test_mcp_server's mock cycle
         shared_mod._invalidate_search_backend()
         assert shared_mod._search_backend is None
+
+
+# ===========================================================================
+# cb_configure — create_vault
+# ===========================================================================
+
+
+class TestCbConfigureCreateVault:
+    """Tests for the create_vault / template / force parameters."""
+
+    def _setup_home(self, tmp_path, monkeypatch):
+        """Helper: create a temporary home dir and redirect Path.home()."""
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+        cfg_dir = home / ".claude" / "cyberbrain"
+        cfg_dir.mkdir(parents=True)
+        (cfg_dir / "config.json").write_text("{}", encoding="utf-8")
+        return home, cfg_dir
+
+    # --- PARA template ---
+
+    def test_para_template_creates_expected_directories(self, tmp_path, monkeypatch):
+        home, cfg_dir = self._setup_home(tmp_path, monkeypatch)
+        vault = home / "MyVault"
+
+        result = _cb_configure()(create_vault=str(vault), template="para")
+
+        assert vault.exists()
+        assert (vault / "Projects").is_dir()
+        assert (vault / "Areas").is_dir()
+        assert (vault / "Resources").is_dir()
+        assert (vault / "Archives").is_dir()
+        assert (vault / "AI" / "Claude-Sessions").is_dir()
+        assert (vault / "AI" / "Working Memory").is_dir()
+
+    def test_para_template_is_the_default(self, tmp_path, monkeypatch):
+        home, cfg_dir = self._setup_home(tmp_path, monkeypatch)
+        vault = home / "DefaultVault"
+
+        result = _cb_configure()(create_vault=str(vault))
+
+        assert (vault / "Projects").is_dir()
+        assert (vault / "Areas").is_dir()
+        assert (vault / "Resources").is_dir()
+        assert (vault / "Archives").is_dir()
+        assert (vault / "AI" / "Claude-Sessions").is_dir()
+        assert (vault / "AI" / "Working Memory").is_dir()
+
+    # --- Flat template ---
+
+    def test_flat_template_creates_expected_directories(self, tmp_path, monkeypatch):
+        home, cfg_dir = self._setup_home(tmp_path, monkeypatch)
+        vault = home / "FlatVault"
+
+        result = _cb_configure()(create_vault=str(vault), template="flat")
+
+        assert vault.exists()
+        assert (vault / "AI" / "Claude-Sessions").is_dir()
+        assert (vault / "AI" / "Working Memory").is_dir()
+        # Should NOT create PARA-specific folders
+        assert not (vault / "Projects").exists()
+        assert not (vault / "Areas").exists()
+        assert not (vault / "Resources").exists()
+        assert not (vault / "Archives").exists()
+
+    # --- Developer template ---
+
+    def test_developer_template_creates_expected_directories(
+        self, tmp_path, monkeypatch
+    ):
+        home, cfg_dir = self._setup_home(tmp_path, monkeypatch)
+        vault = home / "DevVault"
+
+        result = _cb_configure()(create_vault=str(vault), template="developer")
+
+        assert vault.exists()
+        assert (vault / "Projects").is_dir()
+        assert (vault / "AI" / "Claude-Sessions").is_dir()
+        assert (vault / "AI" / "Working Memory").is_dir()
+        # Should NOT create Areas/Resources/Archives
+        assert not (vault / "Areas").exists()
+        assert not (vault / "Resources").exists()
+        assert not (vault / "Archives").exists()
+
+    # --- Root directory creation ---
+
+    def test_creates_vault_root_if_not_exists(self, tmp_path, monkeypatch):
+        home, cfg_dir = self._setup_home(tmp_path, monkeypatch)
+        vault = home / "new" / "nested" / "vault"
+
+        _cb_configure()(create_vault=str(vault), template="flat")
+
+        assert vault.is_dir()
+
+    # --- Config writing ---
+
+    def test_writes_config_with_vault_path_and_inbox(self, tmp_path, monkeypatch):
+        home, cfg_dir = self._setup_home(tmp_path, monkeypatch)
+        vault = home / "ConfigVault"
+
+        _cb_configure()(create_vault=str(vault), template="flat")
+
+        saved = json.loads((cfg_dir / "config.json").read_text())
+        assert saved["vault_path"] == str(vault.resolve())
+        assert saved["inbox"] == "AI/Claude-Sessions"
+        assert saved["working_memory_folder"] == "AI/Working Memory"
+
+    def test_writes_config_with_default_backend_and_model(self, tmp_path, monkeypatch):
+        home, cfg_dir = self._setup_home(tmp_path, monkeypatch)
+        vault = home / "BackendVault"
+
+        _cb_configure()(create_vault=str(vault), template="flat")
+
+        saved = json.loads((cfg_dir / "config.json").read_text())
+        assert saved["backend"] == "claude-code"
+        assert saved["model"] == "claude-haiku-4-5"
+
+    def test_does_not_overwrite_existing_backend_in_config(self, tmp_path, monkeypatch):
+        home, cfg_dir = self._setup_home(tmp_path, monkeypatch)
+        # Pre-populate config with a non-default backend
+        (cfg_dir / "config.json").write_text(
+            json.dumps({"backend": "ollama", "model": "llama3"}), encoding="utf-8"
+        )
+        vault = home / "ExistingBackendVault"
+
+        _cb_configure()(create_vault=str(vault), template="flat")
+
+        saved = json.loads((cfg_dir / "config.json").read_text())
+        # setdefault should preserve the existing backend and model
+        assert saved["backend"] == "ollama"
+        assert saved["model"] == "llama3"
+
+    # --- Return value ---
+
+    def test_return_value_mentions_created_vault_path(self, tmp_path, monkeypatch):
+        home, cfg_dir = self._setup_home(tmp_path, monkeypatch)
+        vault = home / "ReturnVault"
+
+        result = _cb_configure()(create_vault=str(vault), template="flat")
+
+        assert str(vault) in result or "ReturnVault" in result
+
+    def test_return_value_mentions_template_name(self, tmp_path, monkeypatch):
+        home, cfg_dir = self._setup_home(tmp_path, monkeypatch)
+        vault = home / "TemplateVault"
+
+        result = _cb_configure()(create_vault=str(vault), template="developer")
+
+        assert "developer" in result.lower()
+
+    def test_return_value_mentions_config_path(self, tmp_path, monkeypatch):
+        home, cfg_dir = self._setup_home(tmp_path, monkeypatch)
+        vault = home / "CfgPathVault"
+
+        result = _cb_configure()(create_vault=str(vault), template="flat")
+
+        assert "config" in result.lower()
+
+    def test_return_value_includes_created_directories(self, tmp_path, monkeypatch):
+        home, cfg_dir = self._setup_home(tmp_path, monkeypatch)
+        vault = home / "DirListVault"
+
+        result = _cb_configure()(create_vault=str(vault), template="flat")
+
+        assert "AI/Claude-Sessions" in result or "Claude-Sessions" in result
+
+    # --- Overwrite protection ---
+
+    def test_refuses_to_overwrite_non_empty_directory(self, tmp_path, monkeypatch):
+        home, cfg_dir = self._setup_home(tmp_path, monkeypatch)
+        vault = home / "ExistingVault"
+        vault.mkdir()
+        (vault / "some-file.md").write_text("existing content", encoding="utf-8")
+
+        with pytest.raises(ToolError, match="non-empty"):
+            _cb_configure()(create_vault=str(vault), template="flat")
+
+    def test_force_allows_overwrite_of_non_empty_directory(self, tmp_path, monkeypatch):
+        home, cfg_dir = self._setup_home(tmp_path, monkeypatch)
+        vault = home / "ForceVault"
+        vault.mkdir()
+        (vault / "existing.md").write_text("content", encoding="utf-8")
+
+        # Should not raise
+        result = _cb_configure()(create_vault=str(vault), template="flat", force=True)
+
+        assert (vault / "AI" / "Claude-Sessions").is_dir()
+        assert "Claude-Sessions" in result or "flat" in result
+
+    def test_empty_directory_does_not_trigger_overwrite_guard(
+        self, tmp_path, monkeypatch
+    ):
+        home, cfg_dir = self._setup_home(tmp_path, monkeypatch)
+        vault = home / "EmptyVault"
+        vault.mkdir()  # empty directory
+
+        # Should not raise even without force=True
+        result = _cb_configure()(create_vault=str(vault), template="flat")
+
+        assert (vault / "AI" / "Claude-Sessions").is_dir()
+
+    # --- Home directory constraint ---
+
+    def test_path_outside_home_raises(self, tmp_path, monkeypatch):
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+        with pytest.raises(ToolError, match="within your home directory"):
+            _cb_configure()(create_vault="/etc/my_vault", template="flat")
+
+    # --- Invalid template ---
+
+    def test_invalid_template_raises(self, tmp_path, monkeypatch):
+        home, cfg_dir = self._setup_home(tmp_path, monkeypatch)
+        vault = home / "BadTemplateVault"
+
+        with pytest.raises(ToolError, match="Invalid template"):
+            _cb_configure()(create_vault=str(vault), template="invalid_template")
+
+    # --- No .obsidian directory created ---
+
+    def test_no_obsidian_dir_created(self, tmp_path, monkeypatch):
+        home, cfg_dir = self._setup_home(tmp_path, monkeypatch)
+        vault = home / "ObsidianCheckVault"
+
+        _cb_configure()(create_vault=str(vault), template="para")
+
+        assert not (vault / ".obsidian").exists()
+
+    # --- Folder names are human-readable ---
+
+    def test_folder_names_are_human_readable(self, tmp_path, monkeypatch):
+        """Verifies folder names match expected human-readable values."""
+        home, cfg_dir = self._setup_home(tmp_path, monkeypatch)
+        vault = home / "ReadableVault"
+
+        _cb_configure()(create_vault=str(vault), template="para")
+
+        for name in ["Projects", "Areas", "Resources", "Archives"]:
+            assert (vault / name).is_dir(), f"Expected folder '{name}' to exist"
+        assert (vault / "AI" / "Claude-Sessions").is_dir()
+        assert (vault / "AI" / "Working Memory").is_dir()
+
+
+# ===========================================================================
+# cb_configure — prefs path ConfigError handling (fresh install)
+# ===========================================================================
+
+
+class TestCbConfigurePrefsConfigError:
+    """Verify prefs operations return actionable guidance when config is missing."""
+
+    def test_show_prefs_config_error_returns_actionable_message(self):
+        from cyberbrain.extractors.config import ConfigError as _CE
+
+        with patch.object(manage_mod, "_load_config", side_effect=_CE("no config")):
+            result = _cb_configure()(show_prefs=True)
+        assert "not configured" in result.lower()
+        assert "cb_configure" in result
+
+    def test_set_prefs_config_error_returns_actionable_message(self):
+        from cyberbrain.extractors.config import ConfigError as _CE
+
+        with patch.object(manage_mod, "_load_config", side_effect=_CE("no config")):
+            result = _cb_configure()(set_prefs="- My preference")
+        assert "not configured" in result.lower()
+        assert "cb_configure" in result
+
+    def test_reset_prefs_config_error_returns_actionable_message(self):
+        from cyberbrain.extractors.config import ConfigError as _CE
+
+        with patch.object(manage_mod, "_load_config", side_effect=_CE("no config")):
+            result = _cb_configure()(reset_prefs=True)
+        assert "not configured" in result.lower()
+        assert "cb_configure" in result
+
+    def test_show_prefs_config_error_does_not_raise(self):
+        from cyberbrain.extractors.config import ConfigError as _CE
+
+        with patch.object(manage_mod, "_load_config", side_effect=_CE("no config")):
+            # Must return a string, not raise
+            result = _cb_configure()(show_prefs=True)
+        assert isinstance(result, str)
+
+    def test_set_prefs_config_error_does_not_raise(self):
+        from cyberbrain.extractors.config import ConfigError as _CE
+
+        with patch.object(manage_mod, "_load_config", side_effect=_CE("no config")):
+            result = _cb_configure()(set_prefs="- Pref")
+        assert isinstance(result, str)
+
+    def test_reset_prefs_config_error_does_not_raise(self):
+        from cyberbrain.extractors.config import ConfigError as _CE
+
+        with patch.object(manage_mod, "_load_config", side_effect=_CE("no config")):
+            result = _cb_configure()(reset_prefs=True)
+        assert isinstance(result, str)

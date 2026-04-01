@@ -1,0 +1,34 @@
+id: code-quality
+type: review_output
+reviewer: code-reviewer
+verdict: Fail
+findings: |-
+  ## Significant Findings
+
+  ### S1: CyberbrainConfig.working_memory_ttl typed as int, stored and consumed as dict
+  - File: src/cyberbrain/extractors/config.py:50
+  - Issue: TypedDict declares working_memory_ttl: int but runtime uses it as dict. manage.py:509-511 writes it as dict, vault.py:376 reads with .get() pattern.
+  - Impact: Type annotation misleads; old configs with int value would crash in vault.py.
+  - Pre-existing issue, not introduced by this cycle.
+
+  ### S2: QUICKSTART.md directs first-time users to manually edit config files
+  - File: QUICKSTART.md:18-28
+  - Issue: Still says 'edit ~/.claude/cyberbrain/config.json' instead of directing to /cyberbrain:config skill.
+  - Impact: Violates GP-01. Users bypass guided setup.
+
+  ## Minor Findings
+
+  ### M1: Stale imports in reindex.py
+  - File: src/cyberbrain/mcp/tools/reindex.py:3,7
+  - Issue: Path and ToolError imported but unused after redundant vault checks removed. Ruff F401.
+
+  ### M2: __import__('re') inline call inconsistency
+  - File: src/cyberbrain/mcp/tools/manage.py:100
+  - Issue: _read_prefs_section uses __import__('re') while _write_prefs_section uses import re.
+
+  ### M3: SKILL.md error handler still references cb_setup(phase=N)
+  - File: skills/config/SKILL.md:141
+  - Issue: Error handling section references non-existent phase parameter.
+cycle: 1
+content_hash: 39c538fbd5066850f0444c820cfe94c84fd1f68b2e046f164a754ccae91be51f
+token_count: 357

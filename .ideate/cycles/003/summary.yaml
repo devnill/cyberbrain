@@ -1,0 +1,37 @@
+id: summary
+type: cycle_summary
+cycle: 3
+content: |-
+  # Review Summary — Cycle 3
+
+  ## Overview
+  The cycle 2 significant findings are resolved. All ConfigError entry points in manage.py and resources.py are guarded. SKILL.md Phase 4 ordering is correct. Three new significant findings surfaced: the create_vault response text still suggests the old ordering, json.JSONDecodeError escapes _load_config call sites, and hooks don't augment PATH for Homebrew uv.
+
+  ## Phase Convergence
+  Phase: PH-001
+  Cycles completed: 3 / 5 (threshold)
+  Convergence status: Converging (different findings each cycle, progressively more edge-case)
+  Trend: Critical 2→0→0→0. Significant 5→3→3→3. Significant count stalled at 3 but findings are distinct each cycle — new edge cases, not recurring issues.
+
+  ## Significant Findings
+  - [spec-reviewer] create_vault response in manage.py (~line 400) suggests reset_prefs before cb_setup — contradicts SKILL.md Phase 4 ordering (cb_setup first, reset_prefs second). Tool guidance could lead to preference loss if followed outside the skill. — relates to: WI-010, GP-01
+  - [gap-analyst] json.JSONDecodeError from malformed config.json escapes _load_config call sites in manage.py (no-args, prefs, cb_status) and resources.py (_get_guide). Only ConfigError is caught; JSONDecodeError is not a subclass. — relates to: GP-01
+  - [gap-analyst] Hooks check command -v uv but don't augment PATH with /opt/homebrew/bin first. On macOS with Homebrew, uv may not be in hook PATH even though it's installed. mcp/start.sh already solves this. — relates to: WI-007, GP-01
+
+  ## Minor Findings
+  - [code-reviewer] working_memory_ttl typed as int, used as dict (pre-existing) — carry-forward
+  - [code-reviewer] _write_prefs_section may produce triple newline (pre-existing) — carry-forward
+  - [spec-reviewer] cb_configure vault-missing branch has warning but no inline remediation hint — carry-forward
+  - [gap-analyst] Backend/model not configurable through skill (documented limitation) — carry-forward
+
+  ## Findings Requiring User Input
+  None — all findings can be resolved from existing context.
+
+  ## Proposed Refinement Plan
+  3 significant findings remain. All are surgical:
+  1. Fix create_vault next-steps ordering in manage.py (~line 400) to match SKILL.md
+  2. Catch (ConfigError, json.JSONDecodeError) in manage.py and resources.py _load_config calls
+  3. Add PATH augmentation to hooks before uv check (copy pattern from start.sh)
+  Estimated: 1-2 work items, small complexity.
+content_hash: 9b9f38d58ca70ec682e7862a5fcfec19e443bcbd0c56c8759becea45e8619444
+token_count: 628

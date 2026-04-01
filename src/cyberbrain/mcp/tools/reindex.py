@@ -1,14 +1,16 @@
 """cb_reindex tool — maintain the cyberbrain search index."""
 
-from pathlib import Path
 from typing import Annotated
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
 from pydantic import Field
 
 from cyberbrain.extractors import search_index
-from cyberbrain.mcp.shared import _get_search_backend, _load_config, _prune_index
+from cyberbrain.mcp.shared import (
+    _get_search_backend,
+    _prune_index,
+    require_config,
+)
 
 
 def register(mcp: FastMCP) -> None:
@@ -40,12 +42,8 @@ def register(mcp: FastMCP) -> None:
         cb_restructure, cb_review, and cb_enrich call prune automatically after writes.
         Call this manually if cb_status shows a high stale path count.
         """
-        config = _load_config()
+        config = require_config()
         vault_path = config.get("vault_path", "")
-        if not vault_path or not Path(vault_path).exists():
-            raise ToolError(
-                "No vault configured. Run cb_configure(vault_path=...) first."
-            )
 
         backend = _get_search_backend(config)
         if backend is None:

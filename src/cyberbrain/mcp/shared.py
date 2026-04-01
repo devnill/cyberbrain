@@ -99,6 +99,83 @@ def _load_config(cwd: str = "") -> dict:
     return cast(dict, _resolve_config(cwd or str(Path.home())))
 
 
+def require_config(cwd: str = "") -> dict:
+    """Load config or raise ToolError with an actionable message if not configured.
+
+    Checks performed (in order):
+    1. Config file exists at ~/.claude/cyberbrain/config.json
+    2. vault_path is set and is not a placeholder
+    3. vault_path directory exists on disk
+
+    Raises ToolError with a specific message for each failure mode.
+    Returns the merged config dict (global + project) on success.
+    """
+    from fastmcp.exceptions import ToolError
+
+    import cyberbrain.extractors.config as _config_mod
+
+    cfg_path = _config_mod.GLOBAL_CONFIG_PATH
+
+    # Check 1: config file exists
+    if not cfg_path.exists():
+        raise ToolError(
+            "Cyberbrain is not configured. Run /cyberbrain:config to set up your vault."
+        )
+
+    # Load raw JSON (no sys.exit)
+    import json as _json
+
+    try:
+        with open(cfg_path) as _f:
+            raw = _json.load(_f)
+    except (OSError, _json.JSONDecodeError) as _e:
+        raise ToolError(
+            f"Cyberbrain config is unreadable ({_e}). "
+            "Run /cyberbrain:config to reconfigure your vault."
+        )
+
+    # Check 2: vault_path is set and not a placeholder
+    vault_path_raw = raw.get("vault_path", "")
+    _PLACEHOLDER = "/path/to/your/ObsidianVault"
+    if not vault_path_raw:
+        raise ToolError(
+            "Cyberbrain is not configured. Run /cyberbrain:config to set up your vault."
+        )
+    if vault_path_raw == _PLACEHOLDER:
+        raise ToolError(
+            "vault_path is still the placeholder value. "
+            "Run /cyberbrain:config to set your real vault path."
+        )
+
+    # Check 3: vault_path directory exists
+    vault_resolved = Path(vault_path_raw).expanduser().resolve()
+    if not vault_resolved.exists():
+        raise ToolError(
+            f"vault_path '{vault_path_raw}' does not exist on disk. "
+            "Run /cyberbrain:config to update your vault path."
+        )
+
+    # Check 4: vault_path must not be home or root
+    _home = Path.home().resolve()
+    _root = Path("/").resolve()
+    if vault_resolved == _home or vault_resolved == _root:
+        raise ToolError(
+            f"vault_path '{vault_path_raw}' must not be your home directory or filesystem root. "
+            "Run /cyberbrain:config to set a valid vault path."
+        )
+
+    # Delegate final merge (global + project) to the standard loader
+    from typing import cast
+
+    try:
+        return cast(dict, _resolve_config(cwd or str(Path.home())))
+    except Exception as _ce:  # intentional: catch ConfigError or any config-loading failure
+        raise ToolError(
+            f"Cyberbrain config is invalid: {_ce}. "
+            "Run /cyberbrain:config to reconfigure your vault."
+        ) from _ce
+
+
 def _relpath(path: Path, vault_path: str) -> str:
     return os.path.relpath(str(path), vault_path)
 

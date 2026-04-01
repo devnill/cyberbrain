@@ -387,20 +387,18 @@ def _base_config(tmp_path):
 
 
 class TestCbReviewErrors:
-    def test_raises_when_no_vault(self):
-        with patch.object(review_mod, "_load_config", return_value={"vault_path": ""}):
-            with pytest.raises(ToolError, match="No vault configured"):
-                _cb_review()()
-
-    def test_raises_when_vault_not_exist(self, tmp_path):
-        config = {"vault_path": str(tmp_path / "missing")}
-        with patch.object(review_mod, "_load_config", return_value=config):
-            with pytest.raises(ToolError, match="does not exist"):
+    def test_raises_when_not_configured(self):
+        with patch.object(
+            review_mod,
+            "require_config",
+            side_effect=ToolError("Cyberbrain is not configured. Run /cyberbrain:config to set up your vault."),
+        ):
+            with pytest.raises(ToolError, match="not configured"):
                 _cb_review()()
 
     def test_returns_info_when_wm_folder_missing(self, tmp_path):
         config = _base_config(tmp_path)
-        with patch.object(review_mod, "_load_config", return_value=config):
+        with patch.object(review_mod, "require_config", return_value=config):
             result = _cb_review()()
         assert "not found" in result
 
@@ -408,7 +406,7 @@ class TestCbReviewErrors:
         config = _base_config(tmp_path)
         wm = tmp_path / "AI" / "WM"
         wm.mkdir(parents=True)
-        with patch.object(review_mod, "_load_config", return_value=config):
+        with patch.object(review_mod, "require_config", return_value=config):
             result = _cb_review()()
         assert "No working memory notes" in result
 
@@ -421,7 +419,7 @@ class TestCbReviewDryRun:
         yesterday = (date.today() - timedelta(days=1)).isoformat()
         _make_wm_note(wm, "My Task", yesterday)
 
-        with patch.object(review_mod, "_load_config", return_value=config):
+        with patch.object(review_mod, "require_config", return_value=config):
             result = _cb_review()(dry_run=True)
         assert "DRY RUN" in result
         assert "My Task" in result
@@ -434,7 +432,7 @@ class TestCbReviewDryRun:
         for i in range(5):
             _make_wm_note(wm, f"Task{i}", yesterday)
 
-        with patch.object(review_mod, "_load_config", return_value=config):
+        with patch.object(review_mod, "require_config", return_value=config):
             result = _cb_review()(dry_run=True, limit=2)
         assert result.count("→") <= 2
 
@@ -445,7 +443,7 @@ class TestCbReviewDryRun:
         yesterday = (date.today() - timedelta(days=1)).isoformat()
         _make_wm_note(custom, "Custom Task", yesterday)
 
-        with patch.object(review_mod, "_load_config", return_value=config):
+        with patch.object(review_mod, "require_config", return_value=config):
             result = _cb_review()(folder="My/Custom", dry_run=True)
         assert "Custom Task" in result
 
@@ -464,7 +462,7 @@ class TestCbReviewActions:
         decisions = [{"action": "delete", "indices": [0], "rationale": "stale"}]
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch.object(review_mod, "_index_paths"),
@@ -484,7 +482,7 @@ class TestCbReviewActions:
         decisions = [{"action": "extend", "indices": [0], "rationale": "still active"}]
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch.object(review_mod, "_index_paths"),
@@ -518,7 +516,7 @@ class TestCbReviewActions:
         ]
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch.object(review_mod, "_index_paths"),
@@ -550,7 +548,7 @@ class TestCbReviewActions:
         ]
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch.object(review_mod, "_index_paths"),
@@ -586,7 +584,7 @@ class TestCbReviewActions:
         ]
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch.object(review_mod, "_index_paths"),
@@ -630,7 +628,7 @@ class TestCbReviewActions:
         ]
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch.object(review_mod, "_index_paths"),
@@ -662,7 +660,7 @@ class TestCbReviewActions:
         ]
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch.object(review_mod, "_index_paths"),
@@ -688,7 +686,7 @@ class TestCbReviewActions:
         ]
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch.object(review_mod, "_index_paths"),
@@ -707,7 +705,7 @@ class TestCbReviewActions:
         decisions = [{"action": "teleport", "indices": [0], "rationale": "??"}]
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch.object(review_mod, "_index_paths"),
@@ -726,7 +724,7 @@ class TestCbReviewActions:
         decisions = [{"action": "delete", "indices": []}]
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch.object(review_mod, "_index_paths"),
@@ -748,7 +746,7 @@ class TestCbReviewActions:
             pass
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch(
@@ -764,7 +762,7 @@ class TestCbReviewActions:
         config, _ = self._setup(tmp_path)
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch("cyberbrain.extractors.backends.call_model", return_value="not json"),
@@ -777,7 +775,7 @@ class TestCbReviewActions:
         config, _ = self._setup(tmp_path)
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch(
@@ -794,7 +792,7 @@ class TestCbReviewActions:
         decisions = [{"action": "delete", "indices": [0], "rationale": "old"}]
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch.object(review_mod, "_index_paths"),
@@ -832,7 +830,7 @@ class TestCbReviewQualityGate:
         fail_verdict.confidence = 0.3
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch.object(review_mod, "_index_paths"),
@@ -865,7 +863,7 @@ class TestCbReviewQualityGate:
         pass_verdict.confidence = 0.9
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch.object(review_mod, "_index_paths"),
@@ -907,7 +905,7 @@ class TestCbReviewQualityGate:
         fail_verdict.confidence = 0.4
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch.object(review_mod, "_index_paths"),
@@ -936,7 +934,7 @@ class TestCbReviewQualityGate:
         decisions = [{"action": "delete", "indices": [0], "rationale": "stale"}]
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch.object(review_mod, "_index_paths"),
@@ -988,7 +986,7 @@ class TestCbReviewQualityGate:
             return pass_verdict
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch.object(review_mod, "_index_paths"),
@@ -1020,7 +1018,7 @@ class TestCbReviewQualityGate:
         fail_verdict.confidence = 0.45
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch.object(review_mod, "_index_paths"),
@@ -1051,7 +1049,7 @@ class TestCbReviewQualityGate:
         fail_verdict.confidence = 0.3
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(review_mod, "_load_prompt", return_value="prompt"),
             patch.object(review_mod, "_index_paths"),
@@ -1080,7 +1078,7 @@ class TestCbReviewLoadPromptError:
         _make_wm_note(wm, "Task", yesterday)
 
         with (
-            patch.object(review_mod, "_load_config", return_value=config),
+            patch.object(review_mod, "require_config", return_value=config),
             patch.object(review_mod, "_get_search_backend", return_value=None),
             patch.object(
                 review_mod, "_load_prompt", side_effect=ToolError("no prompt")

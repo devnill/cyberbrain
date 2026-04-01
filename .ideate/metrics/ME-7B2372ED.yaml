@@ -1,0 +1,26 @@
+id: ME-7B2372ED
+type: metrics_event
+event_name: unknown
+timestamp: 2026-03-31T12:15:00Z
+skill: execute
+phase: "7"
+cycle: null
+agent_type: code-reviewer
+model: sonnet
+work_item: WI-004
+wall_clock_ms: 140371
+turns_used: 38
+context_files_read: []
+input_tokens: null
+output_tokens: null
+cache_read_tokens: null
+cache_write_tokens: null
+mcp_tools_called: []
+outcome: rework
+finding_count: 3
+finding_severities:
+  critical: 0
+  significant: 0
+  minor: 3
+first_pass_accepted: false
+rework_count: null

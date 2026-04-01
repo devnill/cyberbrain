@@ -152,7 +152,7 @@ class TestCbExtractPathRestriction:
 
         mod = _get_extract_module()
         cb_extract = _register_extract()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with pytest.raises(ToolError, match="must be within"):
                 cb_extract(transcript_path=str(bad_file))
 
@@ -182,7 +182,7 @@ class TestCbExtractPathRestriction:
             "beat_records": [],
             "run_errors": [],
         }
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(
                 mod, "parse_jsonl_transcript", return_value="User: hello"
             ):
@@ -226,7 +226,7 @@ class TestCbExtractPlainText:
             "run_errors": [],
         }
         mock_run = MagicMock(return_value=_fake_result)
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "run_extraction", mock_run):
                 result = cb_extract(transcript_path=str(transcript))
 
@@ -253,7 +253,7 @@ class TestCbExtractPlainText:
 
         mod = _get_extract_module()
         cb_extract = _register_extract()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch(
                 "pathlib.Path.read_text", side_effect=OSError("permission denied")
             ):
@@ -292,7 +292,7 @@ class TestCbExtractBackendError:
         BackendError = _get_backend_error()
         mod = _get_extract_module()
         cb_extract = _register_extract()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(
                 mod, "parse_jsonl_transcript", return_value="User: hello"
             ):
@@ -346,7 +346,7 @@ class TestCbExtractAutofile:
 
         mod = _get_extract_module()
         cb_extract = _register_extract()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(
                 mod, "parse_jsonl_transcript", return_value="User: hello"
             ):
@@ -383,7 +383,7 @@ class TestCbExtractAutofile:
 
         mod = _get_extract_module()
         cb_extract = _register_extract()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(
                 mod, "parse_jsonl_transcript", return_value="User: hello"
             ):
@@ -436,7 +436,7 @@ class TestCbExtractDailyJournal:
         cb_extract = _register_extract()
         mock_run = MagicMock(return_value=_fake_result)
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(
                 mod, "parse_jsonl_transcript", return_value="User: hello"
             ):
@@ -481,7 +481,7 @@ class TestCbExtractDailyJournal:
 
         mod = _get_extract_module()
         cb_extract = _register_extract()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(
                 mod, "parse_jsonl_transcript", return_value="User: hello"
             ):
@@ -514,7 +514,7 @@ class TestCbFileAutofile:
         mock_autofile = MagicMock(return_value=fake_path)
         mock_write = MagicMock(return_value=None)
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT]):
                 with patch.object(mod, "autofile_beat", mock_autofile):
                     with patch.object(mod, "write_beat", mock_write):
@@ -541,7 +541,7 @@ class TestCbFileAutofile:
         mock_autofile = MagicMock(return_value=None)
         mock_write = MagicMock(return_value=fake_path)
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT]):
                 with patch.object(mod, "autofile_beat", mock_autofile):
                     with patch.object(mod, "write_beat", mock_write):
@@ -569,7 +569,7 @@ class TestCbFileAutofile:
         mock_autofile = MagicMock(return_value=None)
         mock_write = MagicMock(return_value=fake_path)
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT]):
                 with patch.object(mod, "autofile_beat", mock_autofile):
                     with patch.object(mod, "write_beat", mock_write):
@@ -604,7 +604,7 @@ class TestCbFileDailyJournal:
         mock_journal = MagicMock()
         mock_write = MagicMock(return_value=fake_path)
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT]):
                 with patch.object(mod, "write_beat", mock_write):
                     with patch.object(mod, "write_journal_entry", mock_journal):
@@ -623,7 +623,7 @@ class TestCbFileDailyJournal:
         mock_journal = MagicMock()
         mock_write = MagicMock(return_value=None)
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT]):
                 with patch.object(mod, "write_beat", mock_write):
                     with patch.object(mod, "write_journal_entry", mock_journal):
@@ -655,7 +655,7 @@ class TestCbFileBackendError:
         BackendError = getattr(_get_file_module(), "BackendError", Exception)
         mod = _get_file_module()
         cb_file = _register_file()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(
                 mod, "_extract_beats", side_effect=BackendError("timeout")
             ):
@@ -679,7 +679,7 @@ class TestCbFileNoContent:
 
         mod = _get_file_module()
         cb_file = _register_file()
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", return_value=[]):
                 result = cb_file(content="hmm")
 
@@ -713,7 +713,7 @@ class TestCbFileTypeOverride:
             captured_beats.append(dict(b))
             return fake_path
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", return_value=[beat]):
                 with patch.object(mod, "write_beat", side_effect=capture_write):
                     cb_file(content="some content", type="reference")
@@ -740,7 +740,7 @@ class TestCbFileTypeOverride:
             captured_beats.append(dict(b))
             return fake_path
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", return_value=[beat]):
                 with patch.object(mod, "write_beat", side_effect=capture_write):
                     cb_file(content="some content", tags="python, async")
@@ -776,7 +776,7 @@ class TestCbFileDocumentIntake:
         mock_extract = MagicMock(return_value=[SAMPLE_BEAT])
         mock_write = MagicMock(return_value=fake_path)
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", mock_extract):
                 with patch.object(mod, "write_beat", mock_write):
                     cb_file(
@@ -805,7 +805,7 @@ class TestCbFileDocumentIntake:
             captured_beats.append(dict(b))
             return fake_path
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", MagicMock()):
                 with patch.object(mod, "write_beat", side_effect=capture_write):
                     cb_file(
@@ -835,7 +835,7 @@ class TestCbFileDocumentIntake:
             captured_beats.append(dict(b))
             return fake_path
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", MagicMock()):
                 with patch.object(mod, "write_beat", side_effect=capture_write):
                     cb_file(
@@ -864,7 +864,7 @@ class TestCbFileDocumentIntake:
             captured_beats.append(dict(b))
             return fake_path
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", MagicMock()):
                 with patch.object(mod, "write_beat", side_effect=capture_write):
                     cb_file(
@@ -896,7 +896,7 @@ class TestCbFileDocumentIntake:
             captured_beats.append(dict(b))
             return fake_path
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", MagicMock()):
                 with patch.object(mod, "write_beat", side_effect=capture_write):
                     cb_file(
@@ -926,7 +926,7 @@ class TestCbFileDocumentIntake:
             captured_beats.append(dict(b))
             return fake_path
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", MagicMock()):
                 with patch.object(mod, "write_beat", side_effect=capture_write):
                     cb_file(
@@ -952,7 +952,7 @@ class TestCbFileDocumentIntake:
         mock_autofile = MagicMock(return_value=None)
         mock_write = MagicMock(return_value=fake_path)
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", MagicMock()):
                 with patch.object(mod, "autofile_beat", mock_autofile):
                     with patch.object(mod, "write_beat", mock_write):
@@ -983,7 +983,7 @@ class TestCbFileDocumentIntake:
             captured_kwargs.append(kwargs)
             return fake_path
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", MagicMock()):
                 with patch.object(mod, "write_beat", side_effect=capture_write):
                     cb_file(
@@ -1009,7 +1009,7 @@ class TestCbFileDocumentIntake:
         mock_autofile = MagicMock(return_value=fake_path)
         mock_write = MagicMock(return_value=None)
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", MagicMock()):
                 with patch.object(mod, "autofile_beat", mock_autofile):
                     with patch.object(mod, "write_beat", mock_write):
@@ -1048,7 +1048,7 @@ class TestCbFileIntakeEntityType:
             captured_beats.append(dict(b))
             return fake_path
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", MagicMock()):
                 with patch.object(mod, "write_beat", side_effect=capture_write):
                     cb_file(
@@ -1077,7 +1077,7 @@ class TestCbFileIntakeEntityType:
         # verify that 'reference' is remapped to entity type 'resource' on disk.
         # update_search_index is imported lazily inside write_beat; patch it at
         # its source module so the lazy import picks up the mock.
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", MagicMock()):
                 with std_patch(
                     "cyberbrain.extractors.search_index.update_search_index"
@@ -1136,7 +1136,7 @@ class TestCbExtractAdditional:
             captured_text.append(text)
             return _fake_result
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "run_extraction", side_effect=capture_run):
                 cb_extract(transcript_path=str(transcript))
 
@@ -1172,7 +1172,7 @@ class TestCbExtractAdditional:
         mod = _get_extract_module()
         cb_extract = _register_extract()
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(
                 mod, "parse_jsonl_transcript", return_value="User: hello"
             ):
@@ -1211,7 +1211,7 @@ class TestCbFileAdditional:
         cb_file = _register_file()
         mock_autofile = MagicMock(return_value=fake_path)
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT]):
                 with patch.object(mod, "autofile_beat", mock_autofile):
                     with patch.object(mod, "write_beat", MagicMock(return_value=None)):
@@ -1252,7 +1252,7 @@ class TestCbFileAutofileAsk:
         mod = _get_file_module()
         cb_file = _register_file()
 
-        with patch.object(mod, "_load_config", return_value=config):
+        with patch.object(mod, "require_config", return_value=config):
             with patch.object(mod, "_extract_beats", return_value=[SAMPLE_BEAT.copy()]):
                 with patch.object(
                     mod, "autofile_beat", side_effect=mock_autofile_with_ask

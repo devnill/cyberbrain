@@ -1,0 +1,9 @@
+id: decision-log
+type: review_output
+reviewer: journal-keeper
+decisions: 20
+open_questions: 7
+cross_references: 3
+cycle: 1
+content_hash: b49b086c2a8468acf1b0f954a5f6988a30c3a534fdd90c6ab02c18f77156a039
+token_count: 30

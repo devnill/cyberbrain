@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.2.1 — 2026-03-31
+
+First-time setup and onboarding fixes.
+
+### New Features
+
+- **`/cyberbrain:config` skill** — guided setup slash command that walks new users through vault discovery, configuration, and first extraction
+- **Vault scaffolding** — `cb_configure(create_vault=True)` creates vault directory structure with inbox folder and starter CLAUDE.md
+
+### Fixes
+
+- **First-run config guard** — MCP tools return actionable setup instructions instead of cryptic errors when config is missing
+- **Silent error handling** — hooks and CLI now surface errors to stderr instead of swallowing them silently
+- **Plugin manifest error handler** — SKILL.md and plugin.json fixes for edge cases
+- **`cb_configure` / `cb_status` fresh install** — handle missing config gracefully with guided next steps
+- **`uv` availability check** — hooks verify `uv` is on PATH before attempting extraction; augment PATH with common install locations
+- **`cb_configure` prefs path** — `ConfigError` caught in manage.py prefs path and resources.py
+- **SKILL.md phase ordering** — `cb_setup` runs before `reset_prefs` in config skill
+- **`create_vault` ordering** — fixed sequencing; catch `JSONDecodeError` in manage.py and resources.py
+
+### Documentation
+
+- Updated QUICKSTART.md and README.md for new onboarding flow
+
 ## 1.2.0 — 2026-03-27
 
 Transcript noise filtering, full audit fixes, and vocabulary separation.

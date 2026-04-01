@@ -1,5 +1,11 @@
 # Quick Start
 
+## Prerequisites
+
+- `uv` — [brew install uv](https://docs.astral.sh/uv/getting-started/installation/)
+
+---
+
 ## Install
 
 ```bash
@@ -14,11 +20,15 @@ claude plugin install cyberbrain@devnill-cyberbrain
 
 ## Configure
 
-### Step 1 — Point at a vault
+Run `/cyberbrain:config` in Claude Code. This walks you through vault path selection, folder structure, and default preferences.
 
-The installer prompts for your vault path. Press Enter to use the default (`~/.claude/cyberbrain/vault/`), or enter the path to an existing Obsidian vault.
+---
 
-To change the vault later, edit `~/.claude/cyberbrain/config.json`:
+### Manual Configuration
+
+For advanced users who prefer to edit config files directly.
+
+**Vault path** — edit `~/.claude/cyberbrain/config.json`:
 
 ```json
 {
@@ -30,17 +40,15 @@ To change the vault later, edit `~/.claude/cyberbrain/config.json`:
 **Don't use Obsidian?**
 Set `vault_path` to any directory. Notes are plain markdown — any editor works.
 
----
+**Backend selection:**
 
-### Step 2 — Choose a backend
-
-**Default — uses your Claude Code subscription, no API key needed:**
+Default — uses your Claude Code subscription, no API key needed:
 
 ```json
 { "backend": "claude-code" }
 ```
 
-**AWS Bedrock:**
+AWS Bedrock:
 
 ```json
 {
@@ -50,7 +58,7 @@ Set `vault_path` to any directory. Notes are plain markdown — any editor works
 ```
 Requires AWS credentials configured (`~/.aws/credentials` or env vars).
 
-**Local model (Ollama):**
+Local model (Ollama):
 
 ```json
 {

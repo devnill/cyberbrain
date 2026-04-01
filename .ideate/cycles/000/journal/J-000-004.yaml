@@ -1,0 +1,12 @@
+id: J-000-004
+type: journal_entry
+phase: execute
+date: 2026-03-31
+cycle_created: 0
+title: work-item-complete
+content: "## [execute] 2026-03-31 — Work item WI-004: Fix silent error handling
+  in hooks and CLI\\nStatus: complete\\nAdded ConfigError exception class to
+  config.py. Replaced sys.exit(0) calls in load_global_config with raise
+  ConfigError. extract_beats.py main catches ConfigError and exits 1. All three
+  hooks updated with pre-flight config checks and actionable error messages.
+  Tests updated from SystemExit to ConfigError expectations."

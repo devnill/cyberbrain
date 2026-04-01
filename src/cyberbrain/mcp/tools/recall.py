@@ -18,8 +18,8 @@ from cyberbrain.extractors.state import wm_recall_log_path as _wm_recall_log_pat
 from cyberbrain.mcp.shared import (
     _call_claude_code_backend,
     _get_search_backend,
-    _load_config,
     _parse_frontmatter,
+    require_config,
 )
 from cyberbrain.mcp.shared import (
     _load_tool_prompt as _load_prompt,
@@ -215,7 +215,7 @@ def register(mcp: FastMCP) -> None:
                 "Query too short — provide at least one word with 3+ characters."
             )
 
-        config = _load_config()
+        config = require_config()
         vault_path = config["vault_path"]
 
         # Lazy incremental refresh: update index with any vault changes since last scan.
@@ -417,7 +417,7 @@ def register(mcp: FastMCP) -> None:
         2. FTS5 index title exact match (case-insensitive)
         3. FTS5 index title prefix/fuzzy match
         """
-        config = _load_config()
+        config = require_config()
         vault_path = Path(config["vault_path"]).resolve()
         MAX_CHARS_PER_NOTE = max_chars_per_note
 

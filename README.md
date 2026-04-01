@@ -73,7 +73,7 @@ claude plugin marketplace add devnill/cyberbrain
 claude plugin install cyberbrain@devnill-cyberbrain
 ```
 
-The plugin system handles hook registration (`PreCompact`, `SessionEnd`), MCP server launch via `uv run`, and version management. After install, run `cb_configure` to set your vault path.
+The plugin system handles hook registration (`PreCompact`, `SessionEnd`), MCP server launch via `uv run`, and version management. After install, run `/cyberbrain:config` in Claude Code to set your vault path, folder structure, and default preferences.
 
 ### Manual installation (Claude Desktop fallback)
 

@@ -1,0 +1,33 @@
+id: WI-012
+type: work_item
+title: Add PATH augmentation to hooks before uv check
+status: done
+complexity: small
+scope:
+  - path: hooks/pre-compact-extract.sh
+    op: modify
+  - path: hooks/session-end-extract.sh
+    op: modify
+  - path: hooks/session-end-reindex.sh
+    op: modify
+depends: []
+blocks: []
+criteria:
+  - All three hooks prepend /opt/homebrew/bin and /usr/local/bin to PATH before the uv availability check
+  - PATH augmentation matches the pattern used in mcp/start.sh
+  - Existing hook behavior preserved
+  - Hooks still exit 0 on all error paths
+domain: onboarding
+phase: null
+notes: |-
+  Add PATH augmentation early in each hook, before the command -v uv check.
+
+  Pattern from mcp/start.sh:
+  export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
+  Place this line before the uv availability guard in each hook. The exact placement should be after the shebang and initial variable parsing, before any command -v uv check.
+resolution: null
+cycle_created: null
+cycle_modified: null
+content_hash: 630943a0097a7b90e66cbef4f4709a7ed89eebe69d269772c3293b89d115cbd6
+token_count: 277

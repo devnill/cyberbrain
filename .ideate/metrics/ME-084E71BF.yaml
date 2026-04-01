@@ -1,0 +1,26 @@
+id: ME-084E71BF
+type: metrics_event
+event_name: unknown
+timestamp: 2026-03-31T12:10:00Z
+skill: execute
+phase: "7"
+cycle: null
+agent_type: code-reviewer
+model: sonnet
+work_item: WI-001
+wall_clock_ms: 104262
+turns_used: 13
+context_files_read: []
+input_tokens: null
+output_tokens: null
+cache_read_tokens: null
+cache_write_tokens: null
+mcp_tools_called: []
+outcome: rework
+finding_count: 5
+finding_severities:
+  critical: 2
+  significant: 1
+  minor: 2
+first_pass_accepted: false
+rework_count: null

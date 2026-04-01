@@ -1,0 +1,24 @@
+id: ME-29807A8D
+type: metrics_event
+event_name: unknown
+timestamp: 2026-03-31T13:00:00Z
+skill: review
+phase: 4a
+cycle: null
+agent_type: gap-analyst
+model: sonnet
+work_item: null
+wall_clock_ms: 1876946
+turns_used: 90
+context_files_read: []
+input_tokens: null
+output_tokens: null
+cache_read_tokens: null
+cache_write_tokens: null
+mcp_tools_called:
+  - ideate_get_context_package
+finding_count: 12
+finding_severities:
+  critical: 1
+  significant: 7
+  minor: 4

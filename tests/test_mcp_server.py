@@ -285,14 +285,14 @@ class TestCbExtractErrors:
 
     def test_raises_tool_error_when_file_not_found(self, fake_home, mock_config):
         missing = fake_home / ".claude" / "projects" / "ghost.jsonl"
-        with patch.object(_extract_mod, "_load_config", return_value=mock_config):
+        with patch.object(_extract_mod, "require_config", return_value=mock_config):
             with pytest.raises(ToolError, match="not found"):
                 cb_extract(transcript_path=str(missing))
 
     def test_raises_tool_error_when_transcript_is_empty(self, fake_home, mock_config):
         empty = fake_home / ".claude" / "projects" / "empty.jsonl"
         empty.write_text("   \n")
-        with patch.object(_extract_mod, "_load_config", return_value=mock_config):
+        with patch.object(_extract_mod, "require_config", return_value=mock_config):
             with patch.object(_extract_mod, "parse_jsonl_transcript", return_value=""):
                 with pytest.raises(ToolError, match="empty"):
                     cb_extract(transcript_path=str(empty))
@@ -300,7 +300,7 @@ class TestCbExtractErrors:
     def test_raises_tool_error_when_jsonl_parse_fails(
         self, fake_home, mock_config, transcript_file
     ):
-        with patch.object(_extract_mod, "_load_config", return_value=mock_config):
+        with patch.object(_extract_mod, "require_config", return_value=mock_config):
             with patch.object(
                 _extract_mod,
                 "parse_jsonl_transcript",
@@ -312,7 +312,7 @@ class TestCbExtractErrors:
     def test_raises_tool_error_on_backend_error(
         self, fake_home, mock_config, transcript_file
     ):
-        with patch.object(_extract_mod, "_load_config", return_value=mock_config):
+        with patch.object(_extract_mod, "require_config", return_value=mock_config):
             with patch.object(
                 _extract_mod, "parse_jsonl_transcript", return_value="content"
             ):
@@ -328,7 +328,7 @@ class TestCbExtractErrors:
     def test_returns_string_when_no_beats_extracted(
         self, fake_home, mock_config, transcript_file
     ):
-        with patch.object(_extract_mod, "_load_config", return_value=mock_config):
+        with patch.object(_extract_mod, "require_config", return_value=mock_config):
             with patch.object(
                 _extract_mod, "parse_jsonl_transcript", return_value="content"
             ):
@@ -356,12 +356,12 @@ class TestCbExtractErrors:
 class TestCbExtractCwdParam:
     """cwd parameter is forwarded to config loading for project-scoped routing."""
 
-    def test_cwd_is_forwarded_to_load_config(
+    def test_cwd_is_forwarded_to_require_config(
         self, fake_home, mock_config, transcript_file
     ):
         project_cwd = "/Users/dan/code/myproject"
         mock_load = MagicMock(return_value=mock_config)
-        with patch.object(_extract_mod, "_load_config", mock_load):
+        with patch.object(_extract_mod, "require_config", mock_load):
             with patch.object(
                 _extract_mod, "parse_jsonl_transcript", return_value="content"
             ):
@@ -383,7 +383,7 @@ class TestCbExtractCwdParam:
         self, fake_home, mock_config, transcript_file
     ):
         mock_load = MagicMock(return_value=mock_config)
-        with patch.object(_extract_mod, "_load_config", mock_load):
+        with patch.object(_extract_mod, "require_config", mock_load):
             with patch.object(
                 _extract_mod, "parse_jsonl_transcript", return_value="content"
             ):
@@ -429,7 +429,7 @@ class TestCbExtractSuccess:
         (vault / "AI" / "Claude-Sessions").mkdir(parents=True)
         fake_path.write_text("content")
 
-        with patch.object(_extract_mod, "_load_config", return_value=config):
+        with patch.object(_extract_mod, "require_config", return_value=config):
             with patch.object(
                 _extract_mod, "parse_jsonl_transcript", return_value="content"
             ):
@@ -485,7 +485,7 @@ class TestCbFileTypedParams:
             path.write_text("content")
             return path
 
-        with patch.object(_file_mod, "_load_config", return_value=config):
+        with patch.object(_file_mod, "require_config", return_value=config):
             with patch.object(
                 _file_mod, "_extract_beats", return_value=[original_beat]
             ):
@@ -517,7 +517,7 @@ class TestCbFileTypedParams:
             path.write_text("content")
             return path
 
-        with patch.object(_file_mod, "_load_config", return_value=config):
+        with patch.object(_file_mod, "require_config", return_value=config):
             with patch.object(_file_mod, "_extract_beats", return_value=[beat]):
                 with patch.object(_file_mod, "write_beat", side_effect=fake_write):
                     cb_file(content="A great recipe", folder=target_folder)
@@ -525,16 +525,16 @@ class TestCbFileTypedParams:
         assert len(captured_configs) == 1
         assert captured_configs[0]["inbox"] == target_folder
 
-    def test_cwd_is_forwarded_to_load_config(self, mock_config):
+    def test_cwd_is_forwarded_to_require_config(self, mock_config):
         project_cwd = "/Users/dan/code/myproject"
         mock_load = MagicMock(return_value=mock_config)
-        with patch.object(_file_mod, "_load_config", mock_load):
+        with patch.object(_file_mod, "require_config", mock_load):
             with patch.object(_file_mod, "_extract_beats", return_value=[]):
                 cb_file(content="Some content", cwd=project_cwd)
         mock_load.assert_called_with(project_cwd)
 
     def test_no_beats_identified_returns_string_not_error(self, mock_config):
-        with patch.object(_file_mod, "_load_config", return_value=mock_config):
+        with patch.object(_file_mod, "require_config", return_value=mock_config):
             with patch.object(_file_mod, "_extract_beats", return_value=[]):
                 result = cb_file(content="just some random text")
         assert isinstance(result, str)
@@ -564,7 +564,7 @@ class TestCbFileErrors:
     """cb_file raises ToolError for genuine failures."""
 
     def test_raises_tool_error_on_backend_error(self, mock_config):
-        with patch.object(_file_mod, "_load_config", return_value=mock_config):
+        with patch.object(_file_mod, "require_config", return_value=mock_config):
             with patch.object(
                 _file_mod, "_extract_beats", side_effect=_BackendError("timed out")
             ):
@@ -585,7 +585,7 @@ class TestCbFileErrors:
             "body": "body",
         }
 
-        with patch.object(_file_mod, "_load_config", return_value=config):
+        with patch.object(_file_mod, "require_config", return_value=config):
             with patch.object(_file_mod, "_extract_beats", return_value=[beat]):
                 with patch.object(
                     _file_mod, "write_beat", side_effect=OSError("disk full")
@@ -633,7 +633,7 @@ class TestCbFileErrors:
                 return good_path
             raise OSError("disk full")
 
-        with patch.object(_file_mod, "_load_config", return_value=config):
+        with patch.object(_file_mod, "require_config", return_value=config):
             with patch.object(_file_mod, "_extract_beats", return_value=beats):
                 with patch.object(_file_mod, "write_beat", side_effect=fake_write):
                     result = cb_file(content="Some content")
@@ -666,7 +666,7 @@ class TestCbRecallErrors:
         vault = tmp_path / "vault"
         vault.mkdir()
         config = {**BASE_CONFIG, "vault_path": str(vault)}
-        with patch.object(_recall_mod, "_load_config", return_value=config):
+        with patch.object(_recall_mod, "require_config", return_value=config):
             with patch.object(_recall_mod, "_get_search_backend", return_value=None):
                 with patch(
                     "subprocess.run", return_value=MagicMock(stdout="", returncode=0)
@@ -687,7 +687,7 @@ class TestCbRecallEmptyResults:
         vault = tmp_path / "vault"
         vault.mkdir()
         config = {**BASE_CONFIG, "vault_path": str(vault)}
-        with patch.object(_recall_mod, "_load_config", return_value=config):
+        with patch.object(_recall_mod, "require_config", return_value=config):
             with patch.object(_recall_mod, "_get_search_backend", return_value=None):
                 with patch(
                     "subprocess.run", return_value=MagicMock(stdout="", returncode=0)
@@ -829,7 +829,7 @@ class TestCbRecallSearchBackend:
         mock_backend.backend_name.return_value = "fts5"
 
         config = {**BASE_CONFIG, "vault_path": str(vault)}
-        with patch.object(_recall_mod, "_load_config", return_value=config):
+        with patch.object(_recall_mod, "require_config", return_value=config):
             with patch.object(
                 _recall_mod, "_get_search_backend", return_value=mock_backend
             ):
@@ -845,7 +845,7 @@ class TestCbRecallSearchBackend:
         mock_backend.search.return_value = []
         mock_backend.backend_name.return_value = "fts5"
 
-        with patch.object(_recall_mod, "_load_config", return_value=config):
+        with patch.object(_recall_mod, "require_config", return_value=config):
             with patch.object(
                 _recall_mod, "_get_search_backend", return_value=mock_backend
             ):
@@ -863,7 +863,7 @@ class TestCbRecallSearchBackend:
         mock_backend.search.side_effect = RuntimeError("index corrupted")
         mock_backend.backend_name.return_value = "fts5"
 
-        with patch.object(_recall_mod, "_load_config", return_value=config):
+        with patch.object(_recall_mod, "require_config", return_value=config):
             with patch.object(
                 _recall_mod, "_get_search_backend", return_value=mock_backend
             ):
@@ -896,7 +896,7 @@ class TestCbRecallSearchBackend:
         mock_backend.backend_name.return_value = "fts5"
 
         config = {**BASE_CONFIG, "vault_path": str(vault)}
-        with patch.object(_recall_mod, "_load_config", return_value=config):
+        with patch.object(_recall_mod, "require_config", return_value=config):
             with patch.object(
                 _recall_mod, "_get_search_backend", return_value=mock_backend
             ):
@@ -927,7 +927,7 @@ class TestCbRecallSearchBackend:
         mock_backend.backend_name.return_value = "fts5"
 
         config = {**BASE_CONFIG, "vault_path": str(vault)}
-        with patch.object(_recall_mod, "_load_config", return_value=config):
+        with patch.object(_recall_mod, "require_config", return_value=config):
             with patch.object(
                 _recall_mod, "_get_search_backend", return_value=mock_backend
             ):
@@ -971,7 +971,7 @@ class TestCbRecallSynthesize:
 
     def test_synthesize_true_calls_synthesize_recall(self, tmp_path):
         config, mock_backend = self._setup(tmp_path)
-        with patch.object(_recall_mod, "_load_config", return_value=config):
+        with patch.object(_recall_mod, "require_config", return_value=config):
             with patch.object(
                 _recall_mod, "_get_search_backend", return_value=mock_backend
             ):
@@ -983,7 +983,7 @@ class TestCbRecallSynthesize:
 
     def test_synthesize_false_does_not_call_synthesize_recall(self, tmp_path):
         config, mock_backend = self._setup(tmp_path)
-        with patch.object(_recall_mod, "_load_config", return_value=config):
+        with patch.object(_recall_mod, "require_config", return_value=config):
             with patch.object(
                 _recall_mod, "_get_search_backend", return_value=mock_backend
             ):
@@ -1465,6 +1465,42 @@ class TestResources:
         assert "explicitly" in guide.lower() or "manual" in guide.lower()
         assert "NEVER" in guide
         assert "Do NOT" in guide
+
+    def test_get_guide_config_error_returns_minimal_guide(self):
+        """_get_guide returns a minimal actionable guide when ConfigError is raised."""
+        from cyberbrain.extractors.config import ConfigError as _CE
+
+        with patch.object(_resources_mod, "_load_config", side_effect=_CE("no config")):
+            guide = _resources_mod._get_guide()
+        assert isinstance(guide, str)
+        assert "not configured" in guide.lower()
+        assert "/cyberbrain:config" in guide
+
+    def test_get_guide_config_error_does_not_raise(self):
+        """_get_guide must not propagate ConfigError."""
+        from cyberbrain.extractors.config import ConfigError as _CE
+
+        with patch.object(_resources_mod, "_load_config", side_effect=_CE("no config")):
+            # Should return a string, never raise
+            result = _resources_mod._get_guide()
+        assert isinstance(result, str)
+
+    def test_cyberbrain_guide_resource_config_error_returns_string(self):
+        """cyberbrain://guide resource does not raise on fresh install."""
+        from cyberbrain.extractors.config import ConfigError as _CE
+
+        with patch.object(_resources_mod, "_load_config", side_effect=_CE("no config")):
+            result = fake_mcp._resources["cyberbrain_guide"]["fn"]()
+        assert isinstance(result, str)
+
+    def test_orient_prompt_config_error_returns_list(self):
+        """orient prompt does not raise on fresh install."""
+        from cyberbrain.extractors.config import ConfigError as _CE
+
+        with patch.object(_resources_mod, "_load_config", side_effect=_CE("no config")):
+            result = fake_mcp._prompts["orient"]["fn"]()
+        assert isinstance(result, list)
+        assert result[0].role == "user"
 
 
 # ===========================================================================

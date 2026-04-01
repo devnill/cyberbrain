@@ -1,0 +1,18 @@
+id: overview
+type: overview
+title: "Post-Review Corrections: Cycle 2 Findings"
+body: |-
+  ## What is changing
+
+  3 surgical fixes from cycle 2 review:
+  1. Catch ConfigError in cb_configure prefs path and resources.py _get_guide()
+  2. Reorder SKILL.md Phase 4 so cb_setup runs before reset_prefs
+
+  ## Scope boundary
+  Changing: manage.py (prefs path), resources.py (_get_guide), skills/config/SKILL.md (Phase 4 ordering)
+  NOT changing: everything else
+
+  ## Work items
+  WI-009, WI-010
+content_hash: d5c5b06941315dfbcd6b24e496246791229b1afa528b5ee3fbbe5911d5688a36
+token_count: 122

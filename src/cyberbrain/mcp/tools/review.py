@@ -13,10 +13,10 @@ from pydantic import Field
 from cyberbrain.mcp.shared import (
     _get_search_backend,
     _index_paths,
-    _load_config,
     _move_to_trash,
     _parse_frontmatter,
     _prune_index,
+    require_config,
     update_vault_note,
     write_vault_note,
 )
@@ -270,17 +270,11 @@ def register(mcp: FastMCP) -> None:
         )
         from cyberbrain.extractors.quality_gate import quality_gate as _quality_gate
 
-        config = _load_config()
+        config = require_config()
         gate_enabled = config.get("quality_gate_enabled", True)
         vault_path_str = config.get("vault_path", "")
-        if not vault_path_str:
-            raise ToolError(
-                "No vault configured. Run cb_configure(vault_path=...) first."
-            )
 
         vault = Path(vault_path_str).expanduser().resolve()
-        if not vault.exists():
-            raise ToolError(f"Vault path does not exist: {vault}")
 
         wm_root_rel = folder or config.get("working_memory_folder", "AI/Working Memory")
         wm_root = vault / wm_root_rel

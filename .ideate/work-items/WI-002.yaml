@@ -1,0 +1,53 @@
+id: WI-002
+type: work_item
+title: Add vault scaffolding to cb_configure
+status: done
+complexity: medium
+scope:
+  - path: src/cyberbrain/mcp/tools/manage.py
+    op: modify
+depends: []
+blocks: []
+criteria:
+  - cb_configure accepts create_vault parameter (path string) that creates directory structure at the specified path
+  - cb_configure accepts template parameter (para|flat|developer) that determines which folders to create
+  - "PARA template creates: Projects/, Areas/, Resources/, Archives/, AI/Claude-Sessions/, AI/Working Memory/"
+  - "Flat template creates: AI/Claude-Sessions/, AI/Working Memory/"
+  - "Developer template creates: Projects/, AI/Claude-Sessions/, AI/Working Memory/"
+  - All templates create the vault root directory if it doesn't exist
+  - After creating dirs, writes config.json with vault_path, inbox (AI/Claude-Sessions), and working_memory_folder (AI/Working Memory)
+  - Returns confirmation listing created directories and config path
+  - Refuses to overwrite existing vault (directory exists and is non-empty) unless force=True
+  - "Follows Obsidian idioms: no .obsidian dir created, folder names are human-readable"
+  - Existing cb_configure functionality (discover, vault_path, set/show config) is preserved unchanged
+  - All existing tests pass; new tests cover create_vault with each template
+domain: onboarding
+phase: null
+notes: |-
+  Modify the cb_configure tool registration in manage.py to add create_vault and template parameters.
+
+  The create_vault flow:
+  1. Validate path doesn't already contain files (unless force=True)
+  2. Create directory structure based on template
+  3. Write global config to ~/.claude/cyberbrain/config.json
+  4. Return success message with created paths
+
+  Template definitions can be a simple dict in manage.py — no need for external template files.
+
+  Existing functionality to preserve:
+  - discover mode (find existing vaults)
+  - vault_path setter
+  - show_prefs/set_prefs/reset_prefs
+  - All existing parameters and return formats
+
+  Config fields to set on vault creation:
+  - vault_path: the created path
+  - inbox: 'AI/Claude-Sessions'
+  - working_memory_folder: 'AI/Working Memory'
+  - backend: 'claude-code' (default)
+  - model: 'claude-haiku-4-5' (default)
+resolution: null
+cycle_created: null
+cycle_modified: null
+content_hash: 53c3b61c1f3cf278b587392c02f7dd972076d54bcdd5f87507aa1ef2abbac39b
+token_count: 598

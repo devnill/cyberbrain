@@ -1,0 +1,14 @@
+id: J-000-015
+type: journal_entry
+phase: execute
+date: 2026-03-31
+cycle_created: 0
+title: group-complete
+content: "## [execute] 2026-03-31 — Cycle 3 corrections complete\\n\\nWI-011:
+  Fix create_vault ordering + catch JSONDecodeError — complete\\n- Swapped
+  next-steps order in create_vault response (cb_setup first, reset_prefs
+  second)\\n- All 4 _load_config sites now catch (ConfigError,
+  json.JSONDecodeError)\\n\\nWI-012: Add PATH augmentation to hooks —
+  complete\\n- All 3 hooks prepend /opt/homebrew/bin:/usr/local/bin to PATH
+  before uv check\\n- Matches mcp/start.sh pattern\\n\\nAll 1497 tests pass. 12
+  work items total, all done."

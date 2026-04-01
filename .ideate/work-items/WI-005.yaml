@@ -1,0 +1,29 @@
+id: WI-005
+type: work_item
+title: Fix plugin manifest and SKILL.md error handler
+status: done
+complexity: small
+scope:
+  - path: .claude-plugin/plugin.json
+    op: modify
+  - path: skills/config/SKILL.md
+    op: modify
+depends: []
+blocks: []
+criteria:
+  - 'plugin.json contains "skills": "./skills" key'
+  - SKILL.md error handling section references cb_setup() and cb_setup(answers=..., write=True) instead of cb_setup(phase=1) and cb_setup(phase=2)
+  - No other changes to plugin.json or SKILL.md beyond these two fixes
+domain: onboarding
+phase: null
+notes: |-
+  Two fixes in plugin/skill layer:
+
+  1. plugin.json: Add "skills": "./skills" after the "mcpServers" key. Reference hamlet plugin at /Users/dan/code/hamlet/.claude-plugin/plugin.json for the pattern.
+
+  2. SKILL.md line 141: The error handling section still says 'If cb_setup(phase=1) or cb_setup(phase=2) fails'. Replace with 'If the first cb_setup() call (without answers) fails' and 'If the second cb_setup(answers=..., write=True) call fails'.
+resolution: null
+cycle_created: null
+cycle_modified: null
+content_hash: 7f9162cb6e6812c3035fea143557084d71f932acd6b23f715e55e33631b33de2
+token_count: 291

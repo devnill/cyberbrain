@@ -1,0 +1,8 @@
+id: gap-analysis
+type: review_output
+reviewer: gap-analyst
+verdict: Fail
+summary: "EC1/IR1: orient prompt raises ConfigError on fresh install (significant). Backend config through skill deferred. Minor: pre-compact uv check plugin-only, reindex silent skip."
+cycle: 2
+content_hash: 79762e7031fb16e08ed363bded95d02494eb1316c8e9a38d0c7cd3df89b7fda4
+token_count: 67

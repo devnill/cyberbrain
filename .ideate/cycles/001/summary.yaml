@@ -1,0 +1,59 @@
+id: summary
+type: cycle_summary
+cycle: 1
+content: |-
+  # Review Summary
+
+  ## Overview
+  The onboarding refinement delivered its core components: a config skill, vault scaffolding, config guard, and error handling fixes. However, two critical integration gaps prevent the work from being usable: the skill is not wired into the plugin manifest, and cb_configure raises on a fresh install instead of returning a detection-friendly response. A refinement cycle is required.
+
+  ## Phase Convergence
+  Phase: PH-001
+  Cycles completed in this phase: 1 / 5 (threshold)
+  Convergence status: Not assessed — first cycle
+  Trend: First cycle in phase — no trend data.
+
+  ## Project Progress
+  No success criteria defined in project artifacts.
+
+  ## Critical Findings
+  - [gap-analyst] plugin.json missing "skills": "./skills" key — /cyberbrain:config skill is unreachable by users. WI-001 is functionally incomplete. — relates to: WI-001
+  - [spec-reviewer] cb_configure() no-args raises ConfigError on fresh install — breaks SKILL.md Phase 1 first-run detection. _load_config() in manage.py calls resolve_config -> load_global_config which raises. — relates to: WI-003, GP-01
+
+  ## Significant Findings
+  - [gap-analyst] Hooks don't check for uv availability in plugin mode — original interview failure #1 not addressed. If uv missing, hooks silently fail with no log entry. — relates to: WI-004, GP-01
+  - [gap-analyst] orient prompt -> cb_status raises ConfigError on fresh install — cb_status uses _load_config not require_config, so unconfigured state produces exception instead of actionable message. — relates to: GP-01
+  - [code-reviewer + gap-analyst] QUICKSTART.md and README still direct users to manual config.json editing instead of /cyberbrain:config. — relates to: GP-01
+  - [gap-analyst] QUICKSTART.md missing uv as prerequisite. — relates to: GP-01
+  - [spec-reviewer + gap-analyst] SKILL.md error handling section still references non-existent cb_setup(phase=1) and cb_setup(phase=2) parameters. — relates to: WI-001
+
+  ## Minor Findings
+  - [code-reviewer] Stale imports in reindex.py — Path and ToolError unused after redundant vault checks removed. Ruff F401. — relates to: WI-003 -> carry-forward
+  - [code-reviewer] __import__('re') inline call in manage.py _read_prefs_section inconsistent with import re in _write_prefs_section. — relates to: cross-cutting -> carry-forward
+  - [code-reviewer + spec-reviewer] working_memory_ttl typed as int in CyberbrainConfig but used as dict at runtime. Pre-existing issue. — relates to: cross-cutting -> carry-forward
+  - [gap-analyst] Hook dedup check uses hardcoded tab-delimited format that could break if log format changes. — relates to: cross-cutting -> carry-forward
+  - [gap-analyst] No test coverage for SKILL.md logic — skill correctness depends on manual review of API consistency. — relates to: WI-001 -> carry-forward
+
+  ## Suggestions
+  - [gap-analyst] Backend/model changes should eventually be supported via cb_configure to complete the guided experience.
+  - [journal-keeper] Extract config validation checks into a shared helper that both require_config and load_global_config call, reducing duplication.
+  - [journal-keeper] Define a structured return format for cb_configure() no-args that makes skill detection unambiguous (not dependent on string matching).
+
+  ## Findings Requiring User Input
+  - Should cb_status get require_config guard (which would break its current use in orient prompt for detection), or should it catch ConfigError and return a structured "not configured" message? The orient resource depends on cb_status working before config exists.
+
+  ## Proposed Refinement Plan
+  The review identified 2 critical and 5 significant findings. A refinement cycle is required.
+
+  Scope for /ideate:refine:
+  1. Add "skills": "./skills" to .claude-plugin/plugin.json (critical — 1 line)
+  2. Fix cb_configure() no-args to handle missing config gracefully — catch ConfigError in _load_config or add a pre-check in manage.py (critical)
+  3. Add uv availability check to hooks in plugin mode (significant)
+  4. Fix cb_status to handle unconfigured state gracefully (significant)
+  5. Update QUICKSTART.md and README.md to reference /cyberbrain:config (significant)
+  6. Fix SKILL.md error handler to use correct cb_setup signatures (significant)
+  7. Add uv prerequisite to QUICKSTART.md (significant)
+
+  Estimated: 4-5 work items, small to medium complexity. No architecture changes needed.
+content_hash: f1f3f54735b1e6f4ce55697084efc91cec2376d4f89534dca5600ab2519626d4
+token_count: 1118

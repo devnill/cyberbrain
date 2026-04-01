@@ -1,5 +1,7 @@
 """cb_configure and cb_status tools — configuration and system status."""
 
+import json
+import re
 from pathlib import Path
 from typing import Annotated
 
@@ -8,6 +10,7 @@ from fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from cyberbrain.extractors.config import ConfigError
 from cyberbrain.extractors.state import (
     config_path,
     runs_log_path,
@@ -48,6 +51,26 @@ def _read_index_stats(config: dict) -> dict:
         return {}
 
 
+_VAULT_TEMPLATES: dict[str, list[str]] = {
+    "para": [
+        "Projects",
+        "Areas",
+        "Resources",
+        "Archives",
+        "AI/Claude-Sessions",
+        "AI/Working Memory",
+    ],
+    "flat": [
+        "AI/Claude-Sessions",
+        "AI/Working Memory",
+    ],
+    "developer": [
+        "Projects",
+        "AI/Claude-Sessions",
+        "AI/Working Memory",
+    ],
+}
+
 _DEFAULT_PREFS = """\
 ## Cyberbrain Preferences
 
@@ -77,7 +100,7 @@ def _read_prefs_section(vault_path: str) -> str | None:
     # Find the end: next ## heading at the same level or EOF
     rest = text[idx:]
     end_match = None
-    for m in __import__("re").finditer(r"^## ", rest, __import__("re").MULTILINE):
+    for m in re.finditer(r"^## ", rest, re.MULTILINE):
         if m.start() > 0:
             end_match = m.start()
             break
@@ -217,6 +240,37 @@ def register(mcp: FastMCP) -> None:
                 )
             ),
         ] = None,
+        create_vault: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Absolute path at which to create a new vault directory structure. "
+                    "Creates the directory and standard subfolders, then writes config.json. "
+                    "Must be within your home directory. Refuses to overwrite a non-empty directory "
+                    "unless force=True."
+                )
+            ),
+        ] = None,
+        template: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Folder template to use when creating a vault with create_vault. "
+                    "'para' (default): Projects/, Areas/, Resources/, Archives/, AI/Claude-Sessions/, AI/Working Memory/. "
+                    "'flat': AI/Claude-Sessions/, AI/Working Memory/ only. "
+                    "'developer': Projects/, AI/Claude-Sessions/, AI/Working Memory/."
+                )
+            ),
+        ] = None,
+        force: Annotated[
+            bool,
+            Field(
+                description=(
+                    "When True, allows create_vault to proceed even if the target directory "
+                    "already exists and is non-empty."
+                )
+            ),
+        ] = False,
     ) -> str:
         """
         Configure cyberbrain or show current configuration.
@@ -234,6 +288,9 @@ def register(mcp: FastMCP) -> None:
         Call with proactive_recall=True/False to enable/disable proactive recall.
         Call with uncertain_filing_behavior='inbox'|'ask' to control low-confidence routing.
         Call with uncertain_filing_threshold=0.5 to set the confidence cutoff (0.0-1.0).
+        Call with create_vault='/path/to/new/vault' to scaffold a new vault and write config.
+        Call with template='para'|'flat'|'developer' to choose the folder structure (default: 'para').
+        Call with force=True to allow create_vault to overwrite a non-empty directory.
 
         Use this to set up cyberbrain through conversation instead of editing config files.
         """
@@ -244,7 +301,14 @@ def register(mcp: FastMCP) -> None:
 
         # --- preferences operations ---
         if show_prefs or set_prefs is not None or reset_prefs:
-            cfg = _load_config()
+            try:
+                cfg = _load_config()
+            except (ConfigError, json.JSONDecodeError):
+                return (
+                    "Cyberbrain is not configured yet. "
+                    "Run cb_configure(discover=True) to find existing Obsidian vaults, "
+                    "or cb_configure(vault_path='/path/to/vault') to set one directly."
+                )
             vp = cfg.get("vault_path", "")
             if not vp or not Path(vp).exists():
                 return (
@@ -278,6 +342,68 @@ def register(mcp: FastMCP) -> None:
 
         def _save_raw(cfg: dict) -> None:
             cfg_path.write_text(_json.dumps(cfg, indent=2) + "\n")
+
+        # --- create_vault mode ---
+        if create_vault is not None:
+            resolved = Path(create_vault).expanduser().resolve()
+            try:
+                resolved.relative_to(Path.home())
+            except ValueError:
+                raise ToolError(
+                    f"create_vault path must be within your home directory. Got: {create_vault}"
+                )
+
+            chosen_template = (template or "para").lower()
+            if chosen_template not in _VAULT_TEMPLATES:
+                raise ToolError(
+                    f"Invalid template: {chosen_template!r}. "
+                    f"Valid options: {', '.join(sorted(_VAULT_TEMPLATES))}."
+                )
+
+            # Check for non-empty existing directory
+            if resolved.exists() and any(resolved.iterdir()):
+                if not force:
+                    raise ToolError(
+                        f"Directory already exists and is non-empty: {resolved}\n"
+                        "Use force=True to scaffold into an existing directory."
+                    )
+
+            folders = _VAULT_TEMPLATES[chosen_template]
+            created_dirs = []
+
+            # Create the vault root
+            resolved.mkdir(parents=True, exist_ok=True)
+
+            # Create each subfolder
+            for folder in folders:
+                folder_path = resolved / folder
+                folder_path.mkdir(parents=True, exist_ok=True)
+                created_dirs.append(str(folder_path))
+
+            # Write config
+            cfg = _load_raw()
+            cfg["vault_path"] = str(resolved)
+            cfg.setdefault("inbox", "AI/Claude-Sessions")
+            cfg.setdefault("working_memory_folder", "AI/Working Memory")
+            cfg.setdefault("backend", "claude-code")
+            cfg.setdefault("model", "claude-haiku-4-5")
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            _save_raw(cfg)
+
+            lines = [
+                f"Vault created at {resolved} (template: {chosen_template})\n",
+                "Directories created:",
+            ]
+            lines.append(f"  {resolved}")
+            for d in created_dirs:
+                lines.append(f"  {d}")
+            lines.append(f"\nConfig written to {cfg_path}")
+            lines.append(
+                "\nNext steps:\n"
+                "  1. Run cb_setup() to generate a vault CLAUDE.md tailored to your notes.\n"
+                "  2. Run cb_configure(reset_prefs=True) to add default extraction preferences."
+            )
+            return "\n".join(lines)
 
         # --- discover mode ---
         if discover:
@@ -461,7 +587,18 @@ def register(mcp: FastMCP) -> None:
             return result
 
         # --- no-args: show current config + health ---
-        cfg = _load_config()
+        try:
+            cfg = _load_config()
+        except (ConfigError, json.JSONDecodeError):
+            return (
+                "## Cyberbrain Configuration\n\n"
+                "Vault:        (not configured)\n\n"
+                "Cyberbrain has not been set up yet.\n"
+                "Run /cyberbrain:config to configure your vault, or:\n"
+                "  cb_configure(discover=True)              — find existing Obsidian vaults\n"
+                "  cb_configure(vault_path='/path/to/vault') — set vault path directly\n"
+                "  cb_configure(create_vault='/path/to/new') — scaffold a new vault"
+            )
         lines = ["## Cyberbrain Configuration\n"]
 
         vault = cfg.get("vault_path", "(not set)")
@@ -559,7 +696,17 @@ def register(mcp: FastMCP) -> None:
         """
         import json as _json
 
-        config = _load_config()
+        try:
+            config = _load_config()
+        except (ConfigError, json.JSONDecodeError):
+            return (
+                "## Cyberbrain Status\n\n"
+                "Cyberbrain has not been set up yet.\n"
+                "Run /cyberbrain:config to configure your vault, or:\n"
+                "  cb_configure(discover=True)              — find existing Obsidian vaults\n"
+                "  cb_configure(vault_path='/path/to/vault') — set vault path directly\n"
+                "  cb_configure(create_vault='/path/to/new') — scaffold a new vault"
+            )
 
         # --- Recent runs ---
         runs = []

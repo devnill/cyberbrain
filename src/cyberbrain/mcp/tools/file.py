@@ -12,9 +12,9 @@ from pydantic import Field
 from cyberbrain.mcp.shared import (
     BackendError,
     _extract_beats,
-    _load_config,
     _relpath,
     autofile_beat,
+    require_config,
     write_beat,
     write_journal_entry,
 )
@@ -104,7 +104,7 @@ def register(mcp: FastMCP) -> None:
         (single-beat capture mode only).
         """
         effective_cwd = cwd or str(Path.home())
-        config = _load_config(effective_cwd)
+        config = require_config(effective_cwd)
         now = datetime.now(UTC)
         session_id = str(uuid.uuid4())
 
