@@ -1,0 +1,25 @@
+id: ME-BE96887A
+type: metrics_event
+event_name: gap-analyst
+timestamp: 2026-04-01T13:10:00Z
+skill: review
+phase: 4a
+cycle: null
+agent_type: gap-analyst
+model: sonnet
+work_item: null
+wall_clock_ms: 277201
+turns_used: null
+context_files_read: []
+input_tokens: null
+output_tokens: null
+cache_read_tokens: null
+cache_write_tokens: null
+mcp_tools_called:
+  - ideate_get_context_package
+  - ideate_get_review_manifest
+finding_count: 9
+finding_severities:
+  critical: 0
+  significant: 1
+  minor: 8

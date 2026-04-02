@@ -1,44 +1,12 @@
 id: gap-analysis
-type: review_output
+type: cycle_summary
 reviewer: gap-analyst
 verdict: Fail
-findings: |-
-  ## Critical Findings
-
-  ### MR2/II1: plugin.json missing 'skills' key — skill unreachable
-  - File: .claude-plugin/plugin.json
-  - Issue: No 'skills': './skills' entry. The plugin system cannot discover skills/config/SKILL.md. WI-001 is functionally incomplete.
-  - Fix: Add '"skills": "./skills"' to plugin.json.
-
-  ## Significant Findings
-
-  ### MR1: Hooks don't check for uv availability in plugin mode
-  - Files: hooks/pre-compact-extract.sh, session-end-extract.sh, session-end-reindex.sh
-  - Issue: Original interview failure #1 not addressed. If uv missing, hooks silently fail.
-
-  ### EC2: SKILL.md error handler references cb_setup(phase=N)
-  - File: skills/config/SKILL.md:141
-
-  ### II3: README/QUICKSTART don't mention /cyberbrain:config
-  - Files: README.md, QUICKSTART.md
-  - Issue: Still direct to manual config.json editing.
-
-  ### MI2: QUICKSTART missing uv prerequisite
-  - File: QUICKSTART.md
-
-  ### IR1: Skill naming not end-to-end verified
-  - Issue: Original interview bug was garbled skill names. Fix adds file but naming not confirmed.
-
-  ### IR2: orient -> cb_status raises on fresh install
-  - File: src/cyberbrain/mcp/tools/manage.py (cb_status), resources.py
-  - Issue: cb_status uses _load_config not require_config. ConfigError propagates on fresh install.
-
-  ## Minor Findings
-
-  ### EC1: setdefault for inbox/working_memory_folder on create_vault
-  ### EC3: Hook dedup format dependency
-  ### MI1: No test coverage for SKILL.md logic
-  ### IR3: Unicode symbols in cb_configure output
+findings:
+  critical: 0
+  significant: 1
+  minor: 8
+content: "Verdict: Fail. MI2 (Significant): No integration test covers the full cb_file → autofile_beat → write_beat round-trip for document-intake. EC1: Low-confidence path sets cb_uncertain_routing on document-intake notes. EC2-EC5: Untested edge cases (path traversal forwarding, collision handling, frontmatter injection). MI1/IR1: autofile_history_samples not in CyberbrainConfig TypedDict. II1-II2: Minor integration gaps. IR2-IR3: Polish issues."
 cycle: 1
-content_hash: ae586d950b80f5afcaa32d48d1fbc4758f5140342933c747b4a309afa62dc4c0
-token_count: 403
+content_hash: bf9a232f65fd525d5505aaec7411350b9ee17f6edaf921a05bbcfaf4e104dec0
+token_count: 147

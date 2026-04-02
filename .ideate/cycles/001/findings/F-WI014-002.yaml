@@ -1,0 +1,11 @@
+id: F-WI014-002
+type: finding
+severity: minor
+title: Missing extend+manual-filing test for AC#3 completeness
+work_item: WI-014
+description: AC#3 requires testing both create and extend for non-document-intake source. Only create was covered.
+resolution: Added test_single_beat_capture_extend_uses_llm_insertion verifying LLM insertion is appended to existing note with source='manual-filing'.
+status: resolved
+cycle: 1
+content_hash: ad1b969de17a4893577d46aad0b5c213947193302433715a268241915462d74d
+token_count: 104

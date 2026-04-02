@@ -1,0 +1,11 @@
+id: F-WI014-001
+type: finding
+severity: minor
+title: Missing search_vault mock and misleading docstring in document intake tests
+work_item: WI-014
+description: Tests 1 and 2 omitted search_vault mock (running real grep subprocess). Test 3 docstring misidentified the discriminating condition as 'without title' instead of source parameter.
+resolution: Added search_vault mocks to tests 1 and 2. Fixed docstring in test 3.
+status: resolved
+cycle: 1
+content_hash: cc3188e1f6c65b7fb100155b32ce907d8b769743607c6ef0bcc602e53be897b7
+token_count: 112

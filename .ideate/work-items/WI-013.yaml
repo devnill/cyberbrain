@@ -1,0 +1,56 @@
+id: WI-013
+type: work_item
+title: Fix autofile content preservation for document intake
+status: done
+complexity: small
+scope:
+  - path: src/cyberbrain/extractors/autofile.py
+    op: modify
+depends: []
+blocks: []
+criteria:
+  - When cb_file is called with title provided (document intake mode) and autofile is enabled, the note body written to the vault matches the original content parameter exactly — no LLM rewriting
+  - When autofile returns action='create' and source='document-intake', the LLM's path decision is used for routing but write_beat is called with the original beat dict to construct the note
+  - When autofile returns action='extend' and source='document-intake', the code falls back to creating a new note at the LLM-chosen folder (full documents should not be appended to existing notes)
+  - Existing single-beat capture behavior (title omitted) is unchanged — autofile still uses LLM-generated content for create and insertion for extend
+domain: autofile
+phase: PH-001
+work_item_type: bug
+notes: |-
+  ## Root cause
+
+  `autofile_beat` line 409: `content = decision.get("content", "")` uses the LLM-generated content for all `create` actions, including document intake where the original `beat["body"]` should be preserved.
+
+  ## Implementation approach
+
+  In `autofile_beat`, add a source-aware branch at the top of the `action == "create"` block:
+
+  ```python
+  elif action == "create":
+      rel_path = decision.get("path", "")
+      
+      # Document intake: preserve original content, use LLM path for routing only
+      if source == "document-intake":
+          if not rel_path:
+              return write_beat(beat, config, session_id, cwd, now, source=source)
+          folder = str(Path(rel_path).parent)
+          intake_config = dict(config)
+          intake_config["inbox"] = folder
+          return write_beat(beat, intake_config, session_id, cwd, now, source=source)
+      
+      # Normal autofile: use LLM-generated content
+      content = decision.get("content", "")
+      ...
+  ```
+
+  Same pattern for `action == "extend"`: when `source == "document-intake"`, extract the folder from `decision.get("target_path")` and route via `write_beat` instead of appending.
+
+  ## Key files
+  - `src/cyberbrain/extractors/autofile.py` — `autofile_beat()` function, lines 379-508
+  - `src/cyberbrain/extractors/vault.py` — `write_beat()` and `resolve_output_dir()` for reference
+  - `src/cyberbrain/mcp/tools/file.py` — `cb_file` tool, confirms `source="document-intake"` sentinel
+resolution: null
+cycle_created: null
+cycle_modified: null
+content_hash: 56382d94a2d9a027e04ea39db927d8468de501467b54ef549a1b6fa9935a950c
+token_count: 664

@@ -1,0 +1,12 @@
+id: J-000-020
+type: journal_entry
+phase: execute
+date: 2026-04-01
+cycle_created: 0
+title: metrics-summary
+content: |-
+  ## [execute] 2026-04-01 — Metrics summary
+  Agents spawned: 4 (2 workers, 2 code-reviewers)
+  Total wall-clock: 1290748ms
+  Models used: sonnet
+  Slowest agent: code-reviewer — WI-013 — 910350ms

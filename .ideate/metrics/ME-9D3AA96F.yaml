@@ -1,0 +1,20 @@
+id: ME-9D3AA96F
+type: metrics_event
+event_name: architect
+timestamp: 2026-04-01T12:00:00Z
+skill: refine
+phase: "2"
+cycle: null
+agent_type: architect
+model: opus
+work_item: null
+wall_clock_ms: 444715
+turns_used: null
+context_files_read: []
+input_tokens: null
+output_tokens: null
+cache_read_tokens: null
+cache_write_tokens: null
+mcp_tools_called:
+  - ideate_get_config
+  - ideate_get_workspace_status

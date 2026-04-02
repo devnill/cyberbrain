@@ -121,6 +121,7 @@ Beat routing:
 | `hooks/session-end-reindex.sh` | SessionEnd hook; runs incremental search index refresh after each session ends; always exits 0 |
 | `src/cyberbrain/extractors/extract_beats.py` | Core engine; parses JSONL/text transcripts, calls LLM backend, writes vault notes, daily journal |
 | `src/cyberbrain/extractors/backends.py` | LLM backend implementations (claude-code, bedrock, ollama); env var stripping; subprocess hardening |
+| `src/cyberbrain/extractors/autofile.py` | Intelligent beat filing using LLM judgment for vault placement; `source="document-intake"` preserves original content, uses LLM only for routing |
 | `src/cyberbrain/extractors/analyze_vault.py` | Vault structure analyzer used by `cb_setup`; produces JSON report |
 | `src/cyberbrain/extractors/state.py` | Centralized state file paths (`~/.claude/cyberbrain/` constants) |
 | `src/cyberbrain/extractors/config.py` | Config loading and `CyberbrainConfig` TypedDict — defines all known config fields with types |

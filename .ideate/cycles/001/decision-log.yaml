@@ -1,9 +1,7 @@
 id: decision-log
-type: review_output
+type: cycle_summary
 reviewer: journal-keeper
-decisions: 20
-open_questions: 7
-cross_references: 3
+content: Decision log with 26 decisions (D-001 through D-026), 7 open questions (OQ-001 through OQ-007), and 3 cross-references. Covers onboarding refinement (WI-001 through WI-012), document intake bug fix (WI-013/WI-014), and three review correction cycles.
 cycle: 1
-content_hash: b49b086c2a8468acf1b0f954a5f6988a30c3a534fdd90c6ab02c18f77156a039
-token_count: 30
+content_hash: 70131fe7901e6e863cffc3f6b783c11139d610d5057463ca638c1eaebd2c4a88
+token_count: 82

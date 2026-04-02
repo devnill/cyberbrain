@@ -1,0 +1,18 @@
+id: interview-refine-4
+type: interview
+title: Refinement Interview — cb_file document intake content rewriting bug
+entries:
+  - question: What specific changes do you want to make?
+    answer: Fix a bug where cb_file in document intake mode (title provided) has its content rewritten by the autofile LLM instead of being preserved verbatim.
+    domain: null
+  - question: What triggered this?
+    answer: User filed a vision analysis document via cb_file with title provided. The autofile LLM rewrote the content — the stored note didn't match the original input.
+    domain: null
+  - question: Should the fix cover both create and extend autofile actions?
+    answer: "Yes. For document intake + create: use LLM path, write original content via write_beat. For document intake + extend: fall back to creating a new note (a full document should be its own note, not appended to an existing one)."
+    domain: null
+  - question: Any broader principle?
+    answer: cb_file should never do summarization. Beat extraction only when needed (title omitted). Document intake means content passes through as-is.
+    domain: null
+content_hash: 3f5b798b3089883044a84fefeaebd523f9220de874f4b79b1d18f3d26fe1bf28
+token_count: 280

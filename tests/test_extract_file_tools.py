@@ -24,6 +24,7 @@ in test_extract_beats.py. These tests verify the MCP layer: path restriction,
 transcript parsing/truncation, BackendError handling, and result formatting.
 """
 
+import json
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -1020,6 +1021,74 @@ class TestCbFileDocumentIntake:
 
         mock_autofile.assert_called_once()
         mock_write.assert_not_called()
+
+
+# ===========================================================================
+# cb_file — document intake + autofile integration (no mocks on autofile/write_beat)
+# ===========================================================================
+
+
+class TestCbFileDocumentIntakeIntegration:
+    """Integration test: cb_file → autofile_beat → write_beat with real vault I/O.
+
+    Only call_model is mocked (to control the autofile LLM response).
+    autofile_beat and write_beat run with real logic against a temp vault.
+    """
+
+    def test_document_intake_autofile_preserves_content_end_to_end(self, tmp_path):
+        """Full round-trip: cb_file(title=...) with autofile enabled writes the
+        original content to the vault, not LLM-rewritten content."""
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        inbox = vault / "AI" / "Claude-Sessions"
+        inbox.mkdir(parents=True)
+        # Create the target folder so write_beat can write there
+        target_folder = vault / "Knowledge" / "Python"
+        target_folder.mkdir(parents=True)
+
+        config = _base_config(vault, autofile=True)
+        original_body = "## Vision Analysis\n\nThis is the original document content that must be preserved verbatim."
+
+        # LLM returns a create decision with rewritten content
+        llm_decision = json.dumps(
+            {
+                "action": "create",
+                "path": "Knowledge/Python/Vision Analysis.md",
+                "content": "---\ntype: reference\ntitle: Rewritten\n---\n\nRewritten by LLM.",
+                "confidence": 0.9,
+            }
+        )
+
+        mod = _get_file_module()
+        cb_file = _register_file()
+
+        with patch.object(mod, "require_config", return_value=config):
+            with patch(
+                "cyberbrain.extractors.autofile.call_model", return_value=llm_decision
+            ):
+                with patch(
+                    "cyberbrain.extractors.autofile.search_vault", return_value=[]
+                ):
+                    result = cb_file(
+                        content=original_body,
+                        title="Vision Analysis",
+                        type="reference",
+                        tags="python, vision",
+                    )
+
+        # The result should confirm the note was filed
+        assert "Vision Analysis" in result
+
+        # Find the written file — should be in Knowledge/Python/ (LLM-chosen path)
+        written_files = list(target_folder.glob("*.md"))
+        assert len(written_files) == 1, f"Expected 1 file in {target_folder}, found {len(written_files)}"
+
+        content_on_disk = written_files[0].read_text(encoding="utf-8")
+        # Original body must be present
+        assert original_body in content_on_disk
+        # LLM-rewritten content must NOT be present
+        assert "Rewritten by LLM" not in content_on_disk
+        assert "Rewritten" not in content_on_disk.split("---", 2)[-1] if content_on_disk.startswith("---") else True
 
 
 # ===========================================================================

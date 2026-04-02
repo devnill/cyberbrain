@@ -1,18 +1,27 @@
 id: overview
 type: overview
-title: "Post-Review Corrections: Cycle 2 Findings"
+title: "Bug Fix: cb_file document intake content preservation"
 body: |-
-  ## What is changing
+  ## What is changing and why
 
-  3 surgical fixes from cycle 2 review:
-  1. Catch ConfigError in cb_configure prefs path and resources.py _get_guide()
-  2. Reorder SKILL.md Phase 4 so cb_setup runs before reset_prefs
+  The `autofile_beat` function in `autofile.py` rewrites note content via LLM even when `cb_file` is in document intake mode (title provided). This is a bug — document intake should preserve content verbatim, using the autofile LLM only for routing decisions (path selection).
+
+  ## Trigger
+
+  User filed a vision analysis document via `cb_file(title=..., content=...)`. The stored note content did not match the original input — the autofile LLM had rewritten it.
 
   ## Scope boundary
-  Changing: manage.py (prefs path), resources.py (_get_guide), skills/config/SKILL.md (Phase 4 ordering)
-  NOT changing: everything else
 
-  ## Work items
-  WI-009, WI-010
-content_hash: d5c5b06941315dfbcd6b24e496246791229b1afa528b5ee3fbbe5911d5688a36
-token_count: 122
+  - **Changing**: `autofile_beat` in `autofile.py` — add source-aware branching for document intake in both `create` and `extend` actions. Test coverage for document intake + autofile.
+  - **Not changing**: Single-beat capture mode, autofile prompts, `write_beat` in `vault.py`, `cb_file` tool registration in `file.py`.
+
+  ## Expected impact
+
+  Minimal. The fix adds a conditional branch in `autofile_beat` for `source == 'document-intake'`. No changes to the autofile LLM contract or prompt. No changes to the write path.
+
+  ## New work items
+
+  WI-013: Fix autofile content preservation for document intake
+  WI-014: Test coverage for document intake + autofile
+content_hash: 919aa85b6777d2df14c5677fddeab230b0e6616f09d015d08ca483515fc3a247
+token_count: 320

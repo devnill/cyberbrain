@@ -1495,3 +1495,381 @@ class TestAutofileScopeRouting:
         assert not str(result).startswith(str(inbox_path)), (
             f"scope:general beat should not route to inbox, got: {result}"
         )
+
+
+# ===========================================================================
+# autofile_beat — document intake content preservation (WI-013 / WI-014)
+# ===========================================================================
+
+
+class TestAutofileDocumentIntake:
+    """autofile_beat with source='document-intake' preserves original beat content.
+
+    When source='document-intake', the LLM response is used only for folder
+    routing — the original beat body is always written, never the LLM-generated
+    or LLM-rewritten content.
+    """
+
+    def test_document_intake_create_preserves_content(self, tmp_path):
+        """cb_file with title + autofile enabled + LLM returns action='create':
+        vault note body matches original beat content, not LLM-rewritten content."""
+        vault = _vault(tmp_path)
+        original_body = "## My Document\n\nThis is the original document content."
+        beat = _beat(
+            title="My Document",
+            body=original_body,
+            tags=["docs", "python"],
+        )
+        # LLM returns a create decision with rewritten content
+        llm_decision = json.dumps(
+            {
+                "action": "create",
+                "path": "Projects/test/My Document.md",
+                "content": "rewritten content that should not appear in the output",
+                "confidence": 0.9,
+            }
+        )
+        captured_calls: list = []
+
+        def fake_write_beat(b, cfg, session_id, cwd, now, **kwargs):
+            captured_calls.append({"beat": b, "config": cfg})
+            # Return a fake path — the actual write is not exercised in this test
+            result_path = vault / "Projects" / "test" / "My Document.md"
+            result_path.parent.mkdir(parents=True, exist_ok=True)
+            result_path.write_text(b.get("body", ""), encoding="utf-8")
+            return result_path
+
+        with patch("cyberbrain.extractors.autofile.search_vault", return_value=[]):
+            with patch(
+                "cyberbrain.extractors.autofile.call_model", return_value=llm_decision
+            ):
+                with patch(
+                    "cyberbrain.extractors.autofile.write_beat", side_effect=fake_write_beat
+                ):
+                    result = autofile_beat(
+                        beat,
+                        _config(vault),
+                        "session-intake",
+                        str(tmp_path),
+                        NOW,
+                        source="document-intake",
+                    )
+
+        # write_beat must have been called (not the direct LLM-content write path)
+        assert len(captured_calls) == 1
+        # The beat passed to write_beat must carry the original body
+        passed_beat = captured_calls[0]["beat"]
+        assert passed_beat["body"] == original_body
+        # The config inbox should be the folder from the LLM path
+        passed_config = captured_calls[0]["config"]
+        assert passed_config["inbox"] == "Projects/test"
+        # The result must not contain LLM-rewritten content
+        assert result is not None
+        content_on_disk = result.read_text()
+        assert "rewritten content" not in content_on_disk
+        assert original_body in content_on_disk
+
+    def test_document_intake_extend_creates_new_note(self, tmp_path):
+        """cb_file with title + autofile enabled + LLM returns action='extend':
+        a new note is created (not appended to existing) with original content preserved."""
+        vault = _vault(tmp_path)
+        # Create the existing note that the LLM wants to extend
+        existing = _write(
+            vault / "Projects" / "existing.md",
+            "---\ntitle: Existing Note\ntags: [python]\n---\n\nExisting content.",
+        )
+        original_body = "## New Document\n\nThis content must be preserved as-is."
+        beat = _beat(
+            title="New Document",
+            body=original_body,
+            tags=["docs"],
+        )
+        # LLM returns an extend decision pointing at the existing note
+        llm_decision = json.dumps(
+            {
+                "action": "extend",
+                "target_path": "Projects/existing.md",
+                "insertion": "rewritten insertion that should not be appended",
+                "confidence": 0.9,
+            }
+        )
+        captured_calls: list = []
+
+        def fake_write_beat(b, cfg, session_id, cwd, now, **kwargs):
+            captured_calls.append({"beat": b, "config": cfg})
+            result_path = vault / "Projects" / "New Document.md"
+            result_path.parent.mkdir(parents=True, exist_ok=True)
+            result_path.write_text(b.get("body", ""), encoding="utf-8")
+            return result_path
+
+        with patch("cyberbrain.extractors.autofile.search_vault", return_value=[]):
+            with patch(
+                "cyberbrain.extractors.autofile.call_model", return_value=llm_decision
+            ):
+                with patch(
+                    "cyberbrain.extractors.autofile.write_beat", side_effect=fake_write_beat
+                ):
+                    result = autofile_beat(
+                        beat,
+                        _config(vault),
+                        "session-intake",
+                        str(tmp_path),
+                        NOW,
+                        source="document-intake",
+                    )
+
+        # write_beat must have been called instead of appending to existing.md
+        assert len(captured_calls) == 1
+        # The existing note must NOT have been modified
+        assert "rewritten insertion" not in existing.read_text()
+        assert "New Document" not in existing.read_text()
+        # The config inbox should be the folder derived from target_path
+        passed_config = captured_calls[0]["config"]
+        assert passed_config["inbox"] == "Projects"
+        # The beat body must be preserved
+        passed_beat = captured_calls[0]["beat"]
+        assert passed_beat["body"] == original_body
+        # A new note was created (not appended to existing.md)
+        assert result is not None
+        assert result != existing
+        content_on_disk = result.read_text()
+        assert "rewritten insertion" not in content_on_disk
+        assert original_body in content_on_disk
+
+    def test_single_beat_capture_create_uses_llm_content(self, tmp_path):
+        """autofile_beat with source='manual-filing': LLM-generated content is used
+        for create, original beat body is not written."""
+        vault = _vault(tmp_path)
+        original_body = "## Original\n\nThis is the original beat body."
+        llm_content = textwrap.dedent("""\
+            ---
+            id: abc123
+            type: decision
+            title: "LLM Title"
+            tags: ["python"]
+            summary: "LLM summary."
+            ---
+
+            LLM-generated content body.
+        """)
+        beat = _beat(
+            title="LLM Title",
+            body=original_body,
+            tags=["python"],
+        )
+        llm_decision = json.dumps(
+            {
+                "action": "create",
+                "path": "Projects/LLM Title.md",
+                "content": llm_content,
+                "confidence": 0.9,
+            }
+        )
+
+        with patch(
+            "cyberbrain.extractors.autofile.call_model", return_value=llm_decision
+        ):
+            with patch("cyberbrain.extractors.autofile.search_vault", return_value=[]):
+                result = autofile_beat(
+                    beat,
+                    _config(vault),
+                    "session-manual",
+                    str(tmp_path),
+                    NOW,
+                    source="manual-filing",
+                )
+
+        # Normal autofile: LLM-generated content should be written
+        assert result is not None
+        assert result.exists()
+        content_on_disk = result.read_text()
+        assert "LLM-generated content body" in content_on_disk
+        # The original beat body should NOT appear (LLM content takes precedence)
+        assert "This is the original beat body" not in content_on_disk
+
+    def test_single_beat_capture_extend_uses_llm_insertion(self, tmp_path):
+        """autofile_beat with source='manual-filing' and action='extend': LLM insertion
+        is appended to the existing note (existing behavior preserved)."""
+        vault = _vault(tmp_path)
+        existing = _write(
+            vault / "Projects" / "existing.md",
+            "---\ntitle: Existing Note\ntags: [python]\n---\n\nExisting content.",
+        )
+        original_body = "## Original\n\nThis is the original beat body."
+        beat = _beat(
+            title="Beat Title",
+            body=original_body,
+            tags=["python"],
+        )
+        llm_insertion = "## New Section\n\nLLM-generated insertion content."
+        llm_decision = json.dumps(
+            {
+                "action": "extend",
+                "target_path": "Projects/existing.md",
+                "insertion": llm_insertion,
+                "confidence": 0.9,
+            }
+        )
+
+        with patch("cyberbrain.extractors.autofile.search_vault", return_value=[]):
+            with patch(
+                "cyberbrain.extractors.autofile.call_model", return_value=llm_decision
+            ):
+                result = autofile_beat(
+                    beat,
+                    _config(vault),
+                    "session-manual",
+                    str(tmp_path),
+                    NOW,
+                    source="manual-filing",
+                )
+
+        # Normal autofile extend: LLM insertion should be appended to the existing note
+        assert result is not None
+        assert result == existing
+        content_on_disk = existing.read_text()
+        assert "LLM-generated insertion content" in content_on_disk
+        assert "Existing content" in content_on_disk
+        # The original beat body should NOT appear (LLM insertion is used instead)
+        assert "This is the original beat body" not in content_on_disk
+
+    def test_document_intake_create_rejects_path_traversal(self, tmp_path):
+        """autofile_beat with source='document-intake' and action='create':
+        path traversal in LLM path is rejected, falls back to write_beat with default config."""
+        vault = _vault(tmp_path)
+        beat = _beat(title="My Doc", body="Original content.", tags=["docs"])
+        llm_decision = json.dumps(
+            {
+                "action": "create",
+                "path": "../../evil/Backdoor.md",
+                "content": "rewritten",
+                "confidence": 0.9,
+            }
+        )
+        captured_calls: list = []
+
+        def fake_write_beat(b, cfg, session_id, cwd, now, **kwargs):
+            captured_calls.append({"beat": b, "config": cfg})
+            result_path = vault / "inbox" / "My Doc.md"
+            result_path.parent.mkdir(parents=True, exist_ok=True)
+            result_path.write_text(b.get("body", ""), encoding="utf-8")
+            return result_path
+
+        with patch("cyberbrain.extractors.autofile.search_vault", return_value=[]):
+            with patch(
+                "cyberbrain.extractors.autofile.call_model", return_value=llm_decision
+            ):
+                with patch(
+                    "cyberbrain.extractors.autofile.write_beat", side_effect=fake_write_beat
+                ):
+                    result = autofile_beat(
+                        beat,
+                        _config(vault),
+                        "session-intake",
+                        str(tmp_path),
+                        NOW,
+                        source="document-intake",
+                    )
+
+        # write_beat called with original config (not intake_config with traversal path)
+        assert len(captured_calls) == 1
+        passed_config = captured_calls[0]["config"]
+        assert "../../evil" not in passed_config.get("inbox", "")
+        assert result is not None
+
+    def test_document_intake_extend_rejects_path_traversal(self, tmp_path):
+        """autofile_beat with source='document-intake' and action='extend':
+        path traversal in target_path is rejected, falls back to write_beat with default config."""
+        vault = _vault(tmp_path)
+        beat = _beat(title="My Doc", body="Original content.", tags=["docs"])
+        llm_decision = json.dumps(
+            {
+                "action": "extend",
+                "target_path": "../../evil/target.md",
+                "insertion": "rewritten",
+                "confidence": 0.9,
+            }
+        )
+        captured_calls: list = []
+
+        def fake_write_beat(b, cfg, session_id, cwd, now, **kwargs):
+            captured_calls.append({"beat": b, "config": cfg})
+            result_path = vault / "inbox" / "My Doc.md"
+            result_path.parent.mkdir(parents=True, exist_ok=True)
+            result_path.write_text(b.get("body", ""), encoding="utf-8")
+            return result_path
+
+        with patch("cyberbrain.extractors.autofile.search_vault", return_value=[]):
+            with patch(
+                "cyberbrain.extractors.autofile.call_model", return_value=llm_decision
+            ):
+                with patch(
+                    "cyberbrain.extractors.autofile.write_beat", side_effect=fake_write_beat
+                ):
+                    result = autofile_beat(
+                        beat,
+                        _config(vault),
+                        "session-intake",
+                        str(tmp_path),
+                        NOW,
+                        source="document-intake",
+                    )
+
+        # write_beat called with original config (no traversal path in inbox)
+        assert len(captured_calls) == 1
+        passed_config = captured_calls[0]["config"]
+        assert "../../evil" not in passed_config.get("inbox", "")
+        assert result is not None
+
+    def test_document_intake_create_clears_vault_folder(self, tmp_path):
+        """autofile_beat with source='document-intake' and vault_folder configured:
+        intake_config must not carry vault_folder so inbox routing takes effect."""
+        vault = _vault(tmp_path)
+        beat = _beat(
+            title="My Doc",
+            body="Original content.",
+            tags=["docs"],
+            scope="project",
+        )
+        llm_decision = json.dumps(
+            {
+                "action": "create",
+                "path": "Knowledge/Python/My Doc.md",
+                "content": "rewritten",
+                "confidence": 0.9,
+            }
+        )
+        captured_calls: list = []
+
+        def fake_write_beat(b, cfg, session_id, cwd, now, **kwargs):
+            captured_calls.append({"beat": b, "config": cfg})
+            result_path = vault / "Knowledge" / "Python" / "My Doc.md"
+            result_path.parent.mkdir(parents=True, exist_ok=True)
+            result_path.write_text(b.get("body", ""), encoding="utf-8")
+            return result_path
+
+        config = _config(vault)
+        config["vault_folder"] = "Projects/my-project/Claude-Notes"
+
+        with patch("cyberbrain.extractors.autofile.search_vault", return_value=[]):
+            with patch(
+                "cyberbrain.extractors.autofile.call_model", return_value=llm_decision
+            ):
+                with patch(
+                    "cyberbrain.extractors.autofile.write_beat", side_effect=fake_write_beat
+                ):
+                    result = autofile_beat(
+                        beat,
+                        config,
+                        "session-intake",
+                        str(tmp_path),
+                        NOW,
+                        source="document-intake",
+                    )
+
+        assert len(captured_calls) == 1
+        passed_config = captured_calls[0]["config"]
+        # vault_folder must be cleared so inbox routing wins
+        assert "vault_folder" not in passed_config
+        assert passed_config["inbox"] == "Knowledge/Python"
+        assert result is not None

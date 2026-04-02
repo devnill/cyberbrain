@@ -1,0 +1,43 @@
+id: WI-014
+type: work_item
+title: Test coverage for document intake autofile content preservation
+status: done
+complexity: small
+scope:
+  - path: tests/test_autofile.py
+    op: modify
+depends:
+  - WI-013
+blocks: []
+criteria:
+  - "Test: cb_file with title + autofile enabled + LLM returns action='create' → vault note body matches original content exactly (not LLM-rewritten)"
+  - "Test: cb_file with title + autofile enabled + LLM returns action='extend' → new note is created (not appended to existing) with original content preserved"
+  - "Test: cb_file without title + autofile enabled → existing behavior unchanged (LLM-generated content used for create, insertion used for extend)"
+  - All existing autofile tests continue to pass
+domain: autofile
+phase: PH-001
+work_item_type: feature
+notes: |-
+  ## Implementation approach
+
+  Add tests to `tests/test_autofile.py` following the existing patterns:
+  - Mock `call_model` to return controlled autofile JSON decisions
+  - Use `temp_vault` / `temp_home` fixtures for filesystem isolation
+  - Verify file content on disk matches expectations
+
+  ## Test cases
+
+  1. **document_intake_create_preserves_content**: Call `autofile_beat` with `source="document-intake"`, mock LLM returns `{"action": "create", "path": "Projects/test/note.md", "content": "rewritten content", "confidence": 0.9}`. Assert the written file contains the original `beat["body"]`, not "rewritten content".
+
+  2. **document_intake_extend_creates_new_note**: Call `autofile_beat` with `source="document-intake"`, mock LLM returns `{"action": "extend", "target_path": "existing.md", "insertion": "rewritten", "confidence": 0.9}`. Assert a new file is created (not appended to existing.md) with original content.
+
+  3. **single_beat_capture_create_uses_llm_content**: Call `autofile_beat` with `source="manual-filing"`, mock LLM returns create action. Assert the written file uses LLM-generated content (existing behavior).
+
+  ## Key files
+  - `tests/test_autofile.py` — existing autofile test module (~1,497 lines)
+  - `tests/conftest.py` — shared fixtures
+resolution: null
+cycle_created: null
+cycle_modified: null
+content_hash: 3f5e4bc21ca916ae811765c4d0631ce0fdd6726b4ac193a1bc6263878b266d0a
+token_count: 557

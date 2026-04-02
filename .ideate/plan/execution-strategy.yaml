@@ -1,19 +1,18 @@
 id: execution-strategy
 type: execution_strategy
-title: Execution Strategy — Cycle 2 Corrections
-mode: full_parallel
-parallelism:
-  max_concurrent: 2
-  worktree: false
-review_cadence: after_all
+title: Execution Strategy — Document Intake Bug Fix
+mode: sequential
+parallelism: 1
+review_cadence: after all items complete
 groups:
-  - name: All Fixes
+  - name: Document intake fix
     items:
-      - WI-009
-      - WI-010
-    order: 1
-    notes: Zero file overlap, zero dependencies. Execute in parallel.
+      - WI-013
+      - WI-014
+    ordering: sequential
+    notes: WI-013 (code fix) must complete before WI-014 (tests) since tests verify the fix.
 agent_config:
   model: sonnet
-content_hash: 7df9632ab53666877912aeeefddfd33da24cb014dbd178ea75b2e9a7432d90bd
-token_count: 93
+  worktree: false
+content_hash: 9ad783c3b2edfb04bbbe4bd60be782ef459204f485bb1c7ad4102a73fcf722d4
+token_count: 104

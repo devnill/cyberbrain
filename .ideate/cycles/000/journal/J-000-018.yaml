@@ -1,0 +1,19 @@
+id: J-000-018
+type: journal_entry
+phase: execute
+date: 2026-04-01
+cycle_created: 0
+title: work-item-complete
+content: >-
+  ## [execute] 2026-04-01 — Work item WI-013: Fix autofile content preservation
+  for document intake
+
+  Status: complete with rework
+
+  Rework: 1 significant finding fixed from incremental review.
+
+  S2: Added _is_within_vault path traversal guards to both document-intake
+  branches (create and extend) in autofile_beat, matching the validation pattern
+  used by the normal autofile paths.
+
+  S1 (missing tests) dismissed — covered by WI-014.

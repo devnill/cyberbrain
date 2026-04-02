@@ -1,0 +1,12 @@
+id: J-000-017
+type: journal_entry
+phase: refine
+date: 2026-04-01
+cycle_created: 0
+title: metrics-summary
+content: |-
+  ## [refine] 2026-04-01 — Metrics summary
+  Agents spawned: 1 (architect: 1)
+  Total wall-clock: 444715ms
+  Models used: opus
+  Slowest agent: architect — 444715ms

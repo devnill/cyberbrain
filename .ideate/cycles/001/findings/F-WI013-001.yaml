@@ -1,0 +1,11 @@
+id: F-WI013-001
+type: finding
+severity: significant
+title: Missing path traversal validation in document-intake branches
+work_item: WI-013
+description: The document-intake branches in autofile_beat skipped _is_within_vault checks that the normal create/extend paths perform.
+resolution: Added _is_within_vault guards to both document-intake branches.
+status: resolved
+cycle: 1
+content_hash: c22244789c34e70810f1d51f5ea64cc869f2872c17617c47f15c0312ad038d61
+token_count: 94

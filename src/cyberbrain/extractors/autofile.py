@@ -380,6 +380,25 @@ def autofile_beat(
     vault = Path(vault_path)
 
     if action == "extend":
+        # Document intake: full documents should not be appended to existing notes.
+        # Fall back to creating a new note at the LLM-chosen folder instead.
+        if source == "document-intake":
+            target_rel = decision.get("target_path", "")
+            if target_rel:
+                target = vault / target_rel
+                if not _is_within_vault(vault, target):
+                    print(
+                        f"[extract_beats] autofile: path traversal rejected (document-intake): {target_rel}",
+                        file=sys.stderr,
+                    )
+                    return write_beat(beat, config, session_id, cwd, now, source=source)
+                folder = str(Path(target_rel).parent)
+                intake_config = dict(config)
+                intake_config["inbox"] = folder
+                intake_config.pop("vault_folder", None)  # inbox must win for document intake routing
+                return write_beat(beat, intake_config, session_id, cwd, now, source=source)
+            return write_beat(beat, config, session_id, cwd, now, source=source)
+
         target_rel = decision.get("target_path", "")
         target = vault / target_rel
         if not _is_within_vault(vault, target):
@@ -406,6 +425,25 @@ def autofile_beat(
 
     elif action == "create":
         rel_path = decision.get("path", "")
+
+        # Document intake: preserve original content, use LLM path for routing only.
+        if source == "document-intake":
+            if not rel_path:
+                return write_beat(beat, config, session_id, cwd, now, source=source)
+            output_path = vault / rel_path
+            if not _is_within_vault(vault, output_path):
+                print(
+                    f"[extract_beats] autofile: path traversal rejected (document-intake): {rel_path}",
+                    file=sys.stderr,
+                )
+                return write_beat(beat, config, session_id, cwd, now, source=source)
+            folder = str(Path(rel_path).parent)
+            intake_config = dict(config)
+            intake_config["inbox"] = folder
+            intake_config.pop("vault_folder", None)  # inbox must win for document intake routing
+            return write_beat(beat, intake_config, session_id, cwd, now, source=source)
+
+        # Normal autofile: use LLM-generated content.
         content = decision.get("content", "")
         if not rel_path or not content:
             return write_beat(beat, config, session_id, cwd, now, source=source)

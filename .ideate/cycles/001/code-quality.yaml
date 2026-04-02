@@ -1,34 +1,12 @@
 id: code-quality
-type: review_output
+type: cycle_summary
 reviewer: code-reviewer
 verdict: Fail
-findings: |-
-  ## Significant Findings
-
-  ### S1: CyberbrainConfig.working_memory_ttl typed as int, stored and consumed as dict
-  - File: src/cyberbrain/extractors/config.py:50
-  - Issue: TypedDict declares working_memory_ttl: int but runtime uses it as dict. manage.py:509-511 writes it as dict, vault.py:376 reads with .get() pattern.
-  - Impact: Type annotation misleads; old configs with int value would crash in vault.py.
-  - Pre-existing issue, not introduced by this cycle.
-
-  ### S2: QUICKSTART.md directs first-time users to manually edit config files
-  - File: QUICKSTART.md:18-28
-  - Issue: Still says 'edit ~/.claude/cyberbrain/config.json' instead of directing to /cyberbrain:config skill.
-  - Impact: Violates GP-01. Users bypass guided setup.
-
-  ## Minor Findings
-
-  ### M1: Stale imports in reindex.py
-  - File: src/cyberbrain/mcp/tools/reindex.py:3,7
-  - Issue: Path and ToolError imported but unused after redundant vault checks removed. Ruff F401.
-
-  ### M2: __import__('re') inline call inconsistency
-  - File: src/cyberbrain/mcp/tools/manage.py:100
-  - Issue: _read_prefs_section uses __import__('re') while _write_prefs_section uses import re.
-
-  ### M3: SKILL.md error handler still references cb_setup(phase=N)
-  - File: skills/config/SKILL.md:141
-  - Issue: Error handling section references non-existent phase parameter.
+findings:
+  critical: 0
+  significant: 2
+  minor: 4
+content: "Verdict: Fail. S1: Document intake routing silently ignored when vault_folder is configured — resolve_output_dir gives vault_folder priority over inbox, so intake_config['inbox'] override is discarded for project-scoped beats. S2: Path traversal guards in document-intake branches have no test coverage. M1-M4: Vacuous assertions in pre-existing tests, type annotation errors, missing source passthrough assertion."
 cycle: 1
-content_hash: 39c538fbd5066850f0444c820cfe94c84fd1f68b2e046f164a754ccae91be51f
-token_count: 357
+content_hash: e052619690db7c7b6ca16318d11c8fed7e3805a27cbb11e472ede3eaecbb51bd
+token_count: 140

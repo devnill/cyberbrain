@@ -1,0 +1,20 @@
+id: J-000-016
+type: journal_entry
+phase: refine
+date: 2026-04-01
+cycle_created: 0
+title: refinement-complete
+content: >-
+  ## [refine] 2026-04-01 — Refinement planning completed
+
+  Trigger: Bug report — cb_file document intake mode has content rewritten by
+  autofile LLM
+
+  Principles changed: none
+
+  New work items: WI-013, WI-014
+
+  Fix autofile_beat to preserve original content when source is
+  "document-intake". The autofile LLM's routing decision (path) is used, but its
+  rewritten content is ignored. Both create and extend actions are handled —
+  extend falls back to creating a new note for full documents.

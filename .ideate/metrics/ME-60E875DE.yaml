@@ -1,0 +1,26 @@
+id: ME-60E875DE
+type: metrics_event
+event_name: worker
+timestamp: 2026-04-01T12:15:00Z
+skill: execute
+phase: 6a
+cycle: null
+agent_type: worker
+model: sonnet
+work_item: WI-013
+wall_clock_ms: 64189
+turns_used: null
+context_files_read:
+  - /Users/dan/code/cyberbrain/src/cyberbrain/extractors/autofile.py
+input_tokens: null
+output_tokens: null
+cache_read_tokens: null
+cache_write_tokens: null
+mcp_tools_called:
+  - ideate_get_artifact_context
+  - ideate_assemble_context
+outcome: null
+finding_count: null
+finding_severities: null
+first_pass_accepted: null
+rework_count: null

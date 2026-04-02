@@ -1,0 +1,23 @@
+id: J-000-019
+type: journal_entry
+phase: execute
+date: 2026-04-01
+cycle_created: 0
+title: work-item-complete
+content: >-
+  ## [execute] 2026-04-01 — Work item WI-014: Test coverage for document intake
+  autofile content preservation
+
+  Status: complete with rework
+
+  Rework: 2 minor findings fixed from incremental review.
+
+  M1: Fixed misleading docstring in
+  test_single_beat_capture_create_uses_llm_content.
+
+  M2: Added search_vault mocks to tests 1 and 2.
+
+  Added test_single_beat_capture_extend_uses_llm_insertion to close AC#3 gap
+  (extend+manual-filing path).
+
+  Final: 55 passed, 13 skipped, 0 failed.
